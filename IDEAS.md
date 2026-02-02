@@ -44,7 +44,7 @@ knowledge-base/
 ### Feature: Direkte Kommunikation zwischen Agents
 
 **Beschreibung:**
-Agents können direkt miteinander sprechen, nicht nur über Orchestrator.
+Agents können direkt miteinander sprechen, nicht nur über Orchestrator. Dabei können die Agenten auch gerne eine eigene Sprache entwickeln, wenn es hilft, schneller zu kommunizieren und eventuell auch Tokens dadurch zu sparen. 
 
 **Patterns:**
 ```python
