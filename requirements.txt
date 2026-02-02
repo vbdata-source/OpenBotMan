@@ -1,0 +1,22 @@
+# Core dependencies
+anthropic>=0.40.0
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+
+# API server (optional)
+fastapi>=0.109.0
+uvicorn>=0.27.0
+pydantic>=2.5.0
+
+# MCP integration (optional)
+# mcp>=0.1.0  # Uncomment when available
+
+# Development
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+black>=24.0.0
+mypy>=1.8.0
+ruff>=0.1.0
+
+# Monitoring (optional)
+structlog>=24.1.0

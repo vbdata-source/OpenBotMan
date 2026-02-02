@@ -1,0 +1,134 @@
+# OpenBotMan Configuration Example
+# Copy this to config.yaml and customize
+
+orchestrator:
+  name: "Multi-Agent Orchestrator"
+  model: claude-opus-4
+  provider: anthropic
+  max_iterations: 10
+
+agents:
+  # Claude Code CLI
+  claude_code:
+    cli: "claude"
+    args:
+      - "-p"
+      - "--output-format"
+      - "json"
+      - "--dangerously-skip-permissions"
+    model_arg: "--model"
+    default_model: "opus"
+    session_arg: "--session-id"
+    system_prompt_arg: "--append-system-prompt"
+    roles:
+      - planner
+      - coder
+      - architect
+
+  # Gemini CLI (optional - configure if installed)
+  gemini:
+    cli: "gemini"
+    args:
+      - "chat"
+      - "--json"
+    model_arg: "--model"
+    default_model: "gemini-2.0-flash-thinking-exp"
+    session_arg: "--session"
+    system_prompt_arg: "--system"
+    roles:
+      - reviewer
+      - critic
+      - optimizer
+
+  # GPT-4 CLI (optional - configure if installed)
+  gpt4:
+    cli: "chatgpt"
+    args:
+      - "--format"
+      - "json"
+    model_arg: "--model"
+    default_model: "gpt-4"
+    session_arg: "--conversation-id"
+    system_prompt_arg: "--system"
+    roles:
+      - tester
+      - documenter
+
+# Predefined workflows
+workflows:
+  # Code review workflow
+  code_review:
+    description: "Complete code review with planning, review, implementation, and testing"
+    steps:
+      - agent: claude_code
+        role: planner
+        task: "Create detailed implementation plan"
+
+      - agent: gemini
+        role: reviewer
+        task: "Review plan for edge cases and improvements"
+        max_iterations: 3
+
+      - agent: claude_code
+        role: coder
+        task: "Implement approved plan"
+
+      - agent: gpt4
+        role: tester
+        task: "Generate comprehensive test suite"
+
+  # Architecture design workflow
+  architecture_design:
+    description: "System architecture design with validation"
+    steps:
+      - agent: claude_code
+        role: architect
+        task: "Design system architecture"
+
+      - agent: gemini
+        role: critic
+        task: "Critique architecture for scalability and maintainability"
+        max_iterations: 2
+
+      - agent: claude_code
+        role: architect
+        task: "Finalize architecture based on feedback"
+
+  # Feature implementation workflow
+  feature_implementation:
+    description: "End-to-end feature implementation"
+    steps:
+      - agent: claude_code
+        role: planner
+        task: "Analyze requirements and create spec"
+
+      - agent: claude_code
+        role: architect
+        task: "Design component architecture"
+
+      - agent: claude_code
+        role: coder
+        task: "Implement based on approved architecture"
+
+      - agent: gemini
+        role: reviewer
+        task: "Code review for quality and best practices"
+        max_iterations: 2
+
+      - agent: gpt4
+        role: tester
+        task: "Create test suite with edge cases"
+
+# Orchestrator behavior
+behavior:
+  # When to use consensus
+  consensus_threshold: 0.7
+
+  # Maximum iterations for agent refinement
+  max_refinement_iterations: 3
+
+  # Timeout for CLI calls (seconds)
+  cli_timeout: 120
+
+  # Enable verbose logging
+  verbose: true
