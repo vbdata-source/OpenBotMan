@@ -1,0 +1,151 @@
+# OpenBotMan - Docker Compose Configuration
+# Production deployment with all services
+
+version: '3.8'
+
+services:
+  # ============================================
+  # Main Orchestrator
+  # ============================================
+  openbotman:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: openbotman
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # API
+      - "3978:3978"   # Teams webhook
+    volumes:
+      - data:/data
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      - NODE_ENV=production
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TEAMS_APP_ID=${TEAMS_APP_ID:-}
+      - TEAMS_APP_PASSWORD=${TEAMS_APP_PASSWORD:-}
+      - DATABASE_URL=postgresql://openbotman:${DB_PASSWORD:-openbotman}@postgres:5432/openbotman
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    depends_on:
+      - postgres
+      - qdrant
+      - redis
+    networks:
+      - openbotman
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ============================================
+  # PostgreSQL - Document Store
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: openbotman-postgres
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    environment:
+      - POSTGRES_USER=openbotman
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-openbotman}
+      - POSTGRES_DB=openbotman
+    networks:
+      - openbotman
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openbotman"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Qdrant - Vector Database
+  # ============================================
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: openbotman-qdrant
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    networks:
+      - openbotman
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Redis - Session Cache & Message Queue
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: openbotman-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - openbotman
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Ollama - Local LLM (Optional)
+  # ============================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: openbotman-ollama
+    restart: unless-stopped
+    profiles:
+      - ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - openbotman
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  data:
+    name: openbotman-data
+  postgres_data:
+    name: openbotman-postgres
+  qdrant_data:
+    name: openbotman-qdrant
+  redis_data:
+    name: openbotman-redis
+  ollama_data:
+    name: openbotman-ollama
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  openbotman:
+    name: openbotman
+    driver: bridge

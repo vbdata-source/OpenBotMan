@@ -1,134 +1,306 @@
-# OpenBotMan Configuration Example
-# Copy this to config.yaml and customize
+# ============================================
+# OpenBotMan Configuration
+# ============================================
+# Copy to config.yaml and customize
 
+# ============================================
+# Orchestrator Settings
+# ============================================
 orchestrator:
-  name: "Multi-Agent Orchestrator"
-  model: claude-opus-4
-  provider: anthropic
-  max_iterations: 10
+  # Model for the main orchestrator
+  model: claude-sonnet-4-20250514
+  
+  # Maximum iterations per task
+  maxIterations: 10
+  
+  # Timeout per agent call (ms)
+  agentTimeout: 120000
+  
+  # Enable autonomous operation
+  autonomous: false
+  
+  # Require human approval for external actions
+  humanApproval: true
 
+# ============================================
+# Knowledge Base Settings
+# ============================================
+knowledgeBase:
+  enabled: true
+  storagePath: /data/knowledge
+  
+  # Automatically extract learnings from tasks
+  autoLearn: true
+  
+  # Vector database type: memory | chromadb | qdrant
+  vectorDb: memory
+  
+  # Embedding model (for external embedding service)
+  embeddingModel: text-embedding-3-small
+
+# ============================================
+# Agent Definitions
+# ============================================
 agents:
-  # Claude Code CLI
-  claude_code:
-    cli: "claude"
-    args:
-      - "-p"
-      - "--output-format"
-      - "json"
-      - "--dangerously-skip-permissions"
-    model_arg: "--model"
-    default_model: "opus"
-    session_arg: "--session-id"
-    system_prompt_arg: "--append-system-prompt"
-    roles:
-      - planner
-      - coder
-      - architect
+  # Claude Code Agent (via CLI)
+  - id: claude_code
+    name: Claude Code
+    role: coder
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+    cli: claude
+    cliArgs: ["--json"]
+    enabled: true
+    systemPrompt: |
+      You are an expert software developer.
+      Write clean, well-documented code.
+      Follow best practices and design patterns.
+    capabilities:
+      code: true
+      review: true
+      filesystem: true
+      shell: true
+      web: false
+      mcp: true
+      discussion: true
+      decisions: true
+    maxTokens: 4096
+    temperature: 0.7
+  
+  # Gemini Agent (for review and research)
+  - id: gemini
+    name: Gemini
+    role: reviewer
+    provider: google
+    model: gemini-2.0-flash
+    enabled: false  # Enable when configured
+    systemPrompt: |
+      You are a critical code reviewer and researcher.
+      Look for bugs, security issues, and improvements.
+      Provide constructive feedback.
+    capabilities:
+      code: false
+      review: true
+      filesystem: false
+      shell: false
+      web: true
+      mcp: false
+      discussion: true
+      decisions: true
+    maxTokens: 4096
+    temperature: 0.5
+  
+  # GPT-4 Agent (for documentation and testing)
+  - id: gpt4
+    name: GPT-4
+    role: tester
+    provider: openai
+    model: gpt-4-turbo-preview
+    enabled: false  # Enable when configured
+    systemPrompt: |
+      You are an expert at testing and documentation.
+      Write comprehensive tests and clear documentation.
+    capabilities:
+      code: true
+      review: false
+      filesystem: true
+      shell: true
+      web: false
+      mcp: false
+      discussion: true
+      decisions: false
+    maxTokens: 4096
+    temperature: 0.3
+  
+  # Ollama Local Agent (fast, free)
+  - id: ollama
+    name: Local LLM
+    role: research
+    provider: ollama
+    model: codellama:13b
+    enabled: false  # Enable when Ollama is running
+    api:
+      baseUrl: http://localhost:11434
+    systemPrompt: |
+      You are a helpful assistant for quick queries.
+      Provide concise, accurate answers.
+    capabilities:
+      code: true
+      review: false
+      filesystem: false
+      shell: false
+      web: false
+      mcp: false
+      discussion: false
+      decisions: false
+    maxTokens: 2048
+    temperature: 0.5
 
-  # Gemini CLI (optional - configure if installed)
-  gemini:
-    cli: "gemini"
-    args:
-      - "chat"
-      - "--json"
-    model_arg: "--model"
-    default_model: "gemini-2.0-flash-thinking-exp"
-    session_arg: "--session"
-    system_prompt_arg: "--system"
-    roles:
-      - reviewer
-      - critic
-      - optimizer
-
-  # GPT-4 CLI (optional - configure if installed)
-  gpt4:
-    cli: "chatgpt"
-    args:
-      - "--format"
-      - "json"
-    model_arg: "--model"
-    default_model: "gpt-4"
-    session_arg: "--conversation-id"
-    system_prompt_arg: "--system"
-    roles:
-      - tester
-      - documenter
-
-# Predefined workflows
+# ============================================
+# Workflows
+# ============================================
 workflows:
-  # Code review workflow
-  code_review:
-    description: "Complete code review with planning, review, implementation, and testing"
+  - id: code_review
+    name: Code Review Workflow
+    description: Full code review with multiple agents
     steps:
-      - agent: claude_code
-        role: planner
-        task: "Create detailed implementation plan"
-
-      - agent: gemini
-        role: reviewer
-        task: "Review plan for edge cases and improvements"
-        max_iterations: 3
-
-      - agent: claude_code
+      - id: analyze
+        name: Analyze Code
         role: coder
-        task: "Implement approved plan"
-
-      - agent: gpt4
-        role: tester
-        task: "Generate comprehensive test suite"
-
-  # Architecture design workflow
-  architecture_design:
-    description: "System architecture design with validation"
-    steps:
-      - agent: claude_code
-        role: architect
-        task: "Design system architecture"
-
-      - agent: gemini
-        role: critic
-        task: "Critique architecture for scalability and maintainability"
-        max_iterations: 2
-
-      - agent: claude_code
-        role: architect
-        task: "Finalize architecture based on feedback"
-
-  # Feature implementation workflow
-  feature_implementation:
-    description: "End-to-end feature implementation"
-    steps:
-      - agent: claude_code
-        role: planner
-        task: "Analyze requirements and create spec"
-
-      - agent: claude_code
-        role: architect
-        task: "Design component architecture"
-
-      - agent: claude_code
-        role: coder
-        task: "Implement based on approved architecture"
-
-      - agent: gemini
+        task: Analyze the code structure and identify areas for review
+        output: analysis
+      
+      - id: review
+        name: Security Review
         role: reviewer
-        task: "Code review for quality and best practices"
-        max_iterations: 2
-
-      - agent: gpt4
+        task: Review the code for security issues and best practices
+        inputs: [analysis]
+        output: review
+      
+      - id: test
+        name: Generate Tests
         role: tester
-        task: "Create test suite with edge cases"
+        task: Generate comprehensive tests based on the analysis
+        inputs: [analysis, review]
+        output: tests
+        maxIterations: 2
+  
+  - id: feature_development
+    name: Feature Development Workflow
+    description: Full feature development from spec to tests
+    steps:
+      - id: plan
+        name: Create Plan
+        role: architect
+        task: Create a detailed implementation plan
+        output: plan
+      
+      - id: implement
+        name: Implement Feature
+        role: coder
+        task: Implement the feature according to the plan
+        inputs: [plan]
+        output: implementation
+        maxIterations: 3
+      
+      - id: review
+        name: Code Review
+        role: reviewer
+        task: Review the implementation
+        inputs: [plan, implementation]
+        output: review
+      
+      - id: test
+        name: Write Tests
+        role: tester
+        task: Write comprehensive tests
+        inputs: [implementation]
+        output: tests
 
-# Orchestrator behavior
-behavior:
-  # When to use consensus
-  consensus_threshold: 0.7
+# ============================================
+# Quality Gates
+# ============================================
+qualityGates:
+  - name: Code Coverage
+    type: coverage
+    threshold: 80
+    required: true
+  
+  - name: Complexity
+    type: complexity
+    threshold: 15
+    required: false
+  
+  - name: Security Scan
+    type: security
+    threshold: 0  # No critical vulnerabilities
+    required: true
 
-  # Maximum iterations for agent refinement
-  max_refinement_iterations: 3
+# ============================================
+# Security Settings
+# ============================================
+security:
+  enabled: true
+  
+  # JWT settings
+  jwt:
+    expiresIn: 3600      # 1 hour
+    refreshExpiresIn: 604800  # 7 days
+    issuer: openbotman
+  
+  # Rate limiting
+  rateLimit:
+    maxRequests: 100
+    windowSeconds: 60
+  
+  # Audit logging
+  audit:
+    enabled: true
+    level: normal  # minimal | normal | verbose
+    retentionDays: 90
+  
+  # Allowed origins (CORS)
+  allowedOrigins:
+    - "*"  # Restrict in production!
+  
+  # IP allowlist (empty = all allowed)
+  ipAllowlist: []
 
-  # Timeout for CLI calls (seconds)
-  cli_timeout: 120
+# ============================================
+# Channel Configuration
+# ============================================
+channels:
+  # Microsoft Teams
+  teams:
+    enabled: false
+    appId: ${TEAMS_APP_ID}
+    appPassword: ${TEAMS_APP_PASSWORD}
+    tenantId: ${TEAMS_TENANT_ID}
+    endpoint: /api/messages
+    port: 3978
+    allowedUsers: []  # Empty = all users
+    allowedTenants: []
+  
+  # Telegram
+  telegram:
+    enabled: false
+    botToken: ${TELEGRAM_BOT_TOKEN}
+    webhookUrl: ${TELEGRAM_WEBHOOK_URL}
+    allowedUsers: []  # Empty = all users
+  
+  # Discord
+  discord:
+    enabled: false
+    botToken: ${DISCORD_BOT_TOKEN}
+    applicationId: ${DISCORD_APP_ID}
+    allowedServers: []
+  
+  # Slack
+  slack:
+    enabled: false
+    botToken: ${SLACK_BOT_TOKEN}
+    appToken: ${SLACK_APP_TOKEN}
+    signingSecret: ${SLACK_SIGNING_SECRET}
 
-  # Enable verbose logging
-  verbose: true
+# ============================================
+# API Server Settings
+# ============================================
+api:
+  enabled: true
+  port: 8080
+  host: "0.0.0.0"
+  cors:
+    enabled: true
+    origins: ["*"]
+
+# ============================================
+# Logging
+# ============================================
+logging:
+  level: info  # debug | info | warn | error
+  format: json  # json | pretty
+  file:
+    enabled: true
+    path: /data/logs/openbotman.log
+    maxSize: 10m
+    maxFiles: 5

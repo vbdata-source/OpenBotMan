@@ -1,0 +1,33 @@
+{
+  "name": "@openbotman/cli",
+  "version": "2.0.0-alpha.1",
+  "description": "OpenBotMan CLI - Command-line interface",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "obm": "./dist/cli.js",
+    "openbotman": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/cli.js",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@openbotman/orchestrator": "workspace:*",
+    "chalk": "^5.3.0",
+    "commander": "^12.0.0",
+    "dotenv": "^16.4.0",
+    "inquirer": "^9.2.0",
+    "ora": "^8.0.0",
+    "yaml": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.7",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  }
+}

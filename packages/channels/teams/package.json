@@ -1,0 +1,24 @@
+{
+  "name": "@openbotman/channel-teams",
+  "version": "2.0.0-alpha.1",
+  "description": "Microsoft Teams channel for OpenBotMan",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@openbotman/protocol": "workspace:*",
+    "botbuilder": "^4.21.0",
+    "express": "^4.18.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  }
+}

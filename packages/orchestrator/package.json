@@ -1,0 +1,44 @@
+{
+  "name": "@openbotman/orchestrator",
+  "version": "2.0.0-alpha.1",
+  "description": "Multi-Agent Orchestrator - The brain of OpenBotMan",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "openbotman": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.18.0",
+    "@openbotman/protocol": "workspace:*",
+    "@openbotman/knowledge-base": "workspace:*",
+    "chalk": "^5.3.0",
+    "commander": "^12.0.0",
+    "dotenv": "^16.4.0",
+    "eventemitter3": "^5.0.1",
+    "inquirer": "^9.2.0",
+    "ora": "^8.0.0",
+    "uuid": "^9.0.0",
+    "yaml": "^2.3.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.7",
+    "@types/uuid": "^9.0.7",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  }
+}

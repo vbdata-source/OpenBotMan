@@ -1,168 +1,243 @@
-# 🤖 OpenBotMan
+# 🤖 OpenBotMan v2.0
 
-**Multi-Agent Orchestrator for coordinating LLM CLIs**
+<div align="center">
 
-OpenBotMan is a lightweight orchestrator that coordinates multiple LLM command-line interfaces (Claude Code, Gemini, GPT-4, etc.) to accomplish complex tasks through collaborative workflows.
+![OpenBotMan Logo](docs/assets/logo.png)
 
-## 🎯 Features
+**Multi-Agent Orchestration Platform**
 
-- **Multi-Agent Coordination**: Orchestrate Claude Code CLI, Gemini CLI, GPT-4 CLI, and more
-- **Role-Based Delegation**: Assign specialized roles (planner, coder, reviewer, tester)
-- **Consensus Building**: Get agreement from multiple agents on decisions
-- **Workflow Engine**: Define and execute multi-step agent workflows
-- **Tool-Based Architecture**: Uses Anthropic's tool use pattern for orchestration
-- **Session Management**: Persistent conversations with each agent
-- **Integration Ready**: MCP Server, REST API, or direct Python integration
+*Autonomous AI Development Teams*
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
+
+[Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Architecture](#-architecture)
+
+</div>
+
+---
+
+## 🎯 What is OpenBotMan?
+
+OpenBotMan is an **autonomous multi-agent orchestration platform** that coordinates multiple AI models (Claude, GPT-4, Gemini, Ollama) to work together as a development team.
+
+```
+You: "Implement user authentication with OAuth2"
+
+OpenBotMan: "I'll coordinate the team..."
+
+┌─────────────────────────────────────────────────────┐
+│  🏗️  ARCHITECT: "Designing OAuth2 flow with PKCE"   │
+│  🔒 SECURITY:  "Adding rate limiting & OWASP"       │
+│  💻 CODER:     "Implementing Passport.js..."        │
+│  📋 TESTER:    "Writing 42 test cases..."           │
+│  ✅ REVIEWER:  "LGTM! Code approved."               │
+└─────────────────────────────────────────────────────┘
+
+OpenBotMan: "Done! Auth system ready with 95% coverage."
+```
+
+## ✨ Features
+
+### 🧠 Multi-LLM Orchestration
+- **Claude** (Anthropic) - Architecture & coding
+- **GPT-4** (OpenAI) - Testing & documentation
+- **Gemini** (Google) - Review & research
+- **Ollama** - Fast local queries (free!)
+
+### 💬 Agent Communication Protocol (AICP)
+- **Compact binary protocol** - 70% smaller than JSON
+- **Shorthand notation** - `@ARCH>CODER:TASK:impl_auth:P1`
+- **Human-readable on demand** - Full transparency
+
+### 🧠 Shared Knowledge Base
+- **Vector search** - Semantic knowledge retrieval
+- **Auto-learning** - Extracts learnings from tasks
+- **Cross-agent memory** - All agents share knowledge
+
+### 🔐 Security First
+- **OAuth2/JWT** authentication
+- **RBAC** - Role-based access control
+- **Audit logging** - Complete action history
+- **Sandbox execution** - Isolated agent environments
+
+### 📱 Multi-Channel Support
+- **Microsoft Teams** - Full integration
+- **Telegram** - Bot API
+- **Discord** - Slash commands
+- **Slack** - Bolt SDK
+- **REST API** - Universal access
+
+### 🐳 Deployment Ready
+- **Docker** - One-line deployment
+- **Docker Compose** - Full stack
+- **Kubernetes** - Helm charts
+- **Cloud** - Railway, Coolify, Fly.io
 
 ## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 20+
+- pnpm 8+
+- API keys for at least one LLM
 
 ### Installation
 
 ```bash
-# Clone or navigate to project
-cd C:\Sources\OpenBotMan
+# Clone
+git clone https://github.com/vbdata-source/OpenBotMan.git
+cd OpenBotMan
 
-# Install dependencies
-pip install -r requirements.txt
+# Install
+pnpm install
 
-# Configure agents
+# Configure
 cp config.example.yaml config.yaml
-# Edit config.yaml with your settings
+# Edit config.yaml with your API keys
+
+# Run
+pnpm start
 ```
 
-### Prerequisites
-
-You need the following CLIs installed:
-- **Claude Code CLI**: `npm install -g @anthropic-ai/claude-code`
-- **Gemini CLI** (optional): Install from Google
-- **GPT-4 CLI** (optional): `pip install openai-cli`
-
-### Basic Usage
+### Docker (Recommended)
 
 ```bash
-# Interactive mode
-python orchestrator.py
+# Quick start
+docker run -d -p 8080:8080 \
+  -e ANTHROPIC_API_KEY=your_key \
+  ghcr.io/vbdata-source/openbotman:latest
 
-# API server mode
-python api_server.py
-
-# MCP server mode
-python mcp_server.py
+# Full stack
+docker-compose up -d
 ```
 
-### Example Session
+### CLI Usage
 
-```
-You: Implement a binary search function with comprehensive tests
+```bash
+# Interactive chat
+openbotman chat
 
-Orchestrator: I'll coordinate this with multiple agents...
-[Orchestrator] Calling claude_code (coder role)...
-[Orchestrator] Calling gemini (reviewer role)...
-[Orchestrator] Calling gpt4 (tester role)...
+# Run a task
+openbotman run "Create a REST API for users"
 
-Orchestrator: Complete! Here's the implementation with review and tests.
-[Shows code, review feedback, and test suite]
-```
+# Run a workflow
+openbotman run --workflow code_review "Review my auth.ts"
 
-## 📦 Architecture
+# List agents
+openbotman agents
 
-```
-User/Antigravity
-      ↓
-Orchestrator Agent (Claude Opus)
-      ↓
-   Tools:
-   • call_agent
-   • create_consensus
-   • run_workflow
-      ↓
-   ┌──────┬──────┬──────┐
-   │Claude│Gemini│ GPT4 │
-   │ CLI  │ CLI  │ CLI  │
-   └──────┴──────┴──────┘
-```
-
-## 🔧 Configuration
-
-Edit `config.yaml`:
-
-```yaml
-orchestrator:
-  model: claude-opus-4
-  max_iterations: 10
-
-agents:
-  claude_code:
-    cli: "claude"
-    default_model: "opus"
-    roles: [planner, coder, architect]
-
-  gemini:
-    cli: "gemini"
-    default_model: "gemini-2.0-flash-thinking-exp"
-    roles: [reviewer, critic, optimizer]
+# List workflows
+openbotman workflows
 ```
 
 ## 📖 Documentation
 
-- [Usage Guide](docs/usage.md)
-- [Workflow System](docs/workflows.md)
+- [Getting Started](docs/getting-started.md)
+- [Configuration](docs/configuration.md)
+- [Architecture](docs/architecture.md)
+- [AICP Protocol](docs/protocol.md)
+- [Security](docs/security.md)
 - [API Reference](docs/api.md)
-- [Integration Guide](docs/integration.md)
 
-## 🛠️ Development
+## 🏗️ Architecture
 
-```bash
-# Run tests
-pytest tests/
-
-# Format code
-black .
-
-# Type check
-mypy .
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Human (PM/Dev)                        │
+│              "Build feature X"                           │
+└────────────────────────┬────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│               ORCHESTRATOR (Claude Opus)                 │
+│  • Coordinates agents                                   │
+│  • Manages tasks & workflows                            │
+│  • Maintains knowledge base                             │
+└────────────────────────┬────────────────────────────────┘
+                         │ AICP Protocol
+          ┌──────────────┼──────────────┬──────────────┐
+          │              │              │              │
+          ▼              ▼              ▼              ▼
+    ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+    │ ARCHITECT│  │  CODER   │  │ REVIEWER │  │  TESTER  │
+    │ (Claude) │  │ (Claude) │  │ (Gemini) │  │  (GPT-4) │
+    └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘
+         │             │             │             │
+         └─────────────┴──────┬──────┴─────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────┐
+│               SHARED KNOWLEDGE BASE                      │
+│  • Vector DB (Qdrant/ChromaDB)                         │
+│  • Document store (PostgreSQL)                          │
+│  • Auto-learning & linking                              │
+└─────────────────────────────────────────────────────────┘
 ```
 
-## 🔗 Integration
+## 🔧 Configuration
 
-### With Antigravity (MCP)
+```yaml
+# config.yaml
+orchestrator:
+  model: claude-sonnet-4-20250514
+  maxIterations: 10
 
-```python
-from mcp import Server
-from orchestrator import MultiAgentOrchestrator
+agents:
+  - id: claude_code
+    role: coder
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+    enabled: true
 
-server = Server("openbotman")
-orchestrator = MultiAgentOrchestrator()
+  - id: gemini
+    role: reviewer
+    provider: google
+    model: gemini-2.0-flash
+    enabled: true
 
-@server.tool()
-async def coordinate(task: str) -> str:
-    return orchestrator.chat(task)
+knowledgeBase:
+  enabled: true
+  autoLearn: true
+  vectorDb: qdrant
+
+channels:
+  teams:
+    enabled: true
+    appId: ${TEAMS_APP_ID}
+  telegram:
+    enabled: true
+    botToken: ${TELEGRAM_BOT_TOKEN}
 ```
-
-### REST API
-
-```bash
-# Start API server
-python api_server.py
-
-# Use from any client
-curl -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"session_id": "test", "message": "Implement feature X"}'
-```
-
-## 📝 License
-
-MIT License - see [LICENSE](LICENSE)
 
 ## 🤝 Contributing
 
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md)
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## 💡 Examples
+1. Fork the repo
+2. Create your feature branch (`git checkout -b feature/amazing`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing`)
+5. Open a Pull Request
 
-See [examples/](examples/) for:
-- Code review workflows
-- Consensus-based decisions
-- Multi-agent debates
-- Custom tool definitions
+## 📜 License
+
+MIT License - see [LICENSE](LICENSE)
+
+## 🙏 Acknowledgments
+
+- [Anthropic](https://anthropic.com) - Claude API
+- [OpenAI](https://openai.com) - GPT-4 API
+- [Google](https://ai.google.dev) - Gemini API
+- [Ollama](https://ollama.ai) - Local LLMs
+- [OpenClaw](https://openclaw.ai) - Inspiration & architecture
+
+---
+
+<div align="center">
+
+**Built with ❤️ by [vb-data e.U.](https://vb-data.at)**
+
+*"The future of software development is autonomous AI teams."*
+
+</div>

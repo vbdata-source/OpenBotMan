@@ -1,0 +1,52 @@
+# OpenBotMan - Docker Compose Development Configuration
+# Lightweight setup for local development
+
+version: '3.8'
+
+services:
+  # ============================================
+  # Development Orchestrator
+  # ============================================
+  openbotman:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: builder  # Use build stage for dev
+    container_name: openbotman-dev
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "3978:3978"
+      - "9229:9229"   # Node.js debugger
+    volumes:
+      - ../:/app
+      - /app/node_modules  # Don't mount node_modules
+      - dev_data:/data
+    environment:
+      - NODE_ENV=development
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LOG_LEVEL=debug
+    command: pnpm dev
+    networks:
+      - openbotman-dev
+
+  # ============================================
+  # Redis (Memory store for dev)
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: openbotman-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - openbotman-dev
+
+volumes:
+  dev_data:
+    name: openbotman-dev-data
+
+networks:
+  openbotman-dev:
+    name: openbotman-dev
+    driver: bridge

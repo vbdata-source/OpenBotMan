@@ -1,0 +1,32 @@
+{
+  "name": "@openbotman/knowledge-base",
+  "version": "2.0.0-alpha.1",
+  "description": "Shared Knowledge Base for OpenBotMan - Vector DB + Document Store",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@openbotman/protocol": "workspace:*",
+    "better-sqlite3": "^9.4.0",
+    "chromadb": "^1.7.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/uuid": "^9.0.7",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  }
+}
