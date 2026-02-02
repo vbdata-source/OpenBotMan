@@ -1,0 +1,115 @@
+{
+  "name": "openbotman-vscode",
+  "displayName": "OpenBotMan",
+  "description": "Multi-Agent AI Orchestration for VS Code",
+  "version": "2.0.0",
+  "publisher": "vbdata",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Machine Learning",
+    "Programming Languages",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "openbotman.chat",
+        "title": "OpenBotMan: Chat with Agents"
+      },
+      {
+        "command": "openbotman.orchestrate",
+        "title": "OpenBotMan: Orchestrate Task"
+      },
+      {
+        "command": "openbotman.review",
+        "title": "OpenBotMan: Code Review"
+      },
+      {
+        "command": "openbotman.discuss",
+        "title": "OpenBotMan: Start Discussion"
+      },
+      {
+        "command": "openbotman.knowledge.query",
+        "title": "OpenBotMan: Query Knowledge Base"
+      },
+      {
+        "command": "openbotman.agents.status",
+        "title": "OpenBotMan: Agent Status"
+      }
+    ],
+    "configuration": {
+      "title": "OpenBotMan",
+      "properties": {
+        "openbotman.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:8080",
+          "description": "OpenBotMan API URL"
+        },
+        "openbotman.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for authentication"
+        },
+        "openbotman.autoReview": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically review code on save"
+        },
+        "openbotman.defaultAgent": {
+          "type": "string",
+          "default": "claude_code",
+          "description": "Default agent for quick tasks"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "openbotman",
+          "title": "OpenBotMan",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "openbotman": [
+        {
+          "id": "openbotman.agents",
+          "name": "Agents"
+        },
+        {
+          "id": "openbotman.tasks",
+          "name": "Tasks"
+        },
+        {
+          "id": "openbotman.knowledge",
+          "name": "Knowledge"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^2.22.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}
