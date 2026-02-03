@@ -35,9 +35,6 @@ export function saveConfig(configPath: string, config: OrchestratorConfig): void
 export function normalizeConfig(raw: Record<string, unknown>): OrchestratorConfig {
   const orchestrator = raw['orchestrator'] as Record<string, unknown> ?? {};
   const kb = raw['knowledgeBase'] as Record<string, unknown> ?? {};
-  
-  // Debug: Log raw orchestrator config
-  console.log('[Config] Raw orchestrator:', JSON.stringify(orchestrator, null, 2));
   const agents = raw['agents'] as Array<Record<string, unknown>> ?? [];
   const workflows = raw['workflows'] as Array<Record<string, unknown>> ?? [];
   const qualityGates = raw['qualityGates'] as Array<Record<string, unknown>> ?? [];
