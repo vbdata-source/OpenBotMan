@@ -41,6 +41,8 @@ export function normalizeConfig(raw: Record<string, unknown>): OrchestratorConfi
   
   return {
     model: orchestrator['model'] as string ?? 'claude-sonnet-4-20250514',
+    provider: orchestrator['provider'] as 'anthropic' | 'claude-cli' | undefined,
+    cli: orchestrator['cli'] as { command?: string; maxTurns?: number } | undefined,
     maxIterations: orchestrator['maxIterations'] as number ?? 10,
     agentTimeout: orchestrator['agentTimeout'] as number ?? 120000,
     autonomous: orchestrator['autonomous'] as boolean ?? false,
