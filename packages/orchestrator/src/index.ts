@@ -12,6 +12,7 @@ export * from './message-queue.js';
 export * from './agent-communication.js';
 export * from './enhanced-discussion.js';
 export * from './auth/index.js';
+export * from './providers/index.js';
 
 // Re-export main classes
 export { Orchestrator } from './orchestrator.js';
@@ -56,3 +57,17 @@ export {
   type AuthStatus,
   type AuthProfile,
 } from './auth/index.js';
+
+// Claude CLI Provider
+export {
+  ClaudeCliProvider,
+  createClaudeCliProvider,
+  claudeCliRequest,
+  type ClaudeCliProviderOptions,
+  type ClaudeCliResponse,
+  type ClaudeCliMessage,
+  type ClaudeCliContent,
+  type ClaudeCliContentBlock,
+  type ClaudeCliResult,
+  type ClaudeCliProviderEvents,
+} from './providers/index.js';

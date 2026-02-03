@@ -264,11 +264,39 @@ export interface QualityGate {
 }
 
 /**
+ * Provider type for the orchestrator
+ */
+export type OrchestratorProvider = 'anthropic' | 'claude-cli';
+
+/**
+ * Claude CLI configuration
+ */
+export interface ClaudeCliConfig {
+  /** Path to claude CLI command (default: 'claude') */
+  command?: string;
+  
+  /** Additional CLI arguments */
+  args?: string[];
+  
+  /** Maximum turns for agentic loop */
+  maxTurns?: number;
+  
+  /** Tools to enable */
+  tools?: string[];
+}
+
+/**
  * Orchestrator configuration
  */
 export interface OrchestratorConfig {
   /** Orchestrator model */
   model: string;
+  
+  /** Provider to use: 'anthropic' (direct API) or 'claude-cli' (CLI subprocess) */
+  provider?: OrchestratorProvider;
+  
+  /** Claude CLI configuration (when provider is 'claude-cli') */
+  cli?: ClaudeCliConfig;
   
   /** Maximum iterations per task */
   maxIterations: number;

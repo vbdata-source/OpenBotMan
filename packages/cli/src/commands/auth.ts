@@ -9,6 +9,7 @@ import ora from 'ora';
 import inquirer from 'inquirer';
 import { 
   ClaudeAuthProvider, 
+  ClaudeCliProvider,
   validateSetupToken,
 } from '@openbotman/orchestrator';
 
@@ -21,26 +22,52 @@ export async function authStatusCommand(options: { storagePath?: string }): Prom
   
   console.log(chalk.bold('\n🔐 Authentication Status\n'));
   
+  // Check Claude CLI availability
+  console.log(chalk.bold('Claude Code CLI:'));
+  const cliAvailable = await ClaudeCliProvider.isAvailable();
+  if (cliAvailable) {
+    const version = await ClaudeCliProvider.getVersion();
+    console.log(chalk.green(`  ✓ Available${version ? ` (${version})` : ''}`));
+  } else {
+    console.log(chalk.yellow('  ✗ Not found in PATH'));
+    console.log(chalk.gray('    Install: curl -fsSL https://claude.ai/install.sh | bash'));
+  }
+  console.log();
+  
+  console.log(chalk.bold('API Authentication:'));
   if (status.authenticated) {
-    console.log(chalk.green('✓ Authenticated'));
-    console.log(`  Method: ${formatMethod(status.method!)}`);
+    console.log(chalk.green('  ✓ Authenticated'));
+    console.log(`    Method: ${formatMethod(status.method!)}`);
     if (status.profile) {
-      console.log(`  Profile: ${chalk.cyan(status.profile)}`);
+      console.log(`    Profile: ${chalk.cyan(status.profile)}`);
     }
     if (status.tokenPreview) {
-      console.log(`  Token: ${chalk.gray(status.tokenPreview)}`);
+      console.log(`    Token: ${chalk.gray(status.tokenPreview)}`);
     }
     if (status.expiresAt) {
       const expires = new Date(status.expiresAt);
       const isExpired = expires.getTime() < Date.now();
       const expiresStr = expires.toLocaleString();
-      console.log(`  Expires: ${isExpired ? chalk.red(expiresStr + ' (EXPIRED)') : chalk.gray(expiresStr)}`);
+      console.log(`    Expires: ${isExpired ? chalk.red(expiresStr + ' (EXPIRED)') : chalk.gray(expiresStr)}`);
     }
   } else {
-    console.log(chalk.red('✗ Not authenticated'));
-    console.log(chalk.gray('\n  To authenticate, either:'));
-    console.log(chalk.gray('  1. Set ANTHROPIC_API_KEY environment variable'));
-    console.log(chalk.gray('  2. Run: openbotman auth setup-token'));
+    console.log(chalk.red('  ✗ Not authenticated'));
+    console.log(chalk.gray('\n    To authenticate, either:'));
+    console.log(chalk.gray('    1. Set ANTHROPIC_API_KEY environment variable'));
+    console.log(chalk.gray('    2. Run: openbotman auth setup-token'));
+  }
+  
+  // Provider recommendation
+  console.log(chalk.bold('\nRecommended Provider:'));
+  if (cliAvailable) {
+    console.log(chalk.cyan('  → claude-cli (uses Claude Pro subscription)'));
+    console.log(chalk.gray('    Set in config.yaml: provider: claude-cli'));
+  } else if (status.authenticated) {
+    console.log(chalk.cyan('  → anthropic (direct API)'));
+    console.log(chalk.gray('    Set in config.yaml: provider: anthropic'));
+  } else {
+    console.log(chalk.yellow('  ⚠ No provider available'));
+    console.log(chalk.gray('    Install Claude CLI or configure API key'));
   }
   
   // List profiles

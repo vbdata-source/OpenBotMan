@@ -7,8 +7,24 @@
 # Orchestrator Settings
 # ============================================
 orchestrator:
+  # Provider: 'claude-cli' (recommended) or 'anthropic' (direct API)
+  # claude-cli: Uses Claude Code CLI as subprocess (works with Claude Pro subscription)
+  # anthropic: Direct API calls (requires ANTHROPIC_API_KEY)
+  provider: claude-cli
+  
   # Model for the main orchestrator
   model: claude-sonnet-4-20250514
+  
+  # Claude CLI configuration (when provider is 'claude-cli')
+  cli:
+    # Path to claude CLI command (default: 'claude')
+    command: claude
+    # Additional CLI arguments
+    args: []
+    # Maximum turns for agentic loop (default: 10)
+    maxTurns: 10
+    # Tools to enable (empty = all tools)
+    tools: []
   
   # Maximum iterations per task
   maxIterations: 10
