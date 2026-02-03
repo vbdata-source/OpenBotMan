@@ -56,4 +56,3 @@ htmlcov/
 Thumbs.db
 node_modules/
 .turbo/
-pnpm-lock.yaml
