@@ -22,6 +22,7 @@ import {
   authDefaultCommand,
   authListCommand,
 } from './commands/auth.js';
+import { demoDiscussionCommand } from './commands/demo-discussion.js';
 
 // Load environment variables
 loadEnv();
@@ -320,6 +321,28 @@ authCmd
   .description('Set default auth profile')
   .option('-s, --storage-path <path>', 'Auth storage path')
   .action((name, options) => authDefaultCommand({ ...options, name }));
+
+/**
+ * Demo commands
+ */
+const demoCmd = program
+  .command('demo')
+  .description('Run demonstration scripts');
+
+demoCmd
+  .command('discussion')
+  .description('Run a multi-agent discussion demo')
+  .option('-t, --topic <topic>', 'Discussion topic', 'Sollen wir TypeScript oder JavaScript verwenden?')
+  .option('-d, --delay <ms>', 'Delay between messages in ms', '1000')
+  .option('--no-animation', 'Disable animation delays')
+  .action((options) => {
+    const delay = parseInt(options.delay, 10);
+    demoDiscussionCommand({
+      topic: options.topic,
+      delay: isNaN(delay) ? 1000 : delay,
+      noAnimation: options.noAnimation === true || options.animation === false,
+    });
+  });
 
 // Parse arguments
 program.parse();

@@ -129,7 +129,52 @@ openbotman agents
 
 # List workflows
 openbotman workflows
+
+# Run demo (multi-agent discussion)
+openbotman demo discussion
+openbotman demo discussion --topic "Sollen wir React oder Vue verwenden?"
 ```
+
+### 🎭 Demo: Multi-Agent Discussion
+
+See how agents collaborate in a structured discussion:
+
+```bash
+openbotman demo discussion
+```
+
+This demonstrates:
+- **Proposals** - Alice suggests TypeScript
+- **Arguments** - Bob counters with JavaScript benefits  
+- **Compromise** - Charlie finds middle ground
+- **Voting** - All agents vote
+- **Consensus** - Final decision is reached
+
+Output example:
+```
+🎭 Multi-Agent Discussion Demo
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Topic: "Sollen wir TypeScript oder JavaScript verwenden?"
+Participants: Alice (Coder), Bob (Reviewer), Charlie (Architect)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[Alice] 💡 PROPOSAL: Ich schlage vor, TypeScript zu verwenden...
+[Bob] ❌ ARGUMENT (against): JavaScript ist einfacher...
+[Charlie] 🤔 ARGUMENT (neutral): Beide haben Vorteile...
+[Alice] ✅ VOTE: support
+[Bob] ✅ VOTE: support
+[Charlie] ✅ VOTE: support
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎉 CONSENSUS REACHED: TypeScript (pragmatischer Ansatz)
+   (3/3 support)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+Options:
+- `--topic "Your topic"` - Custom discussion topic
+- `--delay 2000` - Slower animation (2 seconds between messages)
+- `--no-animation` - Instant output (for CI/testing)
 
 ## 📖 Documentation
 
