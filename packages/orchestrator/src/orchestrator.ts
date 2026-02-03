@@ -57,6 +57,9 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
     // Initialize auth provider
     this.authProvider = new ClaudeAuthProvider(authConfig);
     
+    // Debug: Show provider config
+    console.log(`[Orchestrator] Config provider: ${config.provider ?? 'undefined'}`);
+    
     // Check if we should use Claude CLI provider
     if (config.provider === 'claude-cli') {
       console.log(`[Orchestrator] Using Claude CLI provider`);
