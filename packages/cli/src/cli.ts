@@ -327,9 +327,10 @@ authCmd
  * Discuss command - Real multi-agent discussions with consensus
  */
 program
-  .command('discuss <topic>')
+  .command('discuss [topic]')
   .description('Start a multi-agent discussion with consensus finding')
   .option('-c, --config <path>', 'Config file path', 'config.yaml')
+  .option('-p, --prompt-file <path>', 'Read topic/prompt from a text or markdown file')
   .option('-f, --files <files>', 'Comma-separated list of files to include as context')
   .option('-g, --github', 'Include GitHub context (issues, PRs)')
   .option('-a, --agents <count>', 'Number of agents (1-3)', '3')
@@ -342,13 +343,29 @@ program
   .option('--reviewer <provider>', 'Provider for reviewer (e.g., openai)')
   .option('-v, --verbose', 'Enable verbose output')
   .action(async (topic, options) => {
+    // Load topic from file if --prompt-file is specified
+    let discussionTopic = topic;
+    if (options.promptFile) {
+      if (!existsSync(options.promptFile)) {
+        console.error(chalk.red(`Prompt file not found: ${options.promptFile}`));
+        process.exit(1);
+      }
+      discussionTopic = readFileSync(options.promptFile, 'utf-8').trim();
+      console.log(chalk.gray(`Loaded prompt from: ${options.promptFile}`));
+    }
+    
+    if (!discussionTopic) {
+      console.error(chalk.red('Please provide a topic or use --prompt-file'));
+      process.exit(1);
+    }
+    
     const files = options.files ? options.files.split(',').map((f: string) => f.trim()) : undefined;
     const agentCount = parseInt(options.agents, 10);
     const timeout = parseInt(options.timeout, 10);
     const maxRounds = parseInt(options.maxRounds, 10);
     
     await discussCommand({
-      topic,
+      topic: discussionTopic,
       files,
       github: options.github || false,
       agents: isNaN(agentCount) ? 3 : Math.max(1, Math.min(3, agentCount)),
