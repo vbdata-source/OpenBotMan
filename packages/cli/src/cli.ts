@@ -14,6 +14,7 @@ import { readFileSync, existsSync } from 'fs';
 import { parse as parseYaml } from 'yaml';
 import { config as loadEnv } from 'dotenv';
 import { Orchestrator, type OrchestratorConfig } from '@openbotman/orchestrator';
+import { normalizeConfig } from './utils/config.js';
 import {
   authStatusCommand,
   authSetupTokenCommand,
@@ -69,7 +70,10 @@ function loadConfig(configPath: string): OrchestratorConfig {
   }
   
   const content = readFileSync(configPath, 'utf-8');
-  return parseYaml(content) as OrchestratorConfig;
+  const raw = parseYaml(content) as Record<string, unknown>;
+  
+  // Use normalizeConfig to properly parse all fields
+  return normalizeConfig(raw);
 }
 
 /**
