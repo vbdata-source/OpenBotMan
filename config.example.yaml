@@ -331,31 +331,78 @@ discussion:
   # Timeout per agent in seconds
   timeout: 60
   
+  # Maximum consensus rounds (default: 10)
+  maxRounds: 10
+  
+  # Output directory for markdown exports
+  outputDir: ./discussions
+  
   # Max context size in bytes
   maxContext: 50000
-  
-  # Agent configurations
+
+  # Agent configurations with multi-provider support
+  # Each agent can use a different provider:
+  # - claude-cli: Claude CLI (Pro subscription, no API key needed)
+  # - openai: OpenAI API (requires OPENAI_API_KEY)
+  # - google: Google Gemini API (requires GOOGLE_API_KEY)
+  # - mock: Mock provider for testing
   agents:
-    - role: coder
-      name: Coder
+    - id: planner
+      role: architect
+      name: Planner
+      emoji: "🎯"
+      color: magenta
+      provider: claude-cli          # Uses Claude CLI
+      model: claude-sonnet-4-20250514
+      # apiKey: ${GOOGLE_API_KEY}   # Only needed for API providers
+      systemPrompt: |
+        Du bist ein erfahrener Software-Architekt und Planer.
+        ROLLE: Du erstellst und überarbeitest Vorschläge basierend auf Feedback.
+        Fokus: Patterns, Skalierbarkeit, Trade-offs, langfristige Konsequenzen.
+        Stil: Strategisch, ganzheitlich, strukturierte Vorschläge.
+        
+    - id: coder
+      role: coder
+      name: Senior Developer
       emoji: "💻"
+      color: cyan
+      provider: claude-cli
+      model: claude-sonnet-4-20250514
       systemPrompt: |
         Du bist ein erfahrener Software-Entwickler.
+        ROLLE: Du bewertest Vorschläge aus Implementierungs-Sicht.
         Fokus: Implementierungs-Details, Code-Qualität, Performance.
         Stil: Pragmatisch, lösungsorientiert, konkrete Code-Beispiele.
         
-    - role: reviewer
+    - id: reviewer
+      role: reviewer
       name: Reviewer
       emoji: "🔍"
+      color: yellow
+      provider: claude-cli
+      model: claude-sonnet-4-20250514
       systemPrompt: |
         Du bist ein kritischer Code-Reviewer und QA-Experte.
+        ROLLE: Du identifizierst Risiken und Probleme in Vorschlägen.
         Fokus: Risiken, Edge-Cases, Security, Test-Abdeckung.
         Stil: Konstruktiv-kritisch, hinterfrage Annahmen.
-        
-    - role: architect
-      name: Architect
-      emoji: "🏗️"
-      systemPrompt: |
-        Du bist ein erfahrener Software-Architekt.
-        Fokus: Patterns, Skalierbarkeit, Trade-offs, langfristige Konsequenzen.
-        Stil: Strategisch, ganzheitlich, klare Empfehlungen.
+
+  # Example multi-provider configuration:
+  # agents:
+  #   - id: planner
+  #     role: architect
+  #     provider: google
+  #     model: gemini-2.0-flash
+  #     apiKey: ${GOOGLE_API_KEY}
+  #     ...
+  #   - id: coder
+  #     role: coder
+  #     provider: claude-cli
+  #     model: claude-sonnet-4-20250514
+  #     ...
+  #   - id: reviewer
+  #     role: reviewer
+  #     provider: openai
+  #     model: gpt-4-turbo
+  #     apiKey: ${OPENAI_API_KEY}
+  #     ...

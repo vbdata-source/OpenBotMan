@@ -1,18 +1,40 @@
 /**
- * Real Multi-Agent Discussion Command
+ * Multi-Agent Discussion Command with Consensus
  * 
- * Runs actual Claude CLI agents in a structured discussion.
- * Each agent has a distinct role and perspective.
+ * Runs real multi-agent discussions with iterative consensus-finding.
+ * Supports multiple LLM providers and exports discussions to Markdown.
  * 
- * Agents can be configured in config.yaml under the 'discussion' section.
+ * Features:
+ * - Iterative consensus rounds with position voting
+ * - Multi-provider support (Claude CLI, OpenAI, Google Gemini)
+ * - Markdown export of discussions
+ * - Model display per agent
  */
 
 import chalk from 'chalk';
 import ora from 'ora';
-import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'fs';
 import { join, relative, dirname, extname } from 'path';
 import { parse as parseYaml } from 'yaml';
-import { ClaudeCliProvider, type ClaudeCliResponse } from '@openbotman/orchestrator';
+import { 
+  createProvider,
+  type LLMProvider,
+  type ProviderResponse,
+} from '@openbotman/orchestrator';
+import {
+  extractPosition,
+  extractActionItems,
+  evaluateRound,
+  formatRoundStatus,
+  buildProposerPrompt,
+  buildResponderPrompt,
+  getPositionEmoji,
+  getPositionColor,
+  CONSENSUS_PROTOCOL_PROMPT,
+  type ConsensusContribution,
+  type ConsensusResult,
+  type RoundStatus,
+} from './consensus.js';
 
 // ============================================================================
 // Types
@@ -21,10 +43,13 @@ import { ClaudeCliProvider, type ClaudeCliResponse } from '@openbotman/orchestra
 export interface DiscussAgentConfig {
   id: string;
   name: string;
-  role: 'coder' | 'reviewer' | 'architect';
+  role: 'coder' | 'reviewer' | 'architect' | 'planner';
   emoji: string;
   color: (text: string) => string;
   systemPrompt: string;
+  provider: 'claude-cli' | 'openai' | 'google' | 'mock';
+  model: string;
+  apiKey?: string;
 }
 
 export interface ProjectContext {
@@ -44,7 +69,12 @@ export interface DiscussOptions {
   verbose?: boolean;
   model?: string;
   cwd?: string;
-  config?: string;  // Path to config.yaml
+  config?: string;
+  maxRounds?: number;
+  output?: string;
+  planner?: string;  // Override planner provider
+  coder?: string;    // Override coder provider
+  reviewer?: string; // Override reviewer provider
 }
 
 export interface DiscussionConfig {
@@ -52,6 +82,8 @@ export interface DiscussionConfig {
   provider?: string;
   timeout?: number;
   maxContext?: number;
+  maxRounds?: number;
+  outputDir?: string;
   showAgentConfig?: boolean;
   agents?: Array<{
     id: string;
@@ -60,6 +92,9 @@ export interface DiscussionConfig {
     emoji: string;
     color?: string;
     systemPrompt: string;
+    provider?: string;
+    model?: string;
+    apiKey?: string;
   }>;
 }
 
@@ -76,6 +111,8 @@ export interface DiscussionResult {
   messages: DiscussionMessage[];
   summary: string;
   duration: number;
+  consensusResult?: ConsensusResult;
+  markdownPath?: string;
 }
 
 // ============================================================================
@@ -84,25 +121,58 @@ export interface DiscussionResult {
 
 const DEFAULT_AGENTS: DiscussAgentConfig[] = [
   {
+    id: 'planner',
+    name: 'Planner',
+    role: 'architect',
+    emoji: '🎯',
+    color: chalk.magenta,
+    provider: 'claude-cli',
+    model: 'claude-sonnet-4-20250514',
+    systemPrompt: `Du bist ein erfahrener Software-Architekt und Planer.
+
+DEINE ROLLE: Du erstellst und überarbeitest Vorschläge basierend auf Feedback.
+
+DEINE PERSPEKTIVE:
+- Übergeordnete Patterns und Architektur
+- Skalierbarkeit und Erweiterbarkeit
+- Trade-offs und Alternativen
+- Langfristige Konsequenzen
+
+DEIN STIL:
+- Strukturiere Vorschläge klar
+- Zeige verschiedene Optionen auf
+- Gib konkrete Empfehlungen
+- Adressiere Einwände konstruktiv
+
+${CONSENSUS_PROTOCOL_PROMPT}
+
+Antworte auf Deutsch. Max 400 Wörter.`,
+  },
+  {
     id: 'coder',
-    name: 'Coder',
+    name: 'Senior Developer',
     role: 'coder',
     emoji: '💻',
     color: chalk.cyan,
+    provider: 'claude-cli',
+    model: 'claude-sonnet-4-20250514',
     systemPrompt: `Du bist ein erfahrener Software-Entwickler.
+
+DEINE ROLLE: Du bewertest Vorschläge aus Implementierungs-Sicht.
 
 DEINE PERSPEKTIVE:
 - Implementierungs-Details und Code-Qualität
 - Praktische Umsetzbarkeit
 - Performance und Effizienz
 - Clean Code Prinzipien
-- Konkrete Code-Vorschläge
 
 DEIN STIL:
 - Pragmatisch und lösungsorientiert
 - Zeige Code-Beispiele wenn sinnvoll
 - Denke an Edge-Cases
 - Bewerte Aufwand realistisch
+
+${CONSENSUS_PROTOCOL_PROMPT}
 
 Antworte auf Deutsch. Sei konkret und präzise. Max 300 Wörter.`,
   },
@@ -112,7 +182,11 @@ Antworte auf Deutsch. Sei konkret und präzise. Max 300 Wörter.`,
     role: 'reviewer',
     emoji: '🔍',
     color: chalk.yellow,
+    provider: 'claude-cli',
+    model: 'claude-sonnet-4-20250514',
     systemPrompt: `Du bist ein kritischer Code-Reviewer und QA-Experte.
+
+DEINE ROLLE: Du identifizierst Risiken und Probleme in Vorschlägen.
 
 DEINE PERSPEKTIVE:
 - Risiken und potenzielle Probleme
@@ -125,32 +199,11 @@ DEIN STIL:
 - Konstruktiv-kritisch
 - Hinterfrage Annahmen
 - Denke an das Worst-Case-Szenario
-- Schlage Alternativen vor wenn du Probleme siehst
+- Schlage Alternativen vor
+
+${CONSENSUS_PROTOCOL_PROMPT}
 
 Antworte auf Deutsch. Sei kritisch aber konstruktiv. Max 300 Wörter.`,
-  },
-  {
-    id: 'architect',
-    name: 'Architect',
-    role: 'architect',
-    emoji: '🏗️',
-    color: chalk.magenta,
-    systemPrompt: `Du bist ein erfahrener Software-Architekt.
-
-DEINE PERSPEKTIVE:
-- Übergeordnete Patterns und Architektur
-- Skalierbarkeit und Erweiterbarkeit
-- Trade-offs und Alternativen
-- Langfristige Konsequenzen
-- Integration ins Gesamtsystem
-
-DEIN STIL:
-- Strategisch und ganzheitlich
-- Zeige verschiedene Optionen auf
-- Berücksichtige bestehende Architektur
-- Gib eine klare Empfehlung
-
-Antworte auf Deutsch. Denke langfristig. Max 300 Wörter.`,
   },
 ];
 
@@ -167,6 +220,15 @@ const COLOR_MAP: Record<string, (text: string) => string> = {
   red: chalk.red,
   white: chalk.white,
   gray: chalk.gray,
+};
+
+const ROLE_EMOJI_MAP: Record<string, string> = {
+  coder: '💻',
+  developer: '💻',
+  reviewer: '🔍',
+  architect: '🎯',
+  planner: '🎯',
+  tester: '🧪',
 };
 
 /**
@@ -195,27 +257,124 @@ function loadDiscussionConfig(configPath?: string): DiscussionConfig | null {
 }
 
 /**
- * Merge config agents with defaults
+ * Merge config agents with defaults and apply overrides
  */
-function getAgentsFromConfig(config: DiscussionConfig | null, requestedCount?: number): DiscussAgentConfig[] {
-  if (!config?.agents || config.agents.length === 0) {
-    // Use defaults
-    const count = Math.min(requestedCount || 3, DEFAULT_AGENTS.length);
-    return DEFAULT_AGENTS.slice(0, count);
+function getAgentsFromConfig(
+  config: DiscussionConfig | null, 
+  options: DiscussOptions
+): DiscussAgentConfig[] {
+  let agents: DiscussAgentConfig[];
+  
+  if (config?.agents && config.agents.length > 0) {
+    // Convert config agents to internal format
+    agents = config.agents.map((a) => ({
+      id: a.id,
+      name: a.name,
+      role: a.role as 'coder' | 'reviewer' | 'architect' | 'planner',
+      emoji: a.emoji || ROLE_EMOJI_MAP[a.role] || '🤖',
+      color: COLOR_MAP[a.color || 'white'] || chalk.white,
+      systemPrompt: a.systemPrompt + '\n\n' + CONSENSUS_PROTOCOL_PROMPT,
+      provider: (a.provider || 'claude-cli') as 'claude-cli' | 'openai' | 'google' | 'mock',
+      model: a.model || config.model || 'claude-sonnet-4-20250514',
+      apiKey: a.apiKey,
+    }));
+  } else {
+    agents = [...DEFAULT_AGENTS];
   }
+  
+  // Apply provider overrides from CLI
+  if (options.planner) {
+    const planner = agents.find(a => a.role === 'architect' || a.role === 'planner');
+    if (planner) {
+      const [provider, model] = parseProviderOverride(options.planner);
+      planner.provider = provider;
+      if (model) planner.model = model;
+    }
+  }
+  
+  if (options.coder) {
+    const coder = agents.find(a => a.role === 'coder');
+    if (coder) {
+      const [provider, model] = parseProviderOverride(options.coder);
+      coder.provider = provider;
+      if (model) coder.model = model;
+    }
+  }
+  
+  if (options.reviewer) {
+    const reviewer = agents.find(a => a.role === 'reviewer');
+    if (reviewer) {
+      const [provider, model] = parseProviderOverride(options.reviewer);
+      reviewer.provider = provider;
+      if (model) reviewer.model = model;
+    }
+  }
+  
+  // Apply global model override
+  if (options.model) {
+    for (const agent of agents) {
+      agent.model = options.model;
+    }
+  }
+  
+  // Limit agent count if specified
+  const count = Math.min(options.agents || agents.length, agents.length);
+  return agents.slice(0, count);
+}
 
-  // Convert config agents to internal format
-  const configAgents: DiscussAgentConfig[] = config.agents.map((a) => ({
-    id: a.id,
-    name: a.name,
-    role: a.role as 'coder' | 'reviewer' | 'architect',
-    emoji: a.emoji || '🤖',
-    color: COLOR_MAP[a.color || 'white'] || chalk.white,
-    systemPrompt: a.systemPrompt,
-  }));
+/**
+ * Parse provider override string (e.g., "gemini" or "openai:gpt-4-turbo")
+ */
+function parseProviderOverride(override: string): ['claude-cli' | 'openai' | 'google' | 'mock', string?] {
+  const [provider, model] = override.split(':');
+  
+  const providerMap: Record<string, 'claude-cli' | 'openai' | 'google' | 'mock'> = {
+    'claude': 'claude-cli',
+    'claude-cli': 'claude-cli',
+    'openai': 'openai',
+    'gpt': 'openai',
+    'google': 'google',
+    'gemini': 'google',
+    'mock': 'mock',
+  };
+  
+  const normalizedProvider = providerMap[provider?.toLowerCase() ?? ''] || 'claude-cli';
+  
+  return [normalizedProvider, model];
+}
 
-  const count = Math.min(requestedCount || configAgents.length, configAgents.length);
-  return configAgents.slice(0, count);
+// ============================================================================
+// Provider Creation
+// ============================================================================
+
+/**
+ * Create an LLM provider for an agent
+ */
+function createAgentProvider(agent: DiscussAgentConfig, options: DiscussOptions): LLMProvider {
+  // Get API key from environment if not in config
+  let apiKey = agent.apiKey;
+  if (!apiKey) {
+    switch (agent.provider) {
+      case 'openai':
+        apiKey = process.env['OPENAI_API_KEY'];
+        break;
+      case 'google':
+        apiKey = process.env['GOOGLE_API_KEY'] || process.env['GEMINI_API_KEY'];
+        break;
+    }
+  }
+  
+  return createProvider({
+    provider: agent.provider,
+    model: agent.model,
+    apiKey,
+    cwd: options.cwd || process.cwd(),
+    verbose: options.verbose,
+    defaults: {
+      systemPrompt: agent.systemPrompt,
+      timeoutMs: (options.timeout || 60) * 1000,
+    },
+  });
 }
 
 // ============================================================================
@@ -288,7 +447,7 @@ function getSourceFiles(
           if (extensions.includes(ext)) {
             try {
               const stats = statSync(fullPath);
-              if (stats.size > 0 && stats.size < 20000) { // Max 20KB per file
+              if (stats.size > 0 && stats.size < 20000) {
                 const content = readFileSync(fullPath, 'utf-8');
                 const relPath = relative(projectRoot, fullPath);
                 
@@ -367,7 +526,6 @@ export async function loadProjectContext(
   if (existsSync(readmePath)) {
     try {
       const content = readFileSync(readmePath, 'utf-8');
-      // Truncate if too long
       context.readme = content.length > 5000 ? content.slice(0, 5000) + '\n\n[... truncated]' : content;
       context.totalSize += Math.min(content.length, 5000);
     } catch {
@@ -389,10 +547,8 @@ export async function loadProjectContext(
 
   // Load source files
   if (options.files && options.files.length > 0) {
-    // Load specific files
     context.sourceFiles = loadSpecificFiles(options.files, projectRoot, 50000 - context.totalSize);
   } else {
-    // Auto-discover source files
     const srcDir = existsSync(join(projectRoot, 'src')) 
       ? join(projectRoot, 'src') 
       : projectRoot;
@@ -434,7 +590,6 @@ function formatContextForAgent(context: ProjectContext): string {
     for (const file of context.sourceFiles) {
       parts.push(`### ${file.path}`);
       parts.push('```');
-      // Truncate very long files
       const maxLen = 3000;
       parts.push(file.content.length > maxLen 
         ? file.content.slice(0, maxLen) + '\n// ... [truncated]'
@@ -449,180 +604,226 @@ function formatContextForAgent(context: ProjectContext): string {
 }
 
 // ============================================================================
-// Discussion Engine
+// Markdown Export
+// ============================================================================
+
+/**
+ * Generate markdown export of discussion
+ */
+function generateMarkdown(
+  topic: string,
+  _agents: DiscussAgentConfig[],
+  result: ConsensusResult,
+  _context?: ProjectContext
+): string {
+  const lines: string[] = [];
+  const now = new Date();
+  
+  // Header
+  lines.push(`# Discussion: ${topic}`);
+  lines.push('');
+  lines.push(`**Date:** ${now.toISOString().slice(0, 16).replace('T', ' ')}`);
+  lines.push(`**Participants:** ${result.participants.map(p => `${p.name} (${p.model})`).join(', ')}`);
+  lines.push(`**Rounds:** ${result.totalRounds}`);
+  lines.push(`**Status:** ${result.consensusReached ? '✅ CONSENSUS REACHED' : '❌ NO CONSENSUS'}`);
+  lines.push(`**Duration:** ${Math.round(result.durationMs / 1000)}s`);
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+  
+  // Rounds
+  for (const round of result.rounds) {
+    lines.push(`## Round ${round.round}/${round.maxRounds}`);
+    lines.push('');
+    
+    for (const contrib of round.contributions) {
+      const positionEmoji = getPositionEmoji(contrib.position);
+      lines.push(`### [${contrib.agentName}] ${contrib.emoji} ${contrib.role.toUpperCase()} (${contrib.model} via ${contrib.provider})`);
+      lines.push('');
+      lines.push(contrib.content);
+      lines.push('');
+      lines.push(`**Position:** ${positionEmoji} ${contrib.position}${contrib.positionReason ? ` - ${contrib.positionReason}` : ''}`);
+      lines.push('');
+    }
+    
+    // Round status
+    lines.push('**Round Status:**');
+    const counts: string[] = [];
+    for (const [pos, count] of Object.entries(round.positionCounts)) {
+      if (count > 0 && pos !== 'PROPOSAL') {
+        counts.push(`${count} ${pos}`);
+      }
+    }
+    lines.push(`- Positions: ${counts.join(', ') || 'None'}`);
+    lines.push(`- Consensus: ${round.consensusReached ? 'Yes' : 'No'}`);
+    if (round.objections.length > 0) {
+      lines.push(`- Objections: ${round.objections.length}`);
+    }
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  }
+  
+  // Final Consensus
+  if (result.finalConsensus) {
+    lines.push('## Final Consensus');
+    lines.push('');
+    lines.push(result.finalConsensus);
+    lines.push('');
+  }
+  
+  // Action Items
+  if (result.actionItems.length > 0) {
+    lines.push('## Action Items');
+    lines.push('');
+    for (const item of result.actionItems) {
+      const assignee = item.assignee ? ` (assigned: ${item.assignee})` : '';
+      lines.push(`- [ ] ${item.task}${assignee}`);
+    }
+    lines.push('');
+  }
+  
+  // Conditions & Concerns
+  if (result.allConditions.length > 0 || result.allConcerns.length > 0) {
+    lines.push('## Conditions & Concerns');
+    lines.push('');
+    
+    if (result.allConditions.length > 0) {
+      lines.push('### Conditions');
+      for (const condition of result.allConditions) {
+        lines.push(`- ${condition}`);
+      }
+      lines.push('');
+    }
+    
+    if (result.allConcerns.length > 0) {
+      lines.push('### Noted Concerns');
+      for (const concern of result.allConcerns) {
+        lines.push(`- ${concern}`);
+      }
+      lines.push('');
+    }
+  }
+  
+  // Metadata
+  lines.push('---');
+  lines.push('');
+  lines.push('*Generated by OpenBotMan Multi-Agent Discussion*');
+  
+  return lines.join('\n');
+}
+
+/**
+ * Save markdown to file
+ */
+function saveMarkdown(markdown: string, topic: string, outputDir?: string): string {
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
+  const slug = topic
+    .toLowerCase()
+    .replace(/[^a-z0-9äöüß]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50);
+  
+  const dir = outputDir || join(process.cwd(), 'discussions');
+  const filename = `${dateStr}_${slug}.md`;
+  const filepath = join(dir, filename);
+  
+  // Create directory if needed
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  
+  writeFileSync(filepath, markdown, 'utf-8');
+  return filepath;
+}
+
+// ============================================================================
+// Discussion Engine with Consensus
 // ============================================================================
 
 /**
  * Run a single agent's turn
  */
 async function runAgentTurn(
-  agent: DiscussAgentConfig,
+  _agent: DiscussAgentConfig,
+  provider: LLMProvider,
   prompt: string,
-  options: DiscussOptions
-): Promise<ClaudeCliResponse> {
-  const provider = new ClaudeCliProvider({
-    model: options.model || 'claude-sonnet-4-20250514',
-    systemPrompt: agent.systemPrompt,
-    maxTurns: 1,
-    timeoutMs: (options.timeout || 60) * 1000,
-    cwd: options.cwd || process.cwd(),
-    verbose: options.verbose || false,
-    // Disable tools for discussion - just conversation
-    tools: [],
-  });
-
+  _options: DiscussOptions
+): Promise<ProviderResponse> {
   return await provider.send(prompt);
 }
 
 /**
- * Build prompt for an agent including conversation history
+ * Print agent header with model info
  */
-function buildAgentPrompt(
-  topic: string,
-  context: ProjectContext,
-  previousMessages: DiscussionMessage[],
-  agentRole: string
-): string {
-  const parts: string[] = [];
-
-  // Topic
-  parts.push(`# Diskussions-Thema\n${topic}`);
-  parts.push('');
-
-  // Project context
-  if (context.totalSize > 0) {
-    parts.push('# Projekt-Kontext');
-    parts.push(formatContextForAgent(context));
-  }
-
-  // Previous messages
-  if (previousMessages.length > 0) {
-    parts.push('# Bisherige Diskussion');
-    parts.push('');
-    for (const msg of previousMessages) {
-      parts.push(`## [${msg.agentName}] (${msg.role})`);
-      parts.push(msg.content);
-      parts.push('');
-    }
-  }
-
-  // Instruction
-  parts.push('---');
-  if (previousMessages.length === 0) {
-    parts.push(`Als ${agentRole}: Analysiere das Thema und gib deine initiale Einschätzung.`);
-  } else {
-    parts.push(`Als ${agentRole}: Reagiere auf die bisherigen Beiträge. Ergänze, kritisiere konstruktiv, oder stimme zu.`);
-  }
-
-  return parts.join('\n');
+function printAgentHeader(agent: DiscussAgentConfig): void {
+  const providerLabel = agent.provider === 'claude-cli' ? 'CLI' : 'API';
+  const header = `[${agent.name}] ${agent.emoji} ${agent.role.toUpperCase()} (${agent.model} via ${providerLabel})`;
+  console.log(agent.color(header));
+  console.log(chalk.gray('─'.repeat(60)));
 }
 
 /**
- * Generate summary from discussion
+ * Print contribution with position
  */
-async function generateSummary(
-  topic: string,
-  messages: DiscussionMessage[],
-  options: DiscussOptions
-): Promise<string> {
-  const provider = new ClaudeCliProvider({
-    model: options.model || 'claude-sonnet-4-20250514',
-    systemPrompt: 'Du bist ein neutraler Moderator. Fasse Diskussionen präzise zusammen.',
-    maxTurns: 1,
-    timeoutMs: (options.timeout || 60) * 1000,
-    cwd: options.cwd || process.cwd(),
-    tools: [],
-  });
-
-  const prompt = `Fasse diese Multi-Agent-Diskussion zusammen:
-
-THEMA: ${topic}
-
-DISKUSSION:
-${messages.map(m => `[${m.agentName}] (${m.role}):\n${m.content}`).join('\n\n')}
-
----
-Erstelle eine Zusammenfassung mit:
-- Haupterkenntnisse (2-3 Punkte)
-- Wichtigste Empfehlung
-- Offene Punkte (falls vorhanden)
-
-Max 200 Wörter.`;
-
-  try {
-    const response = await provider.send(prompt);
-    return response.text;
-  } catch {
-    // Fallback: simple summary
-    return `Diskussion zu "${topic}" mit ${messages.length} Beiträgen abgeschlossen.`;
-  }
-}
-
-// ============================================================================
-// Main Command
-// ============================================================================
-
-/**
- * Print styled message from agent
- */
-function printAgentMessage(agent: DiscussAgentConfig, content: string): void {
-  console.log('');
-  console.log(agent.color(`[${agent.name}] ${agent.emoji} ${agent.role.toUpperCase()}`));
-  console.log(chalk.gray('─'.repeat(50)));
-  
-  // Format content
-  const lines = content.split('\n');
+function printContribution(contrib: ConsensusContribution): void {
+  const lines = contrib.content.split('\n');
   for (const line of lines) {
     let formatted = line;
-    // Bold markdown
     formatted = formatted.replace(/\*\*([^*]+)\*\*/g, chalk.bold('$1'));
-    // Code
     formatted = formatted.replace(/`([^`]+)`/g, chalk.cyan('$1'));
     console.log(chalk.white(`  ${formatted}`));
   }
+  
+  // Print position
+  const positionColor = getPositionColor(contrib.position);
+  const positionEmoji = getPositionEmoji(contrib.position);
+  console.log('');
+  console.log(positionColor(`  ${positionEmoji} Position: ${contrib.position}${contrib.positionReason ? ` - ${contrib.positionReason}` : ''}`));
   console.log('');
 }
 
 /**
- * Run the discussion command
+ * Run consensus-based discussion
  */
 export async function runDiscussion(options: DiscussOptions): Promise<DiscussionResult> {
   const startTime = Date.now();
   const messages: DiscussionMessage[] = [];
 
-  // Load discussion config from config.yaml
+  // Load config
   const discussionConfig = loadDiscussionConfig(options.config);
+  const agents = getAgentsFromConfig(discussionConfig, options);
   
-  // Get agents from config or use defaults
-  const agents = getAgentsFromConfig(discussionConfig, options.agents);
+  // Apply config defaults
+  const maxRounds = options.maxRounds ?? discussionConfig?.maxRounds ?? 10;
+  const timeout = options.timeout ?? discussionConfig?.timeout ?? 60;
+  const outputDir = options.output ?? discussionConfig?.outputDir;
   
-  // Apply config timeout if not specified in options
-  if (!options.timeout && discussionConfig?.timeout) {
-    options.timeout = discussionConfig.timeout;
-  }
+  // Identify proposer and responders
+  const proposer = agents.find(a => a.role === 'architect' || a.role === 'planner') || agents[0]!;
+  const responders = agents.filter(a => a.id !== proposer.id);
   
-  // Apply config model if not specified in options
-  if (!options.model && discussionConfig?.model) {
-    options.model = discussionConfig.model;
+  // Create providers for each agent
+  const providers = new Map<string, LLMProvider>();
+  for (const agent of agents) {
+    providers.set(agent.id, createAgentProvider(agent, { ...options, timeout }));
   }
 
   // Header
   console.log('\n');
-  console.log(chalk.bold.white('🤖 Starting Real Multi-Agent Discussion'));
+  console.log(chalk.bold.white('🤖 Multi-Agent Consensus Discussion'));
   console.log(chalk.gray('━'.repeat(60)));
   console.log(chalk.white(`Topic: ${chalk.cyan(options.topic)}`));
-  console.log(chalk.white(`Agents: ${agents.map(a => `${a.emoji} ${a.name}`).join(', ')}`));
+  console.log(chalk.white(`Max Rounds: ${maxRounds}`));
+  console.log('');
   
-  // Show agent config source
-  if (discussionConfig?.agents && discussionConfig.agents.length > 0) {
-    console.log(chalk.gray(`Config: Loaded ${agents.length} agents from config.yaml`));
-  } else {
-    console.log(chalk.gray(`Config: Using ${agents.length} default agents`));
+  // Show agents with their models
+  console.log(chalk.bold('Participants:'));
+  for (const agent of agents) {
+    const providerLabel = agent.provider === 'claude-cli' ? 'CLI' : 'API';
+    console.log(`  ${agent.emoji} ${agent.name} - ${chalk.gray(`${agent.model} via ${providerLabel}`)}`);
   }
-  
-  // Show model and timeout
-  console.log(chalk.gray(`Model: ${options.model || 'claude-sonnet-4-20250514'}`));
-  console.log(chalk.gray(`Timeout: ${options.timeout || 60}s per agent`));
   console.log(chalk.gray('━'.repeat(60)));
 
   // Load context
@@ -634,7 +835,7 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
     contextSpinner.succeed(
       `Context loaded: ${context.sourceFiles.length} files, ${Math.round(context.totalSize / 1024)}KB`
     );
-  } catch (error) {
+  } catch {
     contextSpinner.warn('Could not load context, proceeding without');
     context = {
       readme: null,
@@ -645,89 +846,281 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
     };
   }
 
-  // Check if Claude CLI is available
-  const cliAvailable = await ClaudeCliProvider.isAvailable();
-  if (!cliAvailable) {
-    console.log(chalk.red('\n❌ Claude CLI not found!'));
-    console.log(chalk.yellow('Install it with: npm install -g @anthropic-ai/claude-cli'));
-    console.log(chalk.yellow('Then authenticate: claude auth'));
-    throw new Error('Claude CLI not available');
-  }
-
-  console.log('');
-
-  // Run discussion rounds
+  // Check provider availability
+  const availabilitySpinner = ora('Checking provider availability...').start();
+  const availableProviders: string[] = [];
+  
   for (const agent of agents) {
-    const spinner = ora({
-      text: agent.color(`[${agent.name}] ${agent.emoji} Analyzing...`),
-      color: 'cyan',
-    }).start();
-
-    try {
-      const prompt = buildAgentPrompt(options.topic, context, messages, agent.role);
-      const response = await runAgentTurn(agent, prompt, options);
-
-      spinner.stop();
-
-      const message: DiscussionMessage = {
-        agentId: agent.id,
-        agentName: agent.name,
-        role: agent.role,
-        content: response.text,
-        timestamp: new Date(),
-      };
-      messages.push(message);
-
-      printAgentMessage(agent, response.text);
-
-      // Show cost if available
-      if (response.costUsd) {
-        console.log(chalk.gray(`  💰 Cost: $${response.costUsd.toFixed(4)}`));
-      }
-    } catch (error) {
-      spinner.fail(agent.color(`[${agent.name}] Error`));
-      console.log(chalk.red(`  ${error instanceof Error ? error.message : 'Unknown error'}`));
-      
-      // Add error message to transcript
-      messages.push({
-        agentId: agent.id,
-        agentName: agent.name,
-        role: agent.role,
-        content: `[Error: ${error instanceof Error ? error.message : 'Unknown error'}]`,
-        timestamp: new Date(),
-      });
+    const provider = providers.get(agent.id)!;
+    const available = await provider.isAvailable();
+    if (available) {
+      availableProviders.push(agent.name);
+    } else {
+      availabilitySpinner.warn(`${agent.name}: Provider ${agent.provider} not available`);
     }
   }
-
-  // Generate summary
-  console.log(chalk.gray('\n━'.repeat(60)));
-  const summarySpinner = ora('Generating summary...').start();
   
-  let summary: string;
-  try {
-    summary = await generateSummary(options.topic, messages, options);
-    summarySpinner.succeed('Summary generated');
-  } catch {
-    summarySpinner.warn('Could not generate summary');
-    summary = `Diskussion zu "${options.topic}" abgeschlossen.`;
+  if (availableProviders.length < agents.length) {
+    availabilitySpinner.warn(`Only ${availableProviders.length}/${agents.length} providers available`);
+  } else {
+    availabilitySpinner.succeed('All providers available');
   }
 
+  console.log('');
+
+  // Consensus rounds
+  const rounds: RoundStatus[] = [];
+  let consensusReached = false;
+  let previousRound: RoundStatus | undefined;
+  
+  // Context string for prompts
+  const contextStr = context.totalSize > 0 ? formatContextForAgent(context) : '';
+  
+  for (let round = 1; round <= maxRounds && !consensusReached; round++) {
+    console.log('');
+    console.log(chalk.bold.blue(`🔄 Round ${round}/${maxRounds}`));
+    console.log(chalk.blue('━'.repeat(60)));
+    console.log('');
+    
+    const contributions: ConsensusContribution[] = [];
+    
+    // Step 1: Proposer creates/revises proposal
+    const proposerPrompt = buildProposerPrompt(options.topic, round, previousRound);
+    const fullProposerPrompt = contextStr 
+      ? `${contextStr}\n\n---\n\n${proposerPrompt}`
+      : proposerPrompt;
+    
+    const proposerSpinner = ora({
+      text: proposer.color(`[${proposer.name}] Creating ${round === 1 ? 'proposal' : 'revised proposal'}...`),
+      color: 'cyan',
+    }).start();
+    
+    try {
+      const proposerProvider = providers.get(proposer.id)!;
+      const proposerResponse = await runAgentTurn(proposer, proposerProvider, fullProposerPrompt, options);
+      proposerSpinner.stop();
+      
+      const extracted = extractPosition(proposerResponse.text);
+      const providerLabel = proposer.provider === 'claude-cli' ? 'CLI' : 'API';
+      
+      const proposerContrib: ConsensusContribution = {
+        agentId: proposer.id,
+        agentName: proposer.name,
+        role: proposer.role,
+        model: proposer.model,
+        provider: providerLabel,
+        emoji: proposer.emoji,
+        content: proposerResponse.text,
+        position: 'PROPOSAL',
+        positionReason: extracted.reason,
+        timestamp: new Date(),
+      };
+      contributions.push(proposerContrib);
+      
+      console.log('');
+      printAgentHeader(proposer);
+      printContribution(proposerContrib);
+      
+      // Add to messages
+      messages.push({
+        agentId: proposer.id,
+        agentName: proposer.name,
+        role: proposer.role,
+        content: proposerResponse.text,
+        timestamp: new Date(),
+      });
+      
+      if (proposerResponse.costUsd) {
+        console.log(chalk.gray(`  💰 Cost: $${proposerResponse.costUsd.toFixed(4)}`));
+      }
+    } catch (error) {
+      proposerSpinner.fail(proposer.color(`[${proposer.name}] Error`));
+      console.log(chalk.red(`  ${error instanceof Error ? error.message : 'Unknown error'}`));
+      break;
+    }
+    
+    // Step 2: Each responder evaluates
+    for (const responder of responders) {
+      const responderPrompt = buildResponderPrompt(
+        options.topic,
+        round,
+        contributions[0]!, // The proposal
+        contributions.slice(1), // Previous responses this round
+        responder.role
+      );
+      
+      const fullResponderPrompt = contextStr 
+        ? `${contextStr}\n\n---\n\n${responderPrompt}`
+        : responderPrompt;
+      
+      const responderSpinner = ora({
+        text: responder.color(`[${responder.name}] Analyzing...`),
+        color: 'cyan',
+      }).start();
+      
+      try {
+        const responderProvider = providers.get(responder.id)!;
+        const responderResponse = await runAgentTurn(responder, responderProvider, fullResponderPrompt, options);
+        responderSpinner.stop();
+        
+        const { position, reason } = extractPosition(responderResponse.text);
+        const providerLabel = responder.provider === 'claude-cli' ? 'CLI' : 'API';
+        
+        const responderContrib: ConsensusContribution = {
+          agentId: responder.id,
+          agentName: responder.name,
+          role: responder.role,
+          model: responder.model,
+          provider: providerLabel,
+          emoji: responder.emoji,
+          content: responderResponse.text,
+          position,
+          positionReason: reason,
+          timestamp: new Date(),
+        };
+        contributions.push(responderContrib);
+        
+        console.log('');
+        printAgentHeader(responder);
+        printContribution(responderContrib);
+        
+        // Add to messages
+        messages.push({
+          agentId: responder.id,
+          agentName: responder.name,
+          role: responder.role,
+          content: responderResponse.text,
+          timestamp: new Date(),
+        });
+        
+        if (responderResponse.costUsd) {
+          console.log(chalk.gray(`  💰 Cost: $${responderResponse.costUsd.toFixed(4)}`));
+        }
+      } catch (error) {
+        responderSpinner.fail(responder.color(`[${responder.name}] Error`));
+        console.log(chalk.red(`  ${error instanceof Error ? error.message : 'Unknown error'}`));
+        
+        // Add error placeholder
+        contributions.push({
+          agentId: responder.id,
+          agentName: responder.name,
+          role: responder.role,
+          model: responder.model,
+          provider: responder.provider === 'claude-cli' ? 'CLI' : 'API',
+          emoji: responder.emoji,
+          content: `[Error: ${error instanceof Error ? error.message : 'Unknown error'}]`,
+          position: 'CONCERN',
+          positionReason: 'Agent error',
+          timestamp: new Date(),
+        });
+      }
+    }
+    
+    // Evaluate round
+    const roundStatus = evaluateRound(round, maxRounds, contributions);
+    rounds.push(roundStatus);
+    previousRound = roundStatus;
+    
+    // Print round status
+    console.log('');
+    console.log(chalk.gray('─'.repeat(60)));
+    console.log(formatRoundStatus(roundStatus));
+    
+    consensusReached = roundStatus.consensusReached;
+  }
+  
+  // Generate summary
+  console.log('');
+  console.log(chalk.gray('━'.repeat(60)));
+  
+  let summary: string;
+  let finalConsensus: string | undefined;
+  
+  if (consensusReached) {
+    console.log(chalk.bold.green('\n✅ KONSENS ERREICHT!'));
+    
+    // Use last proposal as final consensus
+    const lastRound = rounds[rounds.length - 1];
+    const proposalContrib = lastRound?.contributions.find(c => c.position === 'PROPOSAL');
+    finalConsensus = proposalContrib?.content;
+    summary = `Konsens nach ${rounds.length} Runde(n) erreicht.`;
+  } else {
+    console.log(chalk.bold.yellow('\n❌ KEIN KONSENS'));
+    summary = `Kein Konsens nach ${rounds.length} Runden. Weitere Diskussion erforderlich.`;
+  }
+  
+  // Collect all action items, conditions, concerns
+  const allActionItems: Array<{ task: string; assignee?: string }> = [];
+  const allConditions: string[] = [];
+  const allConcerns: string[] = [];
+  
+  for (const round of rounds) {
+    allConditions.push(...round.conditions);
+    allConcerns.push(...round.concerns);
+    
+    for (const contrib of round.contributions) {
+      const items = extractActionItems(contrib.content);
+      allActionItems.push(...items);
+    }
+  }
+  
+  // Build consensus result
+  const consensusResult: ConsensusResult = {
+    topic: options.topic,
+    rounds,
+    consensusReached,
+    totalRounds: rounds.length,
+    finalConsensus,
+    actionItems: allActionItems,
+    allConditions: [...new Set(allConditions)],
+    allConcerns: [...new Set(allConcerns)],
+    durationMs: Date.now() - startTime,
+    participants: agents.map(a => ({
+      id: a.id,
+      name: a.name,
+      role: a.role,
+      model: a.model,
+      provider: a.provider === 'claude-cli' ? 'CLI' : 'API',
+    })),
+  };
+  
+  // Generate and save markdown
+  const markdown = generateMarkdown(options.topic, agents, consensusResult, context);
+  const markdownPath = saveMarkdown(markdown, options.topic, outputDir);
+  
+  console.log('');
+  console.log(chalk.green(`📝 Discussion saved to: ${markdownPath}`));
+  
   // Print summary
   console.log('');
-  console.log(chalk.bold.green('📝 ZUSAMMENFASSUNG'));
+  console.log(chalk.bold.white('📊 ZUSAMMENFASSUNG'));
   console.log(chalk.gray('─'.repeat(50)));
-  console.log(chalk.white(summary));
+  console.log(chalk.white(`  Thema: ${options.topic}`));
+  console.log(chalk.white(`  Runden: ${rounds.length}/${maxRounds}`));
+  console.log(chalk.white(`  Status: ${consensusReached ? 'Konsens erreicht' : 'Kein Konsens'}`));
+  console.log(chalk.white(`  Dauer: ${Math.round((Date.now() - startTime) / 1000)}s`));
+  
+  if (allActionItems.length > 0) {
+    console.log('');
+    console.log(chalk.bold('  Action Items:'));
+    for (const item of allActionItems.slice(0, 5)) {
+      console.log(chalk.white(`    - ${item.task}${item.assignee ? ` (${item.assignee})` : ''}`));
+    }
+    if (allActionItems.length > 5) {
+      console.log(chalk.gray(`    ... und ${allActionItems.length - 5} weitere`));
+    }
+  }
+  
   console.log(chalk.gray('─'.repeat(50)));
-
-  const duration = Date.now() - startTime;
-  console.log(chalk.gray(`\n⏱️  Duration: ${Math.round(duration / 1000)}s`));
   console.log('');
 
   return {
     topic: options.topic,
     messages,
     summary,
-    duration,
+    duration: Date.now() - startTime,
+    consensusResult,
+    markdownPath,
   };
 }
 
@@ -738,9 +1131,6 @@ export async function discussCommand(options: DiscussOptions): Promise<void> {
   try {
     await runDiscussion(options);
   } catch (error) {
-    if (error instanceof Error && error.message === 'Claude CLI not available') {
-      process.exit(1);
-    }
     console.error(chalk.red('Error running discussion:'), error);
     process.exit(1);
   }

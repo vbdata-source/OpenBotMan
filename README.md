@@ -189,38 +189,133 @@ Options:
 - `--delay 2000` - Slower animation (2 seconds between messages)
 - `--no-animation` - Instant output (for CI/testing)
 
-### 🆕 Real Multi-Agent Discussions
+### 🆕 Real Multi-Agent Discussions with Consensus
 
-Unlike the demo, the `discuss` command runs **real Claude CLI agents** that analyze your actual code:
+Unlike the demo, the `discuss` command runs **real multi-agent discussions with iterative consensus-finding**:
 
 ```bash
-# Start a discussion about implementing a feature
+# Start a consensus discussion
 openbotman discuss "Wie sollen wir das Caching implementieren?"
 
 # Include specific files for context
 openbotman discuss "Review diese Files" --files src/api.ts,src/db.ts
 
-# Use only 2 agents (Coder + Reviewer, faster)
-openbotman discuss "Schnelle Architektur-Frage" --agents 2
+# Limit consensus rounds
+openbotman discuss "API Design" --max-rounds 5
+
+# Custom output directory
+openbotman discuss "Feature Planning" --output ./decisions/
+
+# Mix providers (requires API keys)
+openbotman discuss "Architecture Review" \
+  --planner gemini \
+  --coder claude-cli \
+  --reviewer openai
 ```
 
-**What happens:**
-1. **Context Loading** - Automatically reads README.md, package.json, and up to 10 source files
-2. **Coder Agent** 💻 - Analyzes from implementation perspective
-3. **Reviewer Agent** 🔍 - Critiques and finds risks
-4. **Architect Agent** 🏗️ - Provides strategic overview
-5. **Summary** - AI-generated summary of key points
+**Consensus Protocol:**
+
+Each agent must end their response with a position:
+- `[POSITION: SUPPORT]` - Full agreement
+- `[POSITION: SUPPORT_WITH_CONDITIONS]` - Agree with conditions
+- `[POSITION: CONCERN]` - Has concerns but no veto
+- `[POSITION: OBJECTION]` - Blocks consensus, requires revision
+
+**Consensus is reached when:**
+- All agents vote SUPPORT or SUPPORT_WITH_CONDITIONS
+- No OBJECTION votes
+- CONCERN counts as "proceed but note"
+
+**Example Output:**
+```
+🔄 Round 1/10
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[Planner] 🎯 ARCHITECT (claude-sonnet-4-20250514 via CLI)
+──────────────────────────────────────────────────────────
+  Ich schlage vor, Redis für Caching zu verwenden...
+  💡 Position: PROPOSAL
+
+[Senior Developer] 💻 CODER (claude-sonnet-4-20250514 via CLI)
+──────────────────────────────────────────────────────────
+  Der Ansatz ist solide. Bedenken bei Memory-Limits...
+  ⚠️ Position: CONCERN - Memory-Limits definieren
+
+[Reviewer] 🔍 REVIEWER (claude-sonnet-4-20250514 via CLI)
+──────────────────────────────────────────────────────────
+  Sicherheitsbedenken bei der Cache-Invalidierung...
+  🚫 Position: OBJECTION - Security-Risiko
+
+📊 Status: 1 CONCERN, 1 OBJECTION → No consensus
+
+🔄 Round 2/10 ...
+
+✅ KONSENS ERREICHT!
+📝 Discussion saved to: discussions/2026-02-03_17-30_caching-implementieren.md
+```
+
+**Markdown Export:**
+
+Every discussion is automatically saved as Markdown:
+```markdown
+# Discussion: Wie sollen wir das Caching implementieren?
+Date: 2026-02-03 17:30
+Participants: Planner (claude-sonnet), Coder (claude-sonnet), Reviewer (gpt-4)
+Rounds: 3
+Status: ✅ CONSENSUS REACHED
+
+## Round 1
+### [Planner] 🎯 ARCHITECT (claude-sonnet-4-20250514 via CLI)
+[Content...]
+**Position:** 💡 PROPOSAL
+...
+
+## Final Consensus
+[Summary of final solution]
+
+## Action Items
+- [ ] Task 1 (assigned: Coder)
+- [ ] Task 2 (assigned: Reviewer)
+
+## Conditions & Concerns
+- Memory limits must be defined
+- Cache TTL strategy needed
+```
+
+**Multi-Provider Support:**
+
+Mix different LLM providers per agent in `config.yaml`:
+```yaml
+discussion:
+  agents:
+    - id: planner
+      provider: google        # Gemini API
+      model: gemini-2.0-flash
+      apiKey: ${GOOGLE_API_KEY}
+    - id: coder
+      provider: claude-cli    # Claude CLI (Pro subscription)
+      model: claude-sonnet-4-20250514
+    - id: reviewer
+      provider: openai        # OpenAI API
+      model: gpt-4-turbo
+      apiKey: ${OPENAI_API_KEY}
+```
 
 **Requirements:**
 - Claude CLI installed and authenticated (`npm install -g @anthropic-ai/claude-cli && claude auth`)
-- Claude Pro/Max subscription (uses your existing subscription, no API key needed!)
+- For non-Claude providers: Set API keys in environment or config
 
 **Options:**
 - `--files <list>` - Specific files to include (comma-separated)
 - `--agents <1-3>` - Number of agents (default: 3)
+- `--max-rounds <n>` - Maximum consensus rounds (default: 10)
 - `--timeout <sec>` - Timeout per agent (default: 60s)
-- `--model <model>` - Model to use (default: claude-sonnet-4-20250514)
-- `--verbose` - Show detailed Claude CLI output
+- `--model <model>` - Model for all agents (default: claude-sonnet-4-20250514)
+- `--output <path>` - Output directory for markdown export
+- `--planner <provider>` - Provider for planner (e.g., gemini, openai:gpt-4)
+- `--coder <provider>` - Provider for coder
+- `--reviewer <provider>` - Provider for reviewer
+- `--verbose` - Show detailed output
 
 ## 📖 Documentation
 

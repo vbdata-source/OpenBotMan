@@ -324,22 +324,28 @@ authCmd
   .action((name, options) => authDefaultCommand({ ...options, name }));
 
 /**
- * Discuss command - Real multi-agent discussions
+ * Discuss command - Real multi-agent discussions with consensus
  */
 program
   .command('discuss <topic>')
-  .description('Start a real multi-agent discussion about a topic')
+  .description('Start a multi-agent discussion with consensus finding')
   .option('-c, --config <path>', 'Config file path', 'config.yaml')
   .option('-f, --files <files>', 'Comma-separated list of files to include as context')
   .option('-g, --github', 'Include GitHub context (issues, PRs)')
   .option('-a, --agents <count>', 'Number of agents (1-3)', '3')
   .option('-t, --timeout <seconds>', 'Timeout per agent in seconds', '60')
-  .option('-m, --model <model>', 'Model to use', 'claude-sonnet-4-20250514')
+  .option('-m, --model <model>', 'Model to use for all agents')
+  .option('-r, --max-rounds <rounds>', 'Maximum consensus rounds', '10')
+  .option('-o, --output <path>', 'Output directory for markdown export')
+  .option('--planner <provider>', 'Provider for planner/architect (e.g., gemini, openai:gpt-4)')
+  .option('--coder <provider>', 'Provider for coder (e.g., claude-cli)')
+  .option('--reviewer <provider>', 'Provider for reviewer (e.g., openai)')
   .option('-v, --verbose', 'Enable verbose output')
   .action(async (topic, options) => {
     const files = options.files ? options.files.split(',').map((f: string) => f.trim()) : undefined;
     const agentCount = parseInt(options.agents, 10);
     const timeout = parseInt(options.timeout, 10);
+    const maxRounds = parseInt(options.maxRounds, 10);
     
     await discussCommand({
       topic,
@@ -349,6 +355,11 @@ program
       timeout: isNaN(timeout) ? 60 : timeout,
       verbose: options.verbose || false,
       model: options.model,
+      maxRounds: isNaN(maxRounds) ? 10 : maxRounds,
+      output: options.output,
+      planner: options.planner,
+      coder: options.coder,
+      reviewer: options.reviewer,
     });
   });
 
