@@ -403,6 +403,7 @@ export class ClaudeCliProvider extends EventEmitter<ClaudeCliProviderEvents> {
     const args: string[] = [
       '--print',              // Non-interactive mode
       '--output-format', 'stream-json',  // Stream JSON for real-time updates
+      '--verbose',            // Required for stream-json with --print
       ...this.options.args,
     ];
     
