@@ -3,12 +3,15 @@
  * 
  * Runs actual Claude CLI agents in a structured discussion.
  * Each agent has a distinct role and perspective.
+ * 
+ * Agents can be configured in config.yaml under the 'discussion' section.
  */
 
 import chalk from 'chalk';
 import ora from 'ora';
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join, relative, dirname, extname } from 'path';
+import { parse as parseYaml } from 'yaml';
 import { ClaudeCliProvider, type ClaudeCliResponse } from '@openbotman/orchestrator';
 
 // ============================================================================
@@ -41,6 +44,23 @@ export interface DiscussOptions {
   verbose?: boolean;
   model?: string;
   cwd?: string;
+  config?: string;  // Path to config.yaml
+}
+
+export interface DiscussionConfig {
+  model?: string;
+  provider?: string;
+  timeout?: number;
+  maxContext?: number;
+  showAgentConfig?: boolean;
+  agents?: Array<{
+    id: string;
+    role: string;
+    name: string;
+    emoji: string;
+    color?: string;
+    systemPrompt: string;
+  }>;
 }
 
 export interface DiscussionMessage {
@@ -133,6 +153,70 @@ DEIN STIL:
 Antworte auf Deutsch. Denke langfristig. Max 300 Wörter.`,
   },
 ];
+
+// ============================================================================
+// Config Loading
+// ============================================================================
+
+const COLOR_MAP: Record<string, (text: string) => string> = {
+  cyan: chalk.cyan,
+  yellow: chalk.yellow,
+  magenta: chalk.magenta,
+  green: chalk.green,
+  blue: chalk.blue,
+  red: chalk.red,
+  white: chalk.white,
+  gray: chalk.gray,
+};
+
+/**
+ * Load discussion config from config.yaml
+ */
+function loadDiscussionConfig(configPath?: string): DiscussionConfig | null {
+  const paths = [
+    configPath,
+    'config.yaml',
+    'config.yml',
+    join(process.cwd(), 'config.yaml'),
+  ].filter(Boolean) as string[];
+
+  for (const path of paths) {
+    if (existsSync(path)) {
+      try {
+        const content = readFileSync(path, 'utf-8');
+        const config = parseYaml(content) as Record<string, unknown>;
+        return config['discussion'] as DiscussionConfig | undefined ?? null;
+      } catch {
+        // Ignore parse errors, fall back to defaults
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Merge config agents with defaults
+ */
+function getAgentsFromConfig(config: DiscussionConfig | null, requestedCount?: number): DiscussAgentConfig[] {
+  if (!config?.agents || config.agents.length === 0) {
+    // Use defaults
+    const count = Math.min(requestedCount || 3, DEFAULT_AGENTS.length);
+    return DEFAULT_AGENTS.slice(0, count);
+  }
+
+  // Convert config agents to internal format
+  const configAgents: DiscussAgentConfig[] = config.agents.map((a) => ({
+    id: a.id,
+    name: a.name,
+    role: a.role as 'coder' | 'reviewer' | 'architect',
+    emoji: a.emoji || '🤖',
+    color: COLOR_MAP[a.color || 'white'] || chalk.white,
+    systemPrompt: a.systemPrompt,
+  }));
+
+  const count = Math.min(requestedCount || configAgents.length, configAgents.length);
+  return configAgents.slice(0, count);
+}
 
 // ============================================================================
 // Project Context Loading
@@ -506,9 +590,21 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
   const startTime = Date.now();
   const messages: DiscussionMessage[] = [];
 
-  // Determine which agents to use
-  const agentCount = Math.min(options.agents || 3, DEFAULT_AGENTS.length);
-  const agents = DEFAULT_AGENTS.slice(0, agentCount);
+  // Load discussion config from config.yaml
+  const discussionConfig = loadDiscussionConfig(options.config);
+  
+  // Get agents from config or use defaults
+  const agents = getAgentsFromConfig(discussionConfig, options.agents);
+  
+  // Apply config timeout if not specified in options
+  if (!options.timeout && discussionConfig?.timeout) {
+    options.timeout = discussionConfig.timeout;
+  }
+  
+  // Apply config model if not specified in options
+  if (!options.model && discussionConfig?.model) {
+    options.model = discussionConfig.model;
+  }
 
   // Header
   console.log('\n');
@@ -516,6 +612,17 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
   console.log(chalk.gray('━'.repeat(60)));
   console.log(chalk.white(`Topic: ${chalk.cyan(options.topic)}`));
   console.log(chalk.white(`Agents: ${agents.map(a => `${a.emoji} ${a.name}`).join(', ')}`));
+  
+  // Show agent config source
+  if (discussionConfig?.agents && discussionConfig.agents.length > 0) {
+    console.log(chalk.gray(`Config: Loaded ${agents.length} agents from config.yaml`));
+  } else {
+    console.log(chalk.gray(`Config: Using ${agents.length} default agents`));
+  }
+  
+  // Show model and timeout
+  console.log(chalk.gray(`Model: ${options.model || 'claude-sonnet-4-20250514'}`));
+  console.log(chalk.gray(`Timeout: ${options.timeout || 60}s per agent`));
   console.log(chalk.gray('━'.repeat(60)));
 
   // Load context

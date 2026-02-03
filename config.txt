@@ -1,0 +1,337 @@
+# ============================================
+# OpenBotMan Configuration
+# ============================================
+# Copy to config.yaml and customize
+
+# ============================================
+# Orchestrator Settings
+# ============================================
+orchestrator:
+  # Provider: 'claude-cli' (Pro-Abo) or 'anthropic' (API-Key)
+  provider: claude-cli
+  model: claude-sonnet-4-20250514
+  
+  # Maximum iterations per task
+  maxIterations: 10
+  
+  # Timeout per agent call (ms)
+  agentTimeout: 120000
+  
+  # Enable autonomous operation
+  autonomous: false
+  
+  # Require human approval for external actions
+  humanApproval: true
+
+# ============================================
+# Discussion Settings (for 'openbotman discuss')
+# ============================================
+discussion:
+  # Default model for discussion agents
+  model: claude-sonnet-4-20250514
+  
+  # Provider: 'claude-cli' uses your Pro subscription
+  provider: claude-cli
+  
+  # Timeout per agent in seconds
+  timeout: 120
+  
+  # Max context size in bytes (50KB default)
+  maxContext: 50000
+  
+  # Show which agents are participating
+  showAgentConfig: true
+  
+  # Agent configurations for discussions
+  agents:
+    - id: coder
+      role: coder
+      name: "Senior Developer"
+      emoji: "💻"
+      color: cyan
+      systemPrompt: |
+        Du bist ein erfahrener Senior Software-Entwickler mit 15+ Jahren Erfahrung.
+        
+        DEINE PERSPEKTIVE:
+        - Implementierungs-Details und Code-Qualität
+        - Praktische Umsetzbarkeit und Aufwandsschätzung
+        - Performance, Skalierbarkeit und Effizienz
+        - Clean Code Prinzipien und Design Patterns
+        - Konkrete Code-Vorschläge mit Beispielen
+        
+        DEIN STIL:
+        - Pragmatisch und lösungsorientiert
+        - Zeige Code-Beispiele wenn sinnvoll
+        - Denke an Edge-Cases und Error-Handling
+        - Bewerte Aufwand realistisch (Stunden/Tage)
+        
+        Antworte auf Deutsch. Sei konkret und präzise.
+        
+    - id: reviewer
+      role: reviewer
+      name: "Security & Quality Expert"
+      emoji: "🔍"
+      color: yellow
+      systemPrompt: |
+        Du bist ein kritischer Code-Reviewer und Security-Experte.
+        
+        DEINE PERSPEKTIVE:
+        - Sicherheitslücken und Vulnerabilities
+        - Performance-Bottlenecks und Memory-Leaks
+        - Edge-Cases und Fehlerszenarien
+        - Code-Qualität und Wartbarkeit
+        - Compliance und Best Practices
+        
+        DEIN STIL:
+        - Kritisch aber konstruktiv
+        - Zeige konkrete Risiken mit Beispielen
+        - Schlage Mitigationen vor
+        - Priorisiere: Kritisch > Hoch > Mittel > Niedrig
+        
+        Antworte auf Deutsch. Sei direkt und präzise.
+        
+    - id: architect
+      role: architect
+      name: "Solution Architect"
+      emoji: "🏗️"
+      color: magenta
+      systemPrompt: |
+        Du bist ein erfahrener Solution Architect.
+        
+        DEINE PERSPEKTIVE:
+        - Gesamtarchitektur und System-Design
+        - Trade-offs zwischen Ansätzen
+        - Skalierbarkeit und Zukunftssicherheit
+        - Integration mit bestehenden Systemen
+        - Alternativen und deren Vor-/Nachteile
+        
+        DEIN STIL:
+        - Strategisch und ausgewogen
+        - Zeige Architektur-Diagramme (ASCII) wenn hilfreich
+        - Bewerte langfristige Auswirkungen
+        - Gib klare Empfehlungen mit Begründung
+        
+        Antworte auf Deutsch. Fasse am Ende zusammen.
+
+# ============================================
+# Knowledge Base Settings
+# ============================================
+knowledgeBase:
+  enabled: true
+  storagePath: ./data/knowledge
+  
+  # Automatically extract learnings from tasks
+  autoLearn: true
+  
+  # Vector database type: memory | chromadb | qdrant
+  vectorDb: memory
+  
+  # Embedding model (for external embedding service)
+  embeddingModel: text-embedding-3-small
+
+# ============================================
+# Agent Definitions (for Orchestrator/Workflows)
+# ============================================
+agents:
+  # Claude Agent (via CLI - uses your Pro subscription!)
+  - id: claude_cli
+    name: Claude (CLI)
+    role: coder
+    provider: claude-cli
+    model: claude-sonnet-4-20250514
+    enabled: true
+    systemPrompt: |
+      You are an expert software developer.
+      Write clean, well-documented code.
+      Follow best practices and design patterns.
+    capabilities:
+      code: true
+      review: true
+      filesystem: true
+      shell: true
+      web: false
+      mcp: true
+      discussion: true
+      decisions: true
+    maxTokens: 4096
+    temperature: 0.7
+
+  # GPT-4 Agent (for documentation and testing)
+  - id: gpt4
+    name: GPT-4
+    role: tester
+    provider: openai
+    model: gpt-4-turbo-preview
+    apiKey: ${OPENAI_API_KEY}  # Set via environment variable!
+    enabled: false  # Enable when OPENAI_API_KEY is set
+    systemPrompt: |
+      You are an expert at testing and documentation.
+      Write comprehensive tests and clear documentation.
+    capabilities:
+      code: true
+      review: false
+      filesystem: true
+      shell: true
+      web: false
+      mcp: false
+      discussion: true
+      decisions: false
+    maxTokens: 4096
+    temperature: 0.3
+
+  # Gemini Agent (for review and research)
+  - id: gemini
+    name: Gemini
+    role: reviewer
+    provider: google
+    model: gemini-2.0-flash
+    apiKey: ${GOOGLE_API_KEY}  # Set via environment variable!
+    enabled: false  # Enable when configured
+    systemPrompt: |
+      You are a critical code reviewer and researcher.
+      Look for bugs, security issues, and improvements.
+      Provide constructive feedback.
+    capabilities:
+      code: false
+      review: true
+      filesystem: false
+      shell: false
+      web: true
+      mcp: false
+      discussion: true
+      decisions: true
+    maxTokens: 4096
+    temperature: 0.5
+
+  # Ollama Local Agent (fast, free, offline)
+  - id: ollama
+    name: Local LLM
+    role: research
+    provider: ollama
+    model: codellama:13b
+    enabled: false  # Enable when Ollama is running
+    api:
+      baseUrl: http://localhost:11434
+    systemPrompt: |
+      You are a helpful assistant for quick queries.
+      Provide concise, accurate answers.
+    capabilities:
+      code: true
+      review: false
+      filesystem: false
+      shell: false
+      web: false
+      mcp: false
+      discussion: false
+      decisions: false
+    maxTokens: 2048
+    temperature: 0.5
+
+# ============================================
+# Workflows
+# ============================================
+workflows:
+  - id: code_review
+    name: Code Review Workflow
+    description: Full code review with multiple agents
+    steps:
+      - id: analyze
+        name: Analyze Code
+        role: coder
+        task: Analyze the code structure and identify areas for review
+        output: analysis
+
+      - id: review
+        name: Security Review
+        role: reviewer
+        task: Review the code for security issues and best practices
+        inputs: [analysis]
+        output: review
+
+      - id: test
+        name: Generate Tests
+        role: tester
+        task: Generate comprehensive tests based on the analysis
+        inputs: [analysis, review]
+        output: tests
+        maxIterations: 2
+
+  - id: feature_development
+    name: Feature Development Workflow
+    description: Full feature development from spec to tests
+    steps:
+      - id: plan
+        name: Create Plan
+        role: architect
+        task: Create a detailed implementation plan
+        output: plan
+
+      - id: implement
+        name: Implement Feature
+        role: coder
+        task: Implement the feature according to the plan
+        inputs: [plan]
+        output: implementation
+        maxIterations: 3
+
+      - id: review
+        name: Code Review
+        role: reviewer
+        task: Review the implementation
+        inputs: [plan, implementation]
+        output: review
+
+      - id: test
+        name: Write Tests
+        role: tester
+        task: Write comprehensive tests
+        inputs: [implementation]
+        output: tests
+
+# ============================================
+# Quality Gates
+# ============================================
+qualityGates:
+  - name: Code Coverage
+    type: coverage
+    threshold: 80
+    required: true
+
+  - name: Complexity
+    type: complexity
+    threshold: 15
+    required: false
+
+  - name: Security Scan
+    type: security
+    threshold: 0  # No critical vulnerabilities
+    required: true
+
+# ============================================
+# Security Settings
+# ============================================
+security:
+  enabled: true
+  
+  # Rate limiting
+  rateLimit:
+    maxRequests: 100
+    windowSeconds: 60
+  
+  # Audit logging
+  audit:
+    enabled: true
+    level: normal  # minimal | normal | verbose
+    retentionDays: 90
+
+# ============================================
+# Logging
+# ============================================
+logging:
+  level: info  # debug | info | warn | error
+  format: pretty  # json | pretty
+  file:
+    enabled: false
+    path: ./data/logs/openbotman.log
+    maxSize: 10m
+    maxFiles: 5
