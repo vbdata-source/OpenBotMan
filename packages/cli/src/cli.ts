@@ -23,6 +23,7 @@ import {
   authListCommand,
 } from './commands/auth.js';
 import { demoDiscussionCommand } from './commands/demo-discussion.js';
+import { discussCommand } from './commands/discuss.js';
 
 // Load environment variables
 loadEnv();
@@ -321,6 +322,35 @@ authCmd
   .description('Set default auth profile')
   .option('-s, --storage-path <path>', 'Auth storage path')
   .action((name, options) => authDefaultCommand({ ...options, name }));
+
+/**
+ * Discuss command - Real multi-agent discussions
+ */
+program
+  .command('discuss <topic>')
+  .description('Start a real multi-agent discussion about a topic')
+  .option('-c, --config <path>', 'Config file path', 'config.yaml')
+  .option('-f, --files <files>', 'Comma-separated list of files to include as context')
+  .option('-g, --github', 'Include GitHub context (issues, PRs)')
+  .option('-a, --agents <count>', 'Number of agents (1-3)', '3')
+  .option('-t, --timeout <seconds>', 'Timeout per agent in seconds', '60')
+  .option('-m, --model <model>', 'Model to use', 'claude-sonnet-4-20250514')
+  .option('-v, --verbose', 'Enable verbose output')
+  .action(async (topic, options) => {
+    const files = options.files ? options.files.split(',').map((f: string) => f.trim()) : undefined;
+    const agentCount = parseInt(options.agents, 10);
+    const timeout = parseInt(options.timeout, 10);
+    
+    await discussCommand({
+      topic,
+      files,
+      github: options.github || false,
+      agents: isNaN(agentCount) ? 3 : Math.max(1, Math.min(3, agentCount)),
+      timeout: isNaN(timeout) ? 60 : timeout,
+      verbose: options.verbose || false,
+      model: options.model,
+    });
+  });
 
 /**
  * Demo commands

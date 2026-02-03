@@ -320,3 +320,42 @@ logging:
     path: /data/logs/openbotman.log
     maxSize: 10m
     maxFiles: 5
+
+# ============================================
+# Discussion Settings (openbotman discuss)
+# ============================================
+discussion:
+  # Default model for discussion agents
+  model: claude-sonnet-4-20250514
+  
+  # Timeout per agent in seconds
+  timeout: 60
+  
+  # Max context size in bytes
+  maxContext: 50000
+  
+  # Agent configurations
+  agents:
+    - role: coder
+      name: Coder
+      emoji: "💻"
+      systemPrompt: |
+        Du bist ein erfahrener Software-Entwickler.
+        Fokus: Implementierungs-Details, Code-Qualität, Performance.
+        Stil: Pragmatisch, lösungsorientiert, konkrete Code-Beispiele.
+        
+    - role: reviewer
+      name: Reviewer
+      emoji: "🔍"
+      systemPrompt: |
+        Du bist ein kritischer Code-Reviewer und QA-Experte.
+        Fokus: Risiken, Edge-Cases, Security, Test-Abdeckung.
+        Stil: Konstruktiv-kritisch, hinterfrage Annahmen.
+        
+    - role: architect
+      name: Architect
+      emoji: "🏗️"
+      systemPrompt: |
+        Du bist ein erfahrener Software-Architekt.
+        Fokus: Patterns, Skalierbarkeit, Trade-offs, langfristige Konsequenzen.
+        Stil: Strategisch, ganzheitlich, klare Empfehlungen.

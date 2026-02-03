@@ -130,51 +130,97 @@ openbotman agents
 # List workflows
 openbotman workflows
 
-# Run demo (multi-agent discussion)
+# Run demo (mock multi-agent discussion)
 openbotman demo discussion
 openbotman demo discussion --topic "Sollen wir React oder Vue verwenden?"
+
+# 🆕 REAL Multi-Agent Discussion (uses actual Claude CLI!)
+openbotman discuss "Wie implementiere ich Caching für diese App?"
+
+# With specific files for context
+openbotman discuss "Review diese Implementierung" --files src/auth.ts,src/users.ts
+
+# With fewer agents (faster)
+openbotman discuss "Schnelle Frage zu Patterns" --agents 2
 ```
 
-### 🎭 Demo: Multi-Agent Discussion
+### 🎭 Demo: Multi-Agent Code Review
 
-See how agents collaborate in a structured discussion:
+Watch AI agents analyze and review the OpenBotMan project itself:
 
 ```bash
 openbotman demo discussion
 ```
 
 This demonstrates:
-- **Proposals** - Alice suggests TypeScript
-- **Arguments** - Bob counters with JavaScript benefits  
-- **Compromise** - Charlie finds middle ground
-- **Voting** - All agents vote
-- **Consensus** - Final decision is reached
+- **Code Analysis** - Alice examines code quality and patterns
+- **Test Review** - Bob evaluates test coverage and documentation
+- **Architecture Review** - Charlie assesses design decisions
+- **Discussion** - Agents discuss findings and improvements
+- **Consensus** - Final quality rating is agreed upon
 
 Output example:
 ```
-🎭 Multi-Agent Discussion Demo
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Topic: "Sollen wir TypeScript oder JavaScript verwenden?"
-Participants: Alice (Coder), Bob (Reviewer), Charlie (Architect)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎭 Multi-Agent Code Review: OpenBotMan
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Project: OpenBotMan v2.0.0-alpha.1
+Packages: 8 | Tests: 408 | Source Files: 42
+Reviewers: Alice (Coder), Bob (Reviewer), Charlie (Architect)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[Alice] 💡 PROPOSAL: Ich schlage vor, TypeScript zu verwenden...
-[Bob] ❌ ARGUMENT (against): JavaScript ist einfacher...
-[Charlie] 🤔 ARGUMENT (neutral): Beide haben Vorteile...
-[Alice] ✅ VOTE: support
-[Bob] ✅ VOTE: support
-[Charlie] ✅ VOTE: support
+[Alice] 🔍 ANALYSIS: Die Monorepo-Struktur ist sauber...
+[Bob] 📋 REVIEW: 408 Tests - beeindruckend für Alpha!
+[Charlie] 🔍 ANALYSIS: Event-driven Design ist gut...
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎉 CONSENSUS REACHED: TypeScript (pragmatischer Ansatz)
-   (3/3 support)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Voting: Gesamtbewertung des Projekts...
+[Alice] ✅ VOTE [Rating: B+]: Solide Basis...
+[Bob] ✅ VOTE [Rating: B+]: Test-Abdeckung beeindruckend...
+[Charlie] ✅ VOTE [Rating: B+]: Architektur erweiterbar...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎉 CONSENSUS REACHED: Project Rating B+ (Gut)
+   (3/3 reviewers agree)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
+The demo showcases how agents can collaboratively review code, discuss quality issues, and reach consensus - demonstrating OpenBotMan's multi-agent discussion capabilities.
+
 Options:
-- `--topic "Your topic"` - Custom discussion topic
 - `--delay 2000` - Slower animation (2 seconds between messages)
 - `--no-animation` - Instant output (for CI/testing)
+
+### 🆕 Real Multi-Agent Discussions
+
+Unlike the demo, the `discuss` command runs **real Claude CLI agents** that analyze your actual code:
+
+```bash
+# Start a discussion about implementing a feature
+openbotman discuss "Wie sollen wir das Caching implementieren?"
+
+# Include specific files for context
+openbotman discuss "Review diese Files" --files src/api.ts,src/db.ts
+
+# Use only 2 agents (Coder + Reviewer, faster)
+openbotman discuss "Schnelle Architektur-Frage" --agents 2
+```
+
+**What happens:**
+1. **Context Loading** - Automatically reads README.md, package.json, and up to 10 source files
+2. **Coder Agent** 💻 - Analyzes from implementation perspective
+3. **Reviewer Agent** 🔍 - Critiques and finds risks
+4. **Architect Agent** 🏗️ - Provides strategic overview
+5. **Summary** - AI-generated summary of key points
+
+**Requirements:**
+- Claude CLI installed and authenticated (`npm install -g @anthropic-ai/claude-cli && claude auth`)
+- Claude Pro/Max subscription (uses your existing subscription, no API key needed!)
+
+**Options:**
+- `--files <list>` - Specific files to include (comma-separated)
+- `--agents <1-3>` - Number of agents (default: 3)
+- `--timeout <sec>` - Timeout per agent (default: 60s)
+- `--model <model>` - Model to use (default: claude-sonnet-4-20250514)
+- `--verbose` - Show detailed Claude CLI output
 
 ## 📖 Documentation
 

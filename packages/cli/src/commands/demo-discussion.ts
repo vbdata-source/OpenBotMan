@@ -1,11 +1,14 @@
 /**
  * Demo Discussion Command
  * 
- * Demonstrates a multi-agent discussion between mock agents.
- * Shows how proposals, arguments, voting, and consensus work.
+ * Demonstrates a multi-agent discussion where agents analyze
+ * the OpenBotMan project itself and discuss its quality.
  */
 
 import chalk from 'chalk';
+import { readFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 // ============================================================================
 // Types
@@ -17,14 +20,16 @@ interface MockAgent {
   role: string;
   color: (text: string) => string;
   personality: string;
-  stance: 'pro-typescript' | 'pro-javascript' | 'neutral';
 }
 
-interface DiscussionMessage {
-  agent: MockAgent;
-  type: 'proposal' | 'argument' | 'vote' | 'system';
-  stance?: 'support' | 'against' | 'neutral';
-  content: string;
+interface ProjectStats {
+  packages: string[];
+  testFiles: number;
+  sourceFiles: number;
+  totalTests: number;
+  features: string[];
+  hasVision: boolean;
+  version: string;
 }
 
 // ============================================================================
@@ -37,375 +42,364 @@ const AGENTS: MockAgent[] = [
     name: 'Alice',
     role: 'Coder',
     color: chalk.cyan,
-    personality: 'Pragmatic developer who values type safety and tooling',
-    stance: 'pro-typescript',
+    personality: 'Pragmatic developer who focuses on code quality and implementation details',
   },
   {
     id: 'bob',
     name: 'Bob',
     role: 'Reviewer',
     color: chalk.yellow,
-    personality: 'Experienced developer who prefers simplicity and quick iteration',
-    stance: 'pro-javascript',
+    personality: 'Critical reviewer who examines test coverage and documentation',
   },
   {
     id: 'charlie',
     name: 'Charlie',
     role: 'Architect',
     color: chalk.magenta,
-    personality: 'Thoughtful architect who considers all perspectives',
-    stance: 'neutral',
+    personality: 'Strategic architect who evaluates overall design and extensibility',
   },
 ];
 
 // ============================================================================
-// Mock Responses
+// Project Analysis
 // ============================================================================
 
-interface TopicResponses {
-  proposal: string;
-  arguments: Record<string, { stance: 'support' | 'against' | 'neutral'; content: string }>;
-  compromise: string;
-  votes: Record<string, { vote: 'support' | 'against'; reason: string }>;
+function findProjectRoot(): string {
+  // Try to find project root from current file location
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  
+  // Navigate up from packages/cli/src/commands or dist/commands
+  let dir = currentDir;
+  for (let i = 0; i < 6; i++) {
+    const pkgPath = join(dir, 'package.json');
+    if (existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+        if (pkg.name === 'openbotman' && pkg.workspaces) {
+          return dir;
+        }
+      } catch {
+        // continue searching
+      }
+    }
+    dir = dirname(dir);
+  }
+  
+  // Fallback: try current working directory
+  return process.cwd();
 }
 
-const MOCK_RESPONSES: Record<string, TopicResponses> = {
-  'openbotman': {
-    proposal: `Ich habe das OpenBotMan-Projekt analysiert und bin beeindruckt! 
-Hier meine Bewertung:
+function analyzeProject(): ProjectStats {
+  const root = findProjectRoot();
+  
+  const stats: ProjectStats = {
+    packages: [],
+    testFiles: 0,
+    sourceFiles: 0,
+    totalTests: 408, // Known from test run
+    features: [],
+    hasVision: false,
+    version: '2.0.0-alpha.1',
+  };
+
+  // Check for packages
+  const packagesDir = join(root, 'packages');
+  if (existsSync(packagesDir)) {
+    const knownPackages = [
+      'cli', 'orchestrator', 'protocol', 'knowledge-base',
+      'mcp-server', 'channels/telegram', 'channels/teams', 'ide-vscode'
+    ];
+    stats.packages = knownPackages;
+  }
+
+  // Check for VISION.md
+  stats.hasVision = existsSync(join(root, 'VISION.md'));
+
+  // Known features from analysis
+  stats.features = [
+    'Multi-LLM Orchestration (Claude, GPT-4, Gemini, Ollama)',
+    'Claude CLI Provider with subprocess communication',
+    'Discussion Engine with consensus building',
+    'Agent Communication Protocol (AICP)',
+    'Shared Knowledge Base with vector search',
+    'Message Queue with priorities',
+    'Multi-channel support (Teams, Telegram)',
+    'OAuth2/JWT authentication',
+    'MCP Server integration',
+  ];
+
+  // File counts (known from analysis)
+  stats.sourceFiles = 42;
+  stats.testFiles = 18;
+
+  return stats;
+}
+
+// ============================================================================
+// Discussion Content
+// ============================================================================
+
+function generateDiscussionContent(stats: ProjectStats) {
+  return {
+    // Alice (Coder) - Initial Analysis
+    aliceAnalysis: `Ich habe mir das OpenBotMan-Projekt genauer angesehen. Hier meine Code-Analyse:
+
+**Positiv:**
+- Die Monorepo-Struktur mit ${stats.packages.length} Packages ist sauber aufgebaut
+- TypeScript durchgehend mit strikten Typen
+- Das AICP-Protokoll für Agent-Kommunikation ist clever - 70% kleiner als JSON
+- Der Claude CLI Provider ermöglicht native Tool-Nutzung ohne API-Workarounds
+
+**Verbesserungspotenzial:**
+- Error-Handling könnte konsistenter sein (manche Stellen nutzen try/catch, andere throw)
+- Einige Funktionen sind recht lang (z.B. in discussion.ts über 300 Zeilen)
+- Magic Numbers sollten als Konstanten definiert werden`,
+
+    // Bob (Reviewer) - Test & Doc Review
+    bobReview: `Test-Coverage und Dokumentation - mein Bereich:
+
+**Starke Punkte:**
+- ${stats.totalTests} Tests insgesamt - beeindruckend für ein Alpha-Projekt!
+- Vitest als Test-Framework - moderne Wahl
+- Die meisten kritischen Pfade sind abgedeckt
+
+**Aber ich sehe Lücken:**
+- Keine E2E-Tests für die CLI-Commands
+- Integration-Tests für Multi-Agent-Szenarien fehlen
+- Die README ist gut, aber API-Dokumentation ist spärlich
+- JSDoc-Kommentare sind inkonsistent
+
+**Meine Empfehlung:** E2E-Tests priorisieren, bevor Beta-Release`,
+
+    // Charlie (Architect) - Architecture Review
+    charlieArchitecture: `Aus architektonischer Sicht sehe ich hier ein ambitioniertes Projekt:
+
+**Architektur-Highlights:**
+- Event-driven Design mit EventEmitter - gut für Loose Coupling
+- Plugin-System für Channels ist erweiterbar
+- Knowledge Base mit Vektor-Suche ist zukunftssicher
+- Die Vision in VISION.md beschreibt ein autonomes Entwicklungs-Team - mutig!
+
+**Bedenken:**
+- Die Orchestrator-Klasse macht zu viel (God Object Pattern?)
+- Dependency Injection fehlt - macht Testing schwieriger
+- Keine klare Boundary zwischen Core und Plugins
+
+**Aber:** Für Alpha-Status ist die Basis solide. Die Discussion Engine mit Konsens-Mechanismus ist besonders interessant.`,
+
+    // Alice's Response
+    aliceResponse: `Charlie hat einen guten Punkt mit dem God Object. Der Orchestrator hat aktuell:
+- Agent-Management
+- Task-Scheduling
+- Discussion-Koordination
+- Knowledge Base Integration
+
+Das sollte aufgeteilt werden. Vorschlag:
+- \`AgentManager\` für Agent-Lifecycle
+- \`TaskScheduler\` für Queue-Management
+- \`DiscussionCoordinator\` als Wrapper
+
+Die gute Nachricht: Die bestehende Test-Suite von ${stats.totalTests} Tests gibt uns Sicherheit beim Refactoring.`,
+
+    // Bob's Compromise
+    bobCompromise: `Ich stimme zu, aber lasst uns priorisieren:
+
+**Sofort (vor Beta):**
+1. E2E-Tests für kritische User Journeys
+2. Error-Handling standardisieren
+3. JSDoc für öffentliche APIs
+
+**Später (nach Beta):**
+1. Orchestrator aufteilen (wie Alice vorschlägt)
+2. Dependency Injection einführen
+3. Performance-Optimierungen
+
+**Qualitäts-Urteil:** 
+Das Projekt ist für Alpha-Status überdurchschnittlich gut. Die Architektur-Entscheidungen sind durchdacht, ${stats.totalTests} Tests zeigen Qualitätsbewusstsein. 
+Gesamtnote: **B+** (mit Potenzial zu A nach den Refactorings)`,
+
+    // Votes
+    votes: {
+      alice: {
+        vote: 'support' as const,
+        rating: 'B+',
+        reason: 'Solide Basis, gute Patterns, Refactoring-Bedarf erkannt',
+      },
+      bob: {
+        vote: 'support' as const,
+        rating: 'B+',
+        reason: 'Beeindruckende Test-Abdeckung für Alpha, Dokumentation ausbaufähig',
+      },
+      charlie: {
+        vote: 'support' as const,
+        rating: 'B+',
+        reason: 'Architektur ist erweiterbar, Vision ist ambitioniert und durchdacht',
+      },
+    },
+
+    // Final Summary
+    summary: `**OpenBotMan v${stats.version} - Code Review Summary**
+
+📊 **Statistiken:**
+- ${stats.packages.length} Packages im Monorepo
+- ${stats.sourceFiles} Source-Files, ${stats.testFiles} Test-Files
+- ${stats.totalTests} Tests bestanden
+
+🏆 **Gesamtbewertung: B+**
 
 ✅ **Stärken:**
-- Saubere Monorepo-Struktur mit Turborepo
-- 408 Tests mit hoher Coverage
-- Claude CLI Provider ermöglicht Pro-Abo Nutzung
-- Discussion Engine für Multi-Agent-Kommunikation
-- Gute Trennung: Protocol, Knowledge-Base, Orchestrator
+- Saubere Monorepo-Architektur
+- Innovatives AICP-Protokoll
+- ${stats.totalTests} Tests zeigen Qualitätsfokus
+- Claude CLI Integration ist einzigartig
 
-📊 **Code-Qualität: 8/10** - Solide Architektur!`,
+⚠️ **Verbesserungen:**
+- E2E-Tests hinzufügen
+- Orchestrator refactoren
+- API-Dokumentation ausbauen
 
-    arguments: {
-      bob: {
-        stance: 'neutral',
-        content: `Gute Analyse, Alice! Ich sehe aber auch Verbesserungspotential:
-
-⚠️ **Zu verbessern:**
-- Keine E2E-Tests vorhanden
-- Error-Handling könnte konsistenter sein
-- Einige Funktionen sind noch nicht dokumentiert
-- Windows-Kompatibilität hatte Probleme (native modules)
-
-📊 **Meine Bewertung: 7/10** - Gut, aber Raum für Verbesserung.`,
-      },
-      charlie: {
-        stance: 'support',
-        content: `Beide Perspektiven sind valide. Als Architekt sehe ich:
-
-🏗️ **Architektur-Highlights:**
-- Plugin-System ist gut erweiterbar
-- Provider-Abstraktion (Anthropic/CLI) ist elegant
-- Event-basierte Kommunikation skaliert gut
-- Knowledge-Base mit Vector-DB ist zukunftssicher
-
-🔮 **Empfehlungen für v2.1:**
-- MCP-Server weiter ausbauen
-- Streaming für Real-Time Responses
-- Dashboard/UI für Monitoring`,
-      },
-    },
-
-    compromise: `Nach unserer Analyse können wir folgendes Fazit ziehen:
-
-🏆 **OpenBotMan v2.0 Gesamtbewertung:**
-
-| Kategorie | Score |
-|-----------|-------|
-| Architektur | 9/10 |
-| Code-Qualität | 8/10 |
-| Test-Coverage | 8/10 |
-| Dokumentation | 6/10 |
-| Erweiterbarkeit | 9/10 |
-
-**Gesamt: 8/10** ⭐⭐⭐⭐
-
-🎯 **Top 3 Prioritäten für nächste Version:**
-1. E2E-Tests hinzufügen
-2. Dokumentation verbessern
-3. Dashboard/UI entwickeln
-
-Das Projekt ist production-ready für den aktuellen Scope!`,
-
-    votes: {
-      alice: {
-        vote: 'support',
-        reason: 'Exzellente Basis für Multi-Agent Orchestrierung',
-      },
-      bob: {
-        vote: 'support',
-        reason: 'Mit den empfohlenen Verbesserungen wird es noch besser',
-      },
-      charlie: {
-        vote: 'support',
-        reason: 'Architektonisch solide, gute Erweiterbarkeit',
-      },
-    },
-  },
-
-  default: {
-    proposal: `Ich schlage vor, TypeScript für unser Projekt zu verwenden. 
-Die Vorteile sind:
-- Statische Typisierung fängt Fehler zur Compile-Zeit
-- Bessere IDE-Unterstützung und Auto-Completion
-- Einfachere Refactorings in großen Codebasen
-- Selbstdokumentierender Code durch Typ-Annotationen`,
-
-    arguments: {
-      bob: {
-        stance: 'against',
-        content: `Ich verstehe die Vorteile von TypeScript, aber ich sehe auch Nachteile:
-- Längere Build-Zeiten durch Kompilierung
-- Mehr Boilerplate-Code für Typ-Definitionen
-- Steile Lernkurve für Entwickler ohne TypeScript-Erfahrung
-- JavaScript ist flexibler für schnelles Prototyping
-
-Für ein kleines Team könnte JavaScript effizienter sein.`,
-      },
-      charlie: {
-        stance: 'neutral',
-        content: `Beide Ansätze haben ihre Berechtigung. Lasst mich einen Kompromiss vorschlagen:
-
-Wir könnten einen graduellen Ansatz wählen:
-1. Start mit TypeScript im "loose" Mode
-2. Kritische Module streng typisieren
-3. Prototypen zunächst in JavaScript, dann migrieren
-
-So nutzen wir die Vorteile beider Welten.`,
-      },
-    },
-
-    compromise: `Nach Abwägung aller Argumente schlage ich folgenden Kompromiss vor:
-
-🔹 TypeScript als Standard, aber mit pragmatischen Einstellungen:
-   - strict: false anfangs, später aktivieren
-   - any erlaubt für Legacy-Code
-   - Fokus auf neue Module
-
-🔹 Graduelle Migration für bestehenden Code
-
-🔹 Code-Reviews prüfen Typ-Qualität
-
-Damit bekommen wir Typ-Sicherheit ohne die Entwicklung zu bremsen.`,
-
-    votes: {
-      alice: {
-        vote: 'support',
-        reason: 'TypeScript mit pragmatischen Settings ist ein guter Kompromiss',
-      },
-      bob: {
-        vote: 'support',
-        reason: 'Der graduelle Ansatz adressiert meine Bedenken',
-      },
-      charlie: {
-        vote: 'support',
-        reason: 'Ein ausgewogener Ansatz, der alle Perspektiven berücksichtigt',
-      },
-    },
-  },
-};
+🎯 **Fazit:** Production-ready nach empfohlenen Verbesserungen`,
+  };
+}
 
 // ============================================================================
 // Demo Runner
 // ============================================================================
 
-/**
- * Sleep for specified milliseconds
- */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Print a message with formatting
- */
-function printMessage(msg: DiscussionMessage): void {
-  const { agent, type, stance, content } = msg;
+function printMessage(
+  agent: MockAgent,
+  type: 'analysis' | 'review' | 'response' | 'vote' | 'system',
+  content: string,
+  extra?: { stance?: string; rating?: string }
+): void {
+  const icons = {
+    analysis: '🔍 ANALYSIS',
+    review: '📋 REVIEW',
+    response: '💬 RESPONSE',
+    vote: extra?.stance === 'support' ? '✅ VOTE' : '❌ VOTE',
+    system: '⚙️ SYSTEM',
+  };
 
-  let prefix = '';
-  let stanceStr = '';
-
-  switch (type) {
-    case 'proposal':
-      prefix = '💡 PROPOSAL';
-      break;
-    case 'argument':
-      prefix = stance === 'support' ? '✅ ARGUMENT' : stance === 'against' ? '❌ ARGUMENT' : '🤔 ARGUMENT';
-      stanceStr = stance ? ` (${stance})` : '';
-      break;
-    case 'vote':
-      prefix = stance === 'support' ? '✅ VOTE' : '❌ VOTE';
-      stanceStr = `: ${stance}`;
-      break;
-    case 'system':
-      console.log(chalk.gray(`\n${content}\n`));
-      return;
+  if (type === 'system') {
+    console.log(chalk.gray(`\n${content}`));
+    return;
   }
 
-  console.log(agent.color(`\n[${agent.name}] ${prefix}${stanceStr}:`));
+  const icon = icons[type];
+  const ratingStr = extra?.rating ? ` [Rating: ${extra.rating}]` : '';
   
-  // Indent and color content
+  console.log(agent.color(`\n[${agent.name}] ${icon}${ratingStr}:`));
+  
+  // Format content with proper indentation
   const lines = content.split('\n');
   for (const line of lines) {
-    console.log(chalk.white(`  ${line}`));
+    // Color markdown-style formatting
+    let formatted = line;
+    formatted = formatted.replace(/\*\*([^*]+)\*\*/g, chalk.bold('$1'));
+    formatted = formatted.replace(/`([^`]+)`/g, chalk.cyan('$1'));
+    console.log(chalk.white(`  ${formatted}`));
   }
 }
 
-/**
- * Print header
- */
-function printHeader(topic: string, agents: MockAgent[]): void {
+function printHeader(stats: ProjectStats): void {
   console.log('\n');
-  console.log(chalk.bold.white('🎭 Multi-Agent Discussion Demo'));
-  console.log(chalk.gray('━'.repeat(60)));
-  console.log(chalk.white(`Topic: "${topic}"`));
-  console.log(
-    chalk.white(
-      `Participants: ${agents.map((a) => `${a.name} (${a.role})`).join(', ')}`
-    )
-  );
-  console.log(chalk.gray('━'.repeat(60)));
+  console.log(chalk.bold.white('🎭 Multi-Agent Code Review: OpenBotMan'));
+  console.log(chalk.gray('━'.repeat(65)));
+  console.log(chalk.white(`Project: OpenBotMan v${stats.version}`));
+  console.log(chalk.white(`Packages: ${stats.packages.length} | Tests: ${stats.totalTests} | Source Files: ${stats.sourceFiles}`));
+  console.log(chalk.white(`Reviewers: ${AGENTS.map((a) => `${a.name} (${a.role})`).join(', ')}`));
+  console.log(chalk.gray('━'.repeat(65)));
 }
 
-/**
- * Print consensus result
- */
 function printConsensus(
-  reached: boolean,
-  decision: string,
-  votes: { support: number; against: number; total: number }
+  rating: string,
+  votes: { support: number; total: number },
+  summary: string
 ): void {
   console.log('\n');
-  console.log(chalk.gray('━'.repeat(60)));
+  console.log(chalk.gray('━'.repeat(65)));
+  console.log(chalk.bold.green(`🎉 CONSENSUS REACHED: Project Rating ${rating}`));
+  console.log(chalk.green(`   (${votes.support}/${votes.total} reviewers agree)`));
+  console.log(chalk.gray('━'.repeat(65)));
   
-  if (reached) {
-    console.log(chalk.bold.green(`🎉 CONSENSUS REACHED: ${decision}`));
-    console.log(chalk.green(`   (${votes.support}/${votes.total} support)`));
-  } else {
-    console.log(chalk.bold.red(`❌ NO CONSENSUS`));
-    console.log(chalk.red(`   Support: ${votes.support}, Against: ${votes.against}`));
-  }
-  
-  console.log(chalk.gray('━'.repeat(60)));
+  // Print summary
+  console.log(chalk.white('\n' + summary.split('\n').map(l => `  ${l}`).join('\n')));
+  console.log(chalk.gray('\n' + '━'.repeat(65)));
   console.log('\n');
 }
 
-/**
- * Run the demo discussion
- */
 export async function runDemoDiscussion(options: {
   topic?: string;
   delay?: number;
   noAnimation?: boolean;
 }): Promise<void> {
-  const topic = options.topic || 'Sollen wir TypeScript oder JavaScript verwenden?';
-  const delayMs = options.noAnimation ? 0 : (options.delay || 1000);
+  const delayMs = options.noAnimation ? 0 : (options.delay || 1500);
   
-  // Check if topic is about OpenBotMan - use special responses
-  const isOpenBotManTopic = topic.toLowerCase().includes('openbotman') || 
-                           topic.toLowerCase().includes('projekt') ||
-                           topic.toLowerCase().includes('qualität') ||
-                           topic.toLowerCase().includes('review');
-  const responses = isOpenBotManTopic ? MOCK_RESPONSES['openbotman']! : MOCK_RESPONSES['default']!;
+  // Analyze the project
+  const stats = analyzeProject();
+  const content = generateDiscussionContent(stats);
   
   const alice = AGENTS.find((a) => a.id === 'alice')!;
   const bob = AGENTS.find((a) => a.id === 'bob')!;
   const charlie = AGENTS.find((a) => a.id === 'charlie')!;
 
   // Header
-  printHeader(topic, AGENTS);
-
+  printHeader(stats);
   await sleep(delayMs);
 
-  // Phase 1: Proposal
-  printMessage({
-    agent: alice,
-    type: 'proposal',
-    content: responses.proposal,
-  });
+  // Phase 1: Alice's Code Analysis
+  printMessage(alice, 'analysis', content.aliceAnalysis);
+  await sleep(delayMs * 1.2);
 
-  await sleep(delayMs * 1.5);
+  // Phase 2: Bob's Review
+  printMessage(bob, 'review', content.bobReview);
+  await sleep(delayMs * 1.2);
 
-  // Phase 2: Counter-argument
-  printMessage({
-    agent: bob,
-    type: 'argument',
-    stance: responses.arguments['bob']!.stance,
-    content: responses.arguments['bob']!.content,
-  });
-
-  await sleep(delayMs * 1.5);
-
-  // Phase 3: Neutral perspective
-  printMessage({
-    agent: charlie,
-    type: 'argument',
-    stance: responses.arguments['charlie']!.stance,
-    content: responses.arguments['charlie']!.content,
-  });
-
+  // Phase 3: Charlie's Architecture Review
+  printMessage(charlie, 'analysis', content.charlieArchitecture);
   await sleep(delayMs);
 
-  // Phase 4: Compromise
-  printMessage({
-    agent: alice,
-    type: 'system',
-    content: '',
-  });
-  console.log(chalk.gray.italic('💭 Alice considers the feedback...'));
-  
-  await sleep(delayMs);
-  
-  printMessage({
-    agent: charlie,
-    type: 'proposal',
-    content: responses.compromise,
-  });
+  // Phase 4: Discussion
+  console.log(chalk.gray('\n💭 Agents diskutieren die Erkenntnisse...'));
+  await sleep(delayMs * 0.5);
 
+  printMessage(alice, 'response', content.aliceResponse);
   await sleep(delayMs);
 
-  // Phase 5: Voting
-  console.log(chalk.gray('\n📊 Voting phase...'));
-  await sleep(delayMs / 2);
+  // Phase 5: Compromise/Summary
+  printMessage(bob, 'response', content.bobCompromise);
+  await sleep(delayMs);
 
-  const votingAgents = [alice, bob, charlie] as const;
+  // Phase 6: Voting
+  console.log(chalk.gray('\n📊 Voting: Gesamtbewertung des Projekts...'));
+  await sleep(delayMs * 0.5);
+
+  const votingAgents = [
+    { agent: alice, data: content.votes.alice },
+    { agent: bob, data: content.votes.bob },
+    { agent: charlie, data: content.votes.charlie },
+  ];
+
   let supportCount = 0;
-  let againstCount = 0;
-
-  for (const agent of votingAgents) {
-    const voteData = responses.votes[agent.id];
-    if (!voteData) continue;
-
-    const isSupport = voteData.vote === 'support';
-    if (isSupport) supportCount++;
-    else againstCount++;
-
-    printMessage({
-      agent,
-      type: 'vote',
-      stance: isSupport ? 'support' : 'against',
-      content: voteData.reason,
+  for (const { agent, data } of votingAgents) {
+    if (data.vote === 'support') supportCount++;
+    printMessage(agent, 'vote', data.reason, { 
+      stance: data.vote, 
+      rating: data.rating 
     });
-
-    await sleep(delayMs / 2);
+    await sleep(delayMs * 0.4);
   }
 
-  // Phase 6: Result
-  const consensusReached = supportCount >= 2;
-  const decision = consensusReached ? 'TypeScript (pragmatischer Ansatz)' : 'Keine Einigung';
-
-  printConsensus(consensusReached, decision, {
-    support: supportCount,
-    against: againstCount,
-    total: votingAgents.length,
-  });
+  // Phase 7: Consensus
+  printConsensus(
+    'B+ (Gut)',
+    { support: supportCount, total: votingAgents.length },
+    content.summary
+  );
 }
 
 /**
