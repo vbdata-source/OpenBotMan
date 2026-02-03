@@ -137,8 +137,10 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
       // Track tokens
       this.totalTokensUsed += response.usage.input_tokens + response.usage.output_tokens;
       
-      // Handle response
-      if (response.stop_reason === 'end_turn') {
+      console.log(`[Orchestrator] Response stop_reason: ${response.stop_reason}`);
+      
+      // Handle response - 'end_turn' means completion, also handle max_tokens gracefully
+      if (response.stop_reason === 'end_turn' || response.stop_reason === 'max_tokens') {
         // Extract text
         const text = response.content
           .filter((b): b is Anthropic.TextBlock => b.type === 'text')
