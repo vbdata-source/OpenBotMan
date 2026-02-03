@@ -10,7 +10,6 @@ import { EventEmitter } from 'eventemitter3';
 import type { 
   DiscussionRoom, 
   DiscussionMessage, 
-  AgentInstance,
   OrchestratorEvents 
 } from './types.js';
 import type { AgentRunner } from './agent-runner.js';
@@ -180,28 +179,37 @@ OPINION: [Your detailed opinion]
     const confidenceMatch = result.response.match(/CONFIDENCE:\s*(\d+)/);
     const opinionMatch = result.response.match(/OPINION:\s*([\s\S]*?)(?:$)/i);
     
-    return {
+    const message: DiscussionMessage = {
       agentId,
       round: room.round,
       type: 'opinion',
       content: opinionMatch?.[1]?.trim() ?? result.response,
-      stance: stanceMatch?.[1]?.toLowerCase() as 'support' | 'oppose' | 'neutral' | undefined,
-      confidence: confidenceMatch ? parseInt(confidenceMatch[1]) / 100 : undefined,
       timestamp: new Date(),
     };
+    
+    const stanceValue = stanceMatch?.[1]?.toLowerCase();
+    if (stanceValue === 'support' || stanceValue === 'oppose' || stanceValue === 'neutral') {
+      message.stance = stanceValue;
+    }
+    
+    if (confidenceMatch && confidenceMatch[1]) {
+      message.confidence = parseInt(confidenceMatch[1]) / 100;
+    }
+    
+    return message;
   }
   
   /**
    * Check if consensus has been reached
    */
-  private async checkConsensus(room: DiscussionRoom): Promise<boolean> {
+  private checkConsensus(room: DiscussionRoom): boolean {
     const currentRoundOpinions = room.transcript.filter(m => m.round === room.round);
     
     // Count stances
-    const stances = { support: 0, oppose: 0, neutral: 0 };
+    const stances: Record<string, number> = { support: 0, oppose: 0, neutral: 0 };
     for (const opinion of currentRoundOpinions) {
       if (opinion.stance) {
-        stances[opinion.stance]++;
+        stances[opinion.stance] = (stances[opinion.stance] ?? 0) + 1;
       }
     }
     
@@ -209,7 +217,7 @@ OPINION: [Your detailed opinion]
     if (total === 0) return false;
     
     // Check if any stance has super-majority
-    const maxStance = Math.max(stances.support, stances.oppose);
+    const maxStance = Math.max(stances['support'] ?? 0, stances['oppose'] ?? 0);
     return maxStance / total >= room.consensusThreshold;
   }
   
@@ -234,18 +242,20 @@ Respond with just the number of your choice.
       
       // Parse vote
       const voteMatch = result.response.match(/\d+/);
-      if (voteMatch) {
+      if (voteMatch && voteMatch[0]) {
         const voteIndex = parseInt(voteMatch[0]) - 1;
-        if (voteIndex >= 0 && voteIndex < options.length) {
-          room.votes[agentId] = options[voteIndex];
+        const selectedOption = options[voteIndex];
+        if (voteIndex >= 0 && voteIndex < options.length && selectedOption) {
+          room.votes[agentId] = selectedOption;
         }
       }
       
+      const voteContent = room.votes[agentId];
       room.transcript.push({
         agentId,
         round: room.round,
         type: 'vote',
-        content: room.votes[agentId] ?? 'Abstain',
+        content: voteContent ?? 'Abstain',
         timestamp: new Date(),
       });
     }
@@ -262,7 +272,10 @@ Respond with just the number of your choice.
     for (const msg of room.transcript) {
       const matches = msg.content.matchAll(/(?:option|choice|proposal)\s*(?:\d+)?[:\s]+([^\n]+)/gi);
       for (const match of matches) {
-        options.add(match[1].trim());
+        const option = match[1];
+        if (option) {
+          options.add(option.trim());
+        }
       }
     }
     
@@ -281,14 +294,19 @@ Respond with just the number of your choice.
     const lastRound = room.transcript.filter(m => m.round === room.round);
     
     // Find the dominant stance
-    const stances = { support: 0, oppose: 0, neutral: 0 };
+    const stances: Record<string, number> = { support: 0, oppose: 0, neutral: 0 };
     for (const msg of lastRound) {
-      if (msg.stance) stances[msg.stance]++;
+      if (msg.stance) {
+        stances[msg.stance] = (stances[msg.stance] ?? 0) + 1;
+      }
     }
     
-    if (stances.support > stances.oppose) {
+    const supportCount = stances['support'] ?? 0;
+    const opposeCount = stances['oppose'] ?? 0;
+    
+    if (supportCount > opposeCount) {
       return `Approved: ${room.topic}`;
-    } else if (stances.oppose > stances.support) {
+    } else if (opposeCount > supportCount) {
       return `Rejected: ${room.topic}`;
     }
     

@@ -103,9 +103,11 @@ export class InMemoryVectorStore implements VectorStore {
     let normB = 0;
     
     for (let i = 0; i < a.length; i++) {
-      dotProduct += a[i] * b[i];
-      normA += a[i] * a[i];
-      normB += b[i] * b[i];
+      const aVal = a[i] ?? 0;
+      const bVal = b[i] ?? 0;
+      dotProduct += aVal * bVal;
+      normA += aVal * aVal;
+      normB += bVal * bVal;
     }
     
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
@@ -303,11 +305,14 @@ export class MockEmbeddingProvider implements EmbeddingProvider {
   private normalize(v: Float32Array): Float32Array {
     let norm = 0;
     for (let i = 0; i < v.length; i++) {
-      norm += v[i] * v[i];
+      const val = v[i] ?? 0;
+      norm += val * val;
     }
     norm = Math.sqrt(norm);
-    for (let i = 0; i < v.length; i++) {
-      v[i] /= norm;
+    if (norm > 0) {
+      for (let i = 0; i < v.length; i++) {
+        v[i] = (v[i] ?? 0) / norm;
+      }
     }
     return v;
   }
@@ -376,12 +381,15 @@ export class KnowledgeBase {
     });
     
     // Emit event
-    await this.emitEvent({
+    const event: KnowledgeEvent = {
       type: 'created',
       knowledgeId: id,
-      agentId: metadata?.agent,
       timestamp: now,
-    });
+    };
+    if (metadata?.agent) {
+      event.agentId = metadata.agent;
+    }
+    await this.emitEvent(event);
     
     // Auto-link if enabled
     if (this.config.autoLink) {
@@ -604,14 +612,17 @@ ${decision.reasoning}
       }
     }
     
-    return this.add('decision', decision.title, content, {
-      project: decision.project,
+    const decisionMeta: Partial<KnowledgeMetadata> = {
       tags: decision.participants,
       custom: {
         status: decision.status,
         participants: decision.participants,
       },
-    });
+    };
+    if (decision.project) {
+      decisionMeta.project = decision.project;
+    }
+    return this.add('decision', decision.title, content, decisionMeta);
   }
   
   /**
@@ -633,14 +644,17 @@ ${pattern.whenToUse.map(w => `- ${w}`).join('\n')}
 ${pattern.whenNotToUse?.length ? `## When NOT to Use\n${pattern.whenNotToUse.map(w => `- ${w}`).join('\n')}` : ''}
     `.trim();
     
-    return this.add('pattern', pattern.name, content, {
-      tags: pattern.languages,
+    const patternMeta: Partial<KnowledgeMetadata> = {
       custom: {
         timesApplied: pattern.timesApplied,
         successRate: pattern.successRate,
-        relatedPatterns: pattern.relatedPatterns,
+        relatedPatterns: pattern.relatedPatterns ?? [],
       },
-    });
+    };
+    if (pattern.languages) {
+      patternMeta.tags = pattern.languages;
+    }
+    return this.add('pattern', pattern.name, content, patternMeta);
   }
   
   /**

@@ -200,7 +200,13 @@ export class ShorthandParser {
     const match = input.match(this.PATTERN);
     if (!match) return null;
     
-    const [, sender, recipient, type, data, paramsStr] = match;
+    const sender = match[1];
+    const recipient = match[2];
+    const type = match[3];
+    const data = match[4];
+    const paramsStr = match[5];
+    
+    if (!sender || !recipient || !type || !data) return null;
     
     // Parse params
     const params: Record<string, string> = {};
@@ -208,7 +214,9 @@ export class ShorthandParser {
       for (const part of paramsStr.split(':')) {
         if (part.includes('=')) {
           const [key, value] = part.split('=', 2);
-          params[key] = value;
+          if (key && value) {
+            params[key] = value;
+          }
         } else {
           // Priority or status shorthand
           params[part] = 'true';
@@ -274,12 +282,12 @@ export class ShorthandParser {
   /**
    * Convert shorthand to full message
    */
-  static toMessage<T extends Record<string, unknown>>(
+  static toMessage(
     shorthand: ShorthandMessage,
     senderUuid: string,
     recipientUuid: string,
-    additionalPayload?: Partial<T>
-  ): Message<T> {
+    additionalPayload?: Record<string, unknown>
+  ): Message<Record<string, unknown>> {
     const typeMap: Record<string, MessageType> = {
       'task_assign': MessageType.TASK_ASSIGN,
       'task_complete': MessageType.TASK_COMPLETE,
@@ -303,7 +311,7 @@ export class ShorthandParser {
         ...shorthand.params,
         data: shorthand.data,
         ...additionalPayload,
-      } as T,
+      },
       shorthand.recipient === 'broadcast' ? MessageFlags.BROADCAST : MessageFlags.NONE
     );
   }
@@ -374,12 +382,14 @@ export class MessageCompressor {
     
     while (i < data.length) {
       let id = 0;
-      while (data[i] & 0x80) {
-        id = (id << 7) | (data[i] & 0x7F);
+      while (i < data.length && (data[i]! & 0x80)) {
+        id = (id << 7) | (data[i]! & 0x7F);
         i++;
       }
-      id = (id << 7) | data[i];
-      ids.push(id);
+      if (i < data.length) {
+        id = (id << 7) | data[i]!;
+        ids.push(id);
+      }
       i++;
     }
     

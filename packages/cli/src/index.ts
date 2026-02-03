@@ -4,4 +4,11 @@
  * Command-line interface for OpenBotMan.
  */
 
-export * from './cli.js';
+// Utilities
+export * from './utils/index.js';
+
+// UI Components
+export * from './ui/index.js';
+
+// Commands
+export * from './commands/index.js';

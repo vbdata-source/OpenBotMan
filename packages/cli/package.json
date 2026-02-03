@@ -13,11 +13,12 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/cli.js",
-    "test": "vitest",
+    "test": "vitest run",
     "clean": "rm -rf dist"
   },
   "dependencies": {
     "@openbotman/orchestrator": "workspace:*",
+    "@openbotman/protocol": "workspace:*",
     "chalk": "^5.3.0",
     "commander": "^12.0.0",
     "dotenv": "^16.4.0",

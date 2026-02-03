@@ -14,6 +14,13 @@ import { readFileSync, existsSync } from 'fs';
 import { parse as parseYaml } from 'yaml';
 import { config as loadEnv } from 'dotenv';
 import { Orchestrator, type OrchestratorConfig } from '@openbotman/orchestrator';
+import {
+  authStatusCommand,
+  authSetupTokenCommand,
+  authRemoveCommand,
+  authDefaultCommand,
+  authListCommand,
+} from './commands/auth.js';
 
 // Load environment variables
 loadEnv();
@@ -227,7 +234,7 @@ program
   .description('Start the API server')
   .option('-c, --config <path>', 'Config file path', 'config.yaml')
   .option('-p, --port <port>', 'Port to listen on', '8080')
-  .action(async (options) => {
+  .action(async (_options) => {
     console.log(LOGO);
     console.log(chalk.yellow('Starting API server...\n'));
     
@@ -268,6 +275,47 @@ program
     console.log(chalk.gray('\nEdit config.yaml and set your API keys, then run:'));
     console.log(chalk.cyan('  openbotman chat'));
   });
+
+/**
+ * Auth commands
+ */
+const authCmd = program
+  .command('auth')
+  .description('Manage authentication');
+
+authCmd
+  .command('status')
+  .description('Show authentication status')
+  .option('-s, --storage-path <path>', 'Auth storage path')
+  .action((options) => authStatusCommand(options));
+
+authCmd
+  .command('setup-token')
+  .description('Import a Claude Code CLI setup-token (for Pro subscription)')
+  .option('-t, --token <token>', 'Setup token (will prompt if not provided)')
+  .option('-n, --name <name>', 'Profile name', 'default')
+  .option('-s, --storage-path <path>', 'Auth storage path')
+  .option('-y, --yes', 'Skip prompts')
+  .action((options) => authSetupTokenCommand(options));
+
+authCmd
+  .command('list')
+  .description('List saved auth profiles')
+  .option('-s, --storage-path <path>', 'Auth storage path')
+  .action((options) => authListCommand(options));
+
+authCmd
+  .command('remove [name]')
+  .description('Remove an auth profile')
+  .option('-s, --storage-path <path>', 'Auth storage path')
+  .option('-y, --yes', 'Skip confirmation')
+  .action((name, options) => authRemoveCommand({ ...options, name }));
+
+authCmd
+  .command('default [name]')
+  .description('Set default auth profile')
+  .option('-s, --storage-path <path>', 'Auth storage path')
+  .action((name, options) => authDefaultCommand({ ...options, name }));
 
 // Parse arguments
 program.parse();

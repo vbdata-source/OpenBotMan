@@ -443,13 +443,13 @@ export const COMPRESSION_DICTIONARY: Record<string, string> = {
   
   // Common words
   'IMPL': 'implement',
-  'REF': 'refactor',
+  'REFA': 'refactor',
   'FIX': 'fix',
   'ADD': 'add',
   'DEL': 'delete',
   'MOD': 'modify',
   'REQ': 'request',
-  'RES': 'response',
+  'RESP': 'response',
   'AUTH': 'authentication',
   'API': 'api',
   'DB': 'database',

@@ -9,31 +9,21 @@ import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from 'eventemitter3';
 import Anthropic from '@anthropic-ai/sdk';
 import { 
-  AICPEncoder, 
-  ShorthandParser, 
-  MessageType, 
   AgentRole,
   Priority,
-  type Message,
-  type TaskAssignPayload,
-  type TaskCompletePayload,
 } from '@openbotman/protocol';
 import { 
-  KnowledgeBase, 
-  type KnowledgeBaseConfig 
+  KnowledgeBase 
 } from '@openbotman/knowledge-base';
 import { AgentRunner, type AgentExecutionResult } from './agent-runner.js';
 import { DiscussionEngine, type DiscussionOptions, type DiscussionResult } from './discussion.js';
+import { ClaudeAuthProvider, type ClaudeAuthConfig } from './auth/index.js';
 import type { 
   OrchestratorConfig, 
-  AgentDefinition, 
   Task, 
-  Workflow,
-  WorkflowStep,
   HumanRequest,
   HumanResponse,
   OrchestratorEvents,
-  ToolDefinition,
 } from './types.js';
 
 /**
@@ -45,6 +35,7 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
   private agentRunner: AgentRunner;
   private discussionEngine: DiscussionEngine;
   private knowledgeBase?: KnowledgeBase;
+  private authProvider: ClaudeAuthProvider;
   
   // State
   private tasks: Map<string, Task> = new Map();
@@ -56,17 +47,31 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
   private totalTasksProcessed = 0;
   private totalTokensUsed = 0;
   
-  constructor(config: OrchestratorConfig) {
+  constructor(config: OrchestratorConfig, authConfig?: ClaudeAuthConfig) {
     super();
     this.config = config;
     this.startTime = new Date();
     
-    // Initialize Anthropic client
-    const apiKey = process.env['ANTHROPIC_API_KEY'];
-    if (!apiKey) {
-      throw new Error('ANTHROPIC_API_KEY not set');
+    // Initialize auth provider
+    this.authProvider = new ClaudeAuthProvider(authConfig);
+    
+    // Initialize Anthropic client using auth provider
+    try {
+      this.client = this.authProvider.createClient();
+      
+      const authStatus = this.authProvider.getStatus();
+      console.log(`[Orchestrator] Auth: ${authStatus.message}`);
+    } catch {
+      // Fallback to legacy API key check for backward compatibility
+      const apiKey = process.env['ANTHROPIC_API_KEY'];
+      if (!apiKey) {
+        throw new Error(
+          'No authentication method available. ' +
+          'Set ANTHROPIC_API_KEY environment variable or run: openbotman auth setup-token'
+        );
+      }
+      this.client = new Anthropic({ apiKey });
     }
-    this.client = new Anthropic({ apiKey });
     
     // Initialize components
     this.agentRunner = new AgentRunner();
@@ -761,5 +766,19 @@ Keep it concise - max 3-4 bullet points.
     for (const agent of this.agentRunner.getAllAgents()) {
       this.agentRunner.resetSession(agent.definition.id);
     }
+  }
+  
+  /**
+   * Get authentication status
+   */
+  getAuthStatus() {
+    return this.authProvider.getStatus();
+  }
+  
+  /**
+   * Get the auth provider for advanced operations
+   */
+  getAuthProvider(): ClaudeAuthProvider {
+    return this.authProvider;
   }
 }

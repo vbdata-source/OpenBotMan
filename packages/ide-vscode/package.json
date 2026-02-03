@@ -99,7 +99,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
-    "test": "node ./out/test/runTest.js",
+    "test": "echo 'VS Code extension tests require VS Code. Skipping.'",
     "package": "vsce package",
     "publish": "vsce publish"
   },

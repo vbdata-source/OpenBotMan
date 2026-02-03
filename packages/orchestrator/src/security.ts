@@ -314,7 +314,14 @@ export class SecurityManager extends EventEmitter<SecurityEvents> {
    */
   verifyToken(token: string): Identity | null {
     try {
-      const [headerB64, payloadB64, signature] = token.split('.');
+      const parts = token.split('.');
+      const headerB64 = parts[0];
+      const payloadB64 = parts[1];
+      const signature = parts[2];
+      
+      if (!headerB64 || !payloadB64 || !signature) {
+        return null;
+      }
       
       // Verify signature
       const expectedSig = createHmac('sha256', this.config.secretKey)

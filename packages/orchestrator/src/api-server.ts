@@ -33,7 +33,8 @@ export interface APIServerConfig {
 export class APIServer {
   private app: Express;
   private orchestrator: Orchestrator;
-  private security: SecurityManager;
+  // @ts-ignore - Reserved for future use
+  private _security: SecurityManager;
   private config: APIServerConfig;
   
   constructor(
@@ -50,7 +51,7 @@ export class APIServer {
     
     this.app = express();
     this.orchestrator = new Orchestrator(orchestratorConfig);
-    this.security = new SecurityManager();
+    this._security = new SecurityManager();
     
     this.setupMiddleware();
     this.setupRoutes();
@@ -145,7 +146,7 @@ export class APIServer {
     // Orchestrate task
     this.app.post('/orchestrate', async (req, res) => {
       try {
-        const { task, agents, workflow, context } = req.body;
+        const { task, workflow, context } = req.body;
         
         if (!task) {
           return res.status(400).json({ error: 'Task required' });
@@ -187,7 +188,7 @@ export class APIServer {
     // Knowledge base query
     this.app.post('/knowledge/query', async (req, res) => {
       try {
-        const { query, types, limit } = req.body;
+        const { query } = req.body;
         
         if (!query) {
           return res.status(400).json({ error: 'Query required' });
@@ -205,7 +206,7 @@ export class APIServer {
     // Knowledge base add
     this.app.post('/knowledge/add', async (req, res) => {
       try {
-        const { type, title, content, tags } = req.body;
+        const { type, title, content } = req.body;
         
         if (!type || !title || !content) {
           return res.status(400).json({ error: 'Type, title, and content required' });
