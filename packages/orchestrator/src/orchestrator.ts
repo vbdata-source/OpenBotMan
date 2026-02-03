@@ -18,6 +18,7 @@ import {
 import { AgentRunner, type AgentExecutionResult } from './agent-runner.js';
 import { DiscussionEngine, type DiscussionOptions, type DiscussionResult } from './discussion.js';
 import { ClaudeAuthProvider, type ClaudeAuthConfig } from './auth/index.js';
+import { ClaudeCliProvider } from './providers/claude-cli.js';
 import type { 
   OrchestratorConfig, 
   Task, 
@@ -31,7 +32,8 @@ import type {
  */
 export class Orchestrator extends EventEmitter<OrchestratorEvents> {
   private config: OrchestratorConfig;
-  private client: Anthropic;
+  private client?: Anthropic;
+  private cliProvider?: ClaudeCliProvider;
   private agentRunner: AgentRunner;
   private discussionEngine: DiscussionEngine;
   private knowledgeBase?: KnowledgeBase;
@@ -55,22 +57,32 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
     // Initialize auth provider
     this.authProvider = new ClaudeAuthProvider(authConfig);
     
-    // Initialize Anthropic client using auth provider
-    try {
-      this.client = this.authProvider.createClient();
-      
-      const authStatus = this.authProvider.getStatus();
-      console.log(`[Orchestrator] Auth: ${authStatus.message}`);
-    } catch {
-      // Fallback to legacy API key check for backward compatibility
-      const apiKey = process.env['ANTHROPIC_API_KEY'];
-      if (!apiKey) {
-        throw new Error(
-          'No authentication method available. ' +
-          'Set ANTHROPIC_API_KEY environment variable or run: openbotman auth setup-token'
-        );
+    // Check if we should use Claude CLI provider
+    if (config.provider === 'claude-cli') {
+      console.log(`[Orchestrator] Using Claude CLI provider`);
+      this.cliProvider = new ClaudeCliProvider({
+        command: config.cli?.command ?? 'claude',
+        model: config.model,
+        maxTurns: config.cli?.maxTurns ?? config.maxIterations,
+      });
+    } else {
+      // Initialize Anthropic client using auth provider
+      try {
+        this.client = this.authProvider.createClient();
+        
+        const authStatus = this.authProvider.getStatus();
+        console.log(`[Orchestrator] Auth: ${authStatus.message}`);
+      } catch {
+        // Fallback to legacy API key check for backward compatibility
+        const apiKey = process.env['ANTHROPIC_API_KEY'];
+        if (!apiKey) {
+          throw new Error(
+            'No authentication method available. ' +
+            'Set ANTHROPIC_API_KEY environment variable or run: openbotman auth setup-token'
+          );
+        }
+        this.client = new Anthropic({ apiKey });
       }
-      this.client = new Anthropic({ apiKey });
     }
     
     // Initialize components
@@ -110,6 +122,11 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
     // Add to history
     this.conversationHistory.push({ role: 'user', content: userMessage });
     
+    // Use CLI provider if configured
+    if (this.cliProvider) {
+      return this.chatWithCli(userMessage);
+    }
+    
     // Build system prompt
     const systemPrompt = this.buildSystemPrompt();
     
@@ -122,6 +139,10 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
     while (iterations < this.config.maxIterations) {
       iterations++;
       console.log(`[Orchestrator] Iteration ${iterations}/${this.config.maxIterations}`);
+      
+      if (!this.client) {
+        throw new Error('Anthropic client not initialized');
+      }
       
       const response = await this.client.messages.create({
         model: this.config.model,
@@ -187,6 +208,37 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
     }
     
     return 'Max iterations reached. Please simplify your request.';
+  }
+  
+  /**
+   * Chat using Claude CLI provider
+   */
+  private async chatWithCli(userMessage: string): Promise<string> {
+    if (!this.cliProvider) {
+      throw new Error('Claude CLI provider not initialized');
+    }
+    
+    console.log(`[Orchestrator] Sending to Claude CLI...`);
+    
+    try {
+      const response = await this.cliProvider.send(userMessage);
+      
+      // Add response to history
+      this.conversationHistory.push({ role: 'assistant', content: response.text });
+      
+      // Track cost if available
+      if (response.costUsd) {
+        console.log(`[Orchestrator] Cost: $${response.costUsd.toFixed(4)}`);
+      }
+      
+      console.log(`[Orchestrator] Response received (${response.numTurns ?? 1} turns)`);
+      
+      return response.text;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[Orchestrator] CLI Error: ${errorMsg}`);
+      throw error;
+    }
   }
   
   /**
