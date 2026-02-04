@@ -38,20 +38,43 @@ pnpm cli discuss [OPTIONEN]
 
 #### Parameter:
 
+**🔴 PFLICHT (einer von beiden):**
+| Parameter | Kurz | Beschreibung |
+|-----------|------|--------------|
+| `[topic]` | | Thema direkt als Text |
+| `--prompt-file <pfad>` | `-p` | Prompt aus Datei laden |
+
+**🟢 OPTIONAL (mit sinnvollen Defaults):**
 | Parameter | Kurz | Beschreibung | Default |
 |-----------|------|--------------|---------|
-| `--prompt-file <pfad>` | `-p` | Prompt aus Datei laden | - |
 | `--agents <anzahl>` | `-a` | Anzahl Agents (1-3) | 3 |
 | `--max-rounds <n>` | `-r` | Max. Konsens-Runden | 10 |
 | `--output <pfad>` | `-o` | Output-Verzeichnis | ./discussions |
-| `--timeout <sek>` | `-t` | Timeout pro Agent | 60 |
-| `--model <model>` | `-m` | Model für alle Agents | config.yaml |
+| `--timeout <sek>` | `-t` | Timeout pro Agent (Sekunden) | 60 |
+| `--model <model>` | `-m` | Model für alle Agents | aus config.yaml |
 | `--verbose` | `-v` | Ausführliche Ausgabe | false |
 | `--planner <provider>` | | Provider für Planner | claude-cli |
 | `--coder <provider>` | | Provider für Coder | claude-cli |
 | `--reviewer <provider>` | | Provider für Reviewer | claude-cli |
 
-#### Beispiele:
+**💡 Empfohlene Runden:**
+| Diskussions-Typ | `--max-rounds` |
+|-----------------|----------------|
+| Schnelle Frage | 3-5 |
+| Normale Analyse | 10 (Default) |
+| Komplexe Architektur | 15-20 |
+
+#### Minimal-Beispiel (nur Pflicht-Parameter):
+
+```cmd
+# Variante 1: Thema direkt
+pnpm cli discuss "Sollen wir React oder Vue verwenden?"
+
+# Variante 2: Thema aus Datei
+pnpm cli discuss --prompt-file C:\Sources\OpenBotMan\prompts\meine-frage.md
+```
+
+#### Weitere Beispiele:
 
 ```cmd
 # Einfache Diskussion
