@@ -9,7 +9,25 @@ Analysiert verschiedene Output-Styles für die Konsolen-Ausgabe und empfehlt ein
 ## Vorgeschlagene Modi
 
 ### 1. Compact Mode (Standard für CLI)
-Pro Agent eine Zeile mit Live-Status:
+
+**Info-Header am Start:**
+```
+╔══════════════════════════════════════════════════════════════╗
+║  OpenBotMan Multi-Agent Discussion                           ║
+╠══════════════════════════════════════════════════════════════╣
+║  Thema: Analysiere die Architektur dieses Projekts          ║
+║  Workspace: C:\Sources\bcs (42 files, 89KB context)         ║
+╠══════════════════════════════════════════════════════════════╣
+║  Agenten:                                                    ║
+║  🎯 Planner    - Architekt, erstellt Vorschläge             ║
+║  💻 Developer  - Senior Dev, prüft Umsetzbarkeit            ║
+║  🔍 Reviewer   - QA-Experte, findet Risiken                 ║
+╠══════════════════════════════════════════════════════════════╣
+║  Max Runden: 4  |  Timeout: 60s  |  Output: verbose         ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+**Dann pro Agent eine Zeile mit Live-Status:**
 ```
 Runde 1/4
 🎯 Planner      [████████░░] Analyzing...
@@ -68,6 +86,8 @@ Strukturierte Events für programmatische Nutzung:
 4. **Fortschritts-Anzeige:** Wie zeigt man Fortschritt bei langen Aufrufen?
 5. **Farben/Formatierung:** Konsistentes Farbschema für Positionen?
 6. **IDE-Integration:** Welche Events braucht eine IDE mindestens?
+7. **Info-Header:** Welche Infos sind am Start essentiell (Thema, Agenten, Settings)?
+8. **Abschluss-Summary:** Was muss die Zusammenfassung am Ende enthalten?
 
 ## Technische Randbedingungen
 - TypeScript-First
