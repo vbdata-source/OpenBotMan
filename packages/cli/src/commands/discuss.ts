@@ -620,7 +620,8 @@ function generateMarkdown(
   topic: string,
   _agents: DiscussAgentConfig[],
   result: ConsensusResult,
-  _context?: ProjectContext
+  _context?: ProjectContext,
+  failedQuestions?: FailedQuestionTracker
 ): string {
   const lines: string[] = [];
   const now = new Date();
@@ -709,6 +710,28 @@ function generateMarkdown(
       }
       lines.push('');
     }
+  }
+  
+  // Failed Questions (if any)
+  const failedCount = failedQuestions?.count() ?? 0;
+  if (failedCount > 0) {
+    const failed = failedQuestions!.getAll();
+    lines.push('## ⚠️ Failed Expert Responses');
+    lines.push('');
+    lines.push(`The following ${failedCount} expert response(s) failed and could not be recovered:`);
+    lines.push('');
+    lines.push('| Agent | Role | Error Type | Message |');
+    lines.push('|-------|------|------------|---------|');
+    for (const f of failed) {
+      const shortMessage = f.errorMessage.length > 50 
+        ? f.errorMessage.substring(0, 50) + '...' 
+        : f.errorMessage;
+      lines.push(`| ${f.agentId} | ${f.agentRole} | ${f.errorType} | ${shortMessage} |`);
+    }
+    lines.push('');
+    lines.push('**Quality Impact:** Consensus based on incomplete expert input.');
+    lines.push('**Recommendation:** Consider re-running the discussion or manually consulting the failed experts.');
+    lines.push('');
   }
   
   // Metadata
@@ -1129,11 +1152,19 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
   };
   
   // Generate and save markdown
-  const markdown = generateMarkdown(options.topic, agents, consensusResult, context);
+  const markdown = generateMarkdown(options.topic, agents, consensusResult, context, failedTracker);
   const markdownPath = saveMarkdown(markdown, options.topic, outputDir);
   
   console.log('');
   console.log(chalk.green(`📝 Discussion saved to: ${markdownPath}`));
+  
+  // Warn about failed questions
+  const failedCount = failedTracker.count();
+  if (failedCount > 0) {
+    console.log(chalk.yellow(`\n⚠️  ${failedCount} expert response(s) failed and could not be recovered.`));
+    console.log(chalk.yellow(`   Quality Impact: Consensus based on incomplete expert input.`));
+    console.log(chalk.yellow(`   See discussion output for details.\n`));
+  }
   
   // Print summary
   console.log('');
