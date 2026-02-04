@@ -36,16 +36,49 @@ OpenBotMan löst ein echtes Problem im "VibeCoding":
 - `FailedQuestionTracker` Klasse
 - Datei: `packages/cli/src/utils/rate-limiter.ts`
 
+### IDE-Integration (Diskussion 2026-02-04)
+**Status:** ❌ Kein Konsens, aber klare Tendenz
+
+**Empfohlene Reihenfolge (KISS-Approach):**
+
+1. **Phase 0 - CLI Enhancement (2 Tage)** ← QUICK WIN
+   ```bash
+   openbotman discuss "Feature X" --workspace . --include "src/**/*.ts"
+   ```
+   - Project-Context als CLI-Argument
+   - Minimaler Aufwand, sofort produktiv nutzbar
+
+2. **Phase 1 - VSCode Extension (1 Woche)**
+   - Command Palette Integration
+   - Sammelt Workspace-Kontext automatisch
+   - Ruft CLI auf, zeigt Output in Panel
+   - "Apply Result" Button für Coding-LLM
+
+3. **Phase 2 - MCP Server (2-3 Wochen)**
+   - Erst wenn Phase 1 funktioniert!
+   - MCP-Spec noch jung, könnte sich ändern
+   - Mehr Debugging-Aufwand
+
+**Wichtige Bedenken (müssen adressiert werden):**
+- Memory-Limits bei großen Repos definieren
+- Error-Recovery bei LLM-Ausfällen
+- API-Key-Management klären
+- Timeout-Strategien für langsame APIs
+
+**Warum MCP nicht zuerst:**
+- Zu komplex für MVP
+- Vendor Lock-in Risk (Spec-Änderungen)
+- VSCode Extension ist schneller zu implementieren
+- Direkter User-Feedback möglich
+
 ---
 
 ## Geplante Features
 
-### 1. IDE-Integration (Diskussion 2026-02-04)
-- VSCode Extension?
-- MCP-Anbindung?
-- Tastenkombination → OpenBotMan Manager starten
-- Source-Zugriff aus IDE
+### 1. IDE-Integration
+Siehe Architektur-Entscheidungen oben.
 - Prompt: `prompts/ide-integration-usecase.md`
+- Diskussion: `discussions/2026-02-04_20-05_openbotman-ide-integration-optimaler-use-case-anal.md`
 
 ### 2. Agent Tool Access (geplant)
 - Web-Recherche für Agenten
@@ -69,7 +102,25 @@ OpenBotMan löst ein echtes Problem im "VibeCoding":
 | 2026-02-04 | Config UI | ✅ Konsens | Hub-and-Spoke, 3-Klick Teams |
 | 2026-02-04 | Rate-Limiting | ❌ Kein Konsens | bottleneck, 1s delay |
 | 2026-02-04 | Error-Handling | ✅ Konsens | 1 retry, fail-fast |
-| 2026-02-04 | IDE-Integration | 🔄 Läuft | - |
+| 2026-02-04 | IDE-Integration | ❌ Kein Konsens | CLI→VSCode→MCP (KISS) |
+
+---
+
+## Priorisierte Roadmap
+
+### Sofort (Phase 0)
+- [ ] CLI: `--workspace` und `--include` Parameter
+- [ ] Project-Context an Agenten übergeben
+
+### Kurzfristig (Phase 1)
+- [ ] VSCode Extension MVP
+- [ ] Command Palette Commands
+- [ ] Output Panel
+
+### Mittelfristig (Phase 2)
+- [ ] MCP Server Implementation
+- [ ] Agent Tool Access (Web, Files)
+- [ ] Web-UI MVP
 
 ---
 
@@ -97,4 +148,4 @@ OpenBotMan löst ein echtes Problem im "VibeCoding":
 
 ---
 
-*Letzte Aktualisierung: 2026-02-04*
+*Letzte Aktualisierung: 2026-02-04 20:11*
