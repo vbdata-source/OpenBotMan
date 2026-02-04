@@ -237,13 +237,17 @@ export class ClaudeCliProvider extends EventEmitter<ClaudeCliProviderEvents> {
   
   /**
    * Send a message and get a response
+   * 
+   * Uses stdin to pass the message to avoid OS argument length limits (ENAMETOOLONG).
+   * This allows for large context windows with project files.
    */
   async send(message: string): Promise<ClaudeCliResponse> {
     return new Promise((resolve, reject) => {
-      const args = this.buildArgs(message);
+      const args = this.buildArgs(); // No message in args - will use stdin
       
       if (this.options.verbose) {
         console.log(`[ClaudeCliProvider] Running: ${this.options.command} ${args.join(' ')}`);
+        console.log(`[ClaudeCliProvider] Message length: ${message.length} bytes (via stdin)`);
       }
       
       this.process = spawn(this.options.command, args, {
@@ -332,7 +336,9 @@ export class ClaudeCliProvider extends EventEmitter<ClaudeCliProviderEvents> {
         reject(error);
       });
       
-      // Close stdin since we pass message as argument
+      // Write message to stdin and close it
+      // This avoids ENAMETOOLONG errors with large prompts
+      this.process.stdin?.write(message);
       this.process.stdin?.end();
     });
   }
@@ -398,8 +404,11 @@ export class ClaudeCliProvider extends EventEmitter<ClaudeCliProviderEvents> {
   
   /**
    * Build CLI arguments
+   * 
+   * Note: Message is passed via stdin to avoid ENAMETOOLONG errors.
+   * The '-' argument tells claude CLI to read from stdin.
    */
-  private buildArgs(message: string): string[] {
+  private buildArgs(): string[] {
     const args: string[] = [
       '--print',              // Non-interactive mode
       '--output-format', 'stream-json',  // Stream JSON for real-time updates
@@ -432,8 +441,8 @@ export class ClaudeCliProvider extends EventEmitter<ClaudeCliProviderEvents> {
       args.push('--resume', this.options.sessionId);
     }
     
-    // Message as argument
-    args.push(message);
+    // Read message from stdin (avoids argument length limits)
+    args.push('-');
     
     return args;
   }
