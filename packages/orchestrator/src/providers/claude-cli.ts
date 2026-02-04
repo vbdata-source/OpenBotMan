@@ -246,8 +246,8 @@ export class ClaudeCliProvider extends EventEmitter<ClaudeCliProviderEvents> {
       const args = this.buildArgs(); // No message in args - will use stdin
       
       if (this.options.verbose) {
-        console.log(`[ClaudeCliProvider] Running: ${this.options.command} ${args.join(' ')}`);
-        console.log(`[ClaudeCliProvider] Message length: ${message.length} bytes (via stdin)`);
+        // Only log essential info, not the full system prompt
+        console.log(`[ClaudeCliProvider] Model: ${this.options.model}, Message: ${message.length} bytes`);
       }
       
       this.process = spawn(this.options.command, args, {
