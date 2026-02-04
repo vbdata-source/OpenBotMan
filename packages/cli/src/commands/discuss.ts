@@ -13,8 +13,9 @@
 
 import chalk from 'chalk';
 import ora from 'ora';
+import fg from 'fast-glob';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'fs';
-import { join, relative, dirname, extname } from 'path';
+import { join, relative, dirname, extname, resolve } from 'path';
 import { parse as parseYaml } from 'yaml';
 import { 
   createProvider,
@@ -81,6 +82,9 @@ export interface DiscussOptions {
   planner?: string;  // Override planner provider
   coder?: string;    // Override coder provider
   reviewer?: string; // Override reviewer provider
+  workspace?: string;  // Project workspace root path
+  include?: string[];  // Glob patterns for files to include
+  maxContextKb?: number; // Max context size in KB (default: 100)
 }
 
 export interface DiscussionConfig {
@@ -511,36 +515,114 @@ function loadSpecificFiles(
 }
 
 /**
+ * Load files matching glob patterns
+ */
+async function loadGlobFiles(
+  patterns: string[],
+  workspaceRoot: string,
+  maxBytes: number
+): Promise<Array<{ path: string; content: string; size: number }>> {
+  const files: Array<{ path: string; content: string; size: number }> = [];
+  let totalSize = 0;
+
+  // Find matching files
+  const matchedFiles = await fg(patterns, {
+    cwd: workspaceRoot,
+    absolute: false,
+    onlyFiles: true,
+    ignore: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/build/**',
+      '**/.git/**',
+      '**/coverage/**',
+      '**/*.min.js',
+      '**/*.map',
+      '**/package-lock.json',
+      '**/pnpm-lock.yaml',
+      '**/yarn.lock',
+    ],
+  });
+
+  // Sort by path for consistent output
+  matchedFiles.sort();
+
+  for (const relPath of matchedFiles) {
+    if (totalSize >= maxBytes) break;
+
+    const fullPath = join(workspaceRoot, relPath);
+    try {
+      const stat = statSync(fullPath);
+      // Skip large files (>50KB individual)
+      if (stat.size > 50000) continue;
+      
+      const content = readFileSync(fullPath, 'utf-8');
+      const size = content.length;
+      
+      if (totalSize + size > maxBytes) {
+        // Truncate if needed
+        const remaining = maxBytes - totalSize;
+        if (remaining > 500) {
+          files.push({
+            path: relPath,
+            content: content.slice(0, remaining) + '\n// ... [truncated due to size limit]',
+            size: remaining,
+          });
+          totalSize += remaining;
+        }
+        break;
+      }
+
+      files.push({ path: relPath, content, size });
+      totalSize += size;
+    } catch {
+      // Skip unreadable files
+    }
+  }
+
+  return files;
+}
+
+/**
  * Load project context
  */
 export async function loadProjectContext(
   options: DiscussOptions
 ): Promise<ProjectContext> {
-  const cwd = options.cwd || process.cwd();
-  const projectRoot = findProjectRoot(cwd);
+  // Determine project root: --workspace takes precedence
+  const workspaceRoot = options.workspace 
+    ? resolve(options.workspace)
+    : options.cwd 
+      ? findProjectRoot(options.cwd)
+      : findProjectRoot(process.cwd());
+  
+  const maxContextBytes = (options.maxContextKb || 100) * 1024; // Default 100KB
   
   const context: ProjectContext = {
     readme: null,
     packageJson: null,
     sourceFiles: [],
     totalSize: 0,
-    projectRoot,
+    projectRoot: workspaceRoot,
   };
 
   // Load README.md
-  const readmePath = join(projectRoot, 'README.md');
+  const readmePath = join(workspaceRoot, 'README.md');
   if (existsSync(readmePath)) {
     try {
       const content = readFileSync(readmePath, 'utf-8');
-      context.readme = content.length > 5000 ? content.slice(0, 5000) + '\n\n[... truncated]' : content;
-      context.totalSize += Math.min(content.length, 5000);
+      const maxReadme = Math.min(5000, maxContextBytes * 0.1); // Max 10% of context
+      context.readme = content.length > maxReadme 
+        ? content.slice(0, maxReadme) + '\n\n[... truncated]' 
+        : content;
+      context.totalSize += context.readme.length;
     } catch {
       // Skip
     }
   }
 
   // Load package.json
-  const pkgPath = join(projectRoot, 'package.json');
+  const pkgPath = join(workspaceRoot, 'package.json');
   if (existsSync(pkgPath)) {
     try {
       const content = readFileSync(pkgPath, 'utf-8');
@@ -551,14 +633,25 @@ export async function loadProjectContext(
     }
   }
 
-  // Load source files
-  if (options.files && options.files.length > 0) {
-    context.sourceFiles = loadSpecificFiles(options.files, projectRoot, 50000 - context.totalSize);
+  const remainingBytes = maxContextBytes - context.totalSize;
+
+  // Load source files based on options priority:
+  // 1. --include glob patterns (highest priority)
+  // 2. --files specific files
+  // 3. Auto-detect src/ directory (fallback)
+  
+  if (options.include && options.include.length > 0) {
+    // Use glob patterns
+    context.sourceFiles = await loadGlobFiles(options.include, workspaceRoot, remainingBytes);
+  } else if (options.files && options.files.length > 0) {
+    // Use specific files
+    context.sourceFiles = loadSpecificFiles(options.files, workspaceRoot, remainingBytes);
   } else {
-    const srcDir = existsSync(join(projectRoot, 'src')) 
-      ? join(projectRoot, 'src') 
-      : projectRoot;
-    context.sourceFiles = getSourceFiles(srcDir, projectRoot, 10, 50000 - context.totalSize);
+    // Fallback: auto-detect src/
+    const srcDir = existsSync(join(workspaceRoot, 'src')) 
+      ? join(workspaceRoot, 'src') 
+      : workspaceRoot;
+    context.sourceFiles = getSourceFiles(srcDir, workspaceRoot, 10, remainingBytes);
   }
 
   for (const file of context.sourceFiles) {

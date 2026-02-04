@@ -332,6 +332,9 @@ program
   .option('-c, --config <path>', 'Config file path', 'config.yaml')
   .option('-p, --prompt-file <path>', 'Read topic/prompt from a text or markdown file')
   .option('-f, --files <files>', 'Comma-separated list of files to include as context')
+  .option('-w, --workspace <path>', 'Project workspace root directory')
+  .option('-i, --include <patterns>', 'Glob patterns for files to include (comma-separated, e.g., "src/**/*.ts,lib/**/*.js")')
+  .option('--max-context <kb>', 'Maximum context size in KB (default: 100)', '100')
   .option('-g, --github', 'Include GitHub context (issues, PRs)')
   .option('-a, --agents <count>', 'Number of agents (1-3)', '3')
   .option('-t, --timeout <seconds>', 'Timeout per agent in seconds', '60')
@@ -360,13 +363,26 @@ program
     }
     
     const files = options.files ? options.files.split(',').map((f: string) => f.trim()) : undefined;
+    const include = options.include ? options.include.split(',').map((p: string) => p.trim()) : undefined;
     const agentCount = parseInt(options.agents, 10);
     const timeout = parseInt(options.timeout, 10);
     const maxRounds = parseInt(options.maxRounds, 10);
+    const maxContextKb = parseInt(options.maxContext, 10);
+    
+    // Log workspace info if provided
+    if (options.workspace) {
+      console.log(chalk.gray(`Using workspace: ${options.workspace}`));
+    }
+    if (include) {
+      console.log(chalk.gray(`Include patterns: ${include.join(', ')}`));
+    }
     
     await discussCommand({
       topic: discussionTopic,
       files,
+      include,
+      workspace: options.workspace,
+      maxContextKb: isNaN(maxContextKb) ? 100 : maxContextKb,
       github: options.github || false,
       agents: isNaN(agentCount) ? 3 : Math.max(1, Math.min(3, agentCount)),
       timeout: isNaN(timeout) ? 60 : timeout,

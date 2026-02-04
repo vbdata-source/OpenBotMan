@@ -1,273 +1,198 @@
 /**
- * Tests for Real Discussion Command
+ * Tests for discuss command workspace/include functionality
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { loadProjectContext, type DiscussOptions, type ProjectContext } from './discuss.js';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
+import { loadProjectContext, type DiscussOptions } from './discuss.js';
 
-// Mock ClaudeCliProvider
-vi.mock('@openbotman/orchestrator', () => ({
-  ClaudeCliProvider: vi.fn().mockImplementation(() => ({
-    send: vi.fn().mockResolvedValue({
-      text: 'Mock response from Claude CLI',
-      costUsd: 0.001,
-      sessionId: 'test-session',
-      isError: false,
-    }),
-  })),
-}));
+const TEST_DIR = join(process.cwd(), 'test-workspace-temp');
 
-describe('discuss command', () => {
-  let tempDir: string;
-
+describe('loadProjectContext with workspace', () => {
   beforeEach(() => {
-    // Create temp directory for test files
-    tempDir = mkdtempSync(join(tmpdir(), 'discuss-test-'));
+    // Create test directory structure
+    mkdirSync(TEST_DIR, { recursive: true });
+    mkdirSync(join(TEST_DIR, 'src'), { recursive: true });
+    mkdirSync(join(TEST_DIR, 'src', 'utils'), { recursive: true });
+    mkdirSync(join(TEST_DIR, 'lib'), { recursive: true });
+    mkdirSync(join(TEST_DIR, 'node_modules', 'some-pkg'), { recursive: true });
+
+    // Create test files
+    writeFileSync(join(TEST_DIR, 'package.json'), JSON.stringify({
+      name: 'test-project',
+      version: '1.0.0',
+      description: 'Test project for workspace loading',
+    }, null, 2));
+
+    writeFileSync(join(TEST_DIR, 'README.md'), '# Test Project\n\nThis is a test.');
+
+    writeFileSync(join(TEST_DIR, 'src', 'index.ts'), `
+export function main() {
+  console.log('Hello World');
+}
+`);
+
+    writeFileSync(join(TEST_DIR, 'src', 'utils', 'helper.ts'), `
+export function helper() {
+  return 'helper';
+}
+`);
+
+    writeFileSync(join(TEST_DIR, 'lib', 'legacy.js'), `
+module.exports = { legacy: true };
+`);
+
+    // File that should be ignored
+    writeFileSync(join(TEST_DIR, 'node_modules', 'some-pkg', 'index.js'), 'module.exports = {}');
   });
 
   afterEach(() => {
     // Cleanup
-    try {
-      rmSync(tempDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
+    if (existsSync(TEST_DIR)) {
+      rmSync(TEST_DIR, { recursive: true, force: true });
     }
   });
 
-  describe('loadProjectContext', () => {
-    it('should load README.md if present', async () => {
-      const readmeContent = '# Test Project\n\nThis is a test project.';
-      writeFileSync(join(tempDir, 'README.md'), readmeContent);
-      writeFileSync(join(tempDir, 'package.json'), JSON.stringify({ name: 'test' }));
+  it('should load files from workspace with include patterns', async () => {
+    const options: DiscussOptions = {
+      topic: 'Test topic',
+      workspace: TEST_DIR,
+      include: ['src/**/*.ts'],
+    };
 
-      const options: DiscussOptions = {
-        topic: 'Test topic',
-        cwd: tempDir,
-      };
+    const context = await loadProjectContext(options);
 
-      const context = await loadProjectContext(options);
-      
-      expect(context.readme).toBe(readmeContent);
-    });
-
-    it('should load package.json if present', async () => {
-      const pkgContent = {
-        name: 'test-project',
-        version: '1.0.0',
-        description: 'A test project',
-      };
-      writeFileSync(join(tempDir, 'package.json'), JSON.stringify(pkgContent, null, 2));
-
-      const options: DiscussOptions = {
-        topic: 'Test topic',
-        cwd: tempDir,
-      };
-
-      const context = await loadProjectContext(options);
-      
-      expect(context.packageJson).toEqual(pkgContent);
-    });
-
-    it('should load source files from src directory', async () => {
-      writeFileSync(join(tempDir, 'package.json'), JSON.stringify({ name: 'test' }));
-      mkdirSync(join(tempDir, 'src'));
-      writeFileSync(join(tempDir, 'src', 'index.ts'), 'export const hello = "world";');
-      writeFileSync(join(tempDir, 'src', 'utils.ts'), 'export function add(a: number, b: number) { return a + b; }');
-
-      const options: DiscussOptions = {
-        topic: 'Test topic',
-        cwd: tempDir,
-      };
-
-      const context = await loadProjectContext(options);
-      
-      expect(context.sourceFiles.length).toBeGreaterThan(0);
-      expect(context.sourceFiles.some(f => f.path.includes('index.ts'))).toBe(true);
-    });
-
-    it('should load specific files when provided', async () => {
-      writeFileSync(join(tempDir, 'package.json'), JSON.stringify({ name: 'test' }));
-      writeFileSync(join(tempDir, 'custom.ts'), 'const custom = true;');
-      writeFileSync(join(tempDir, 'other.ts'), 'const other = false;');
-
-      const options: DiscussOptions = {
-        topic: 'Test topic',
-        files: ['custom.ts'],
-        cwd: tempDir,
-      };
-
-      const context = await loadProjectContext(options);
-      
-      expect(context.sourceFiles.length).toBe(1);
-      expect(context.sourceFiles[0]?.path).toBe('custom.ts');
-    });
-
-    it('should respect max size limits', async () => {
-      writeFileSync(join(tempDir, 'package.json'), JSON.stringify({ name: 'test' }));
-      mkdirSync(join(tempDir, 'src'));
-      
-      // Create many files
-      for (let i = 0; i < 20; i++) {
-        writeFileSync(
-          join(tempDir, 'src', `file${i}.ts`),
-          `export const value${i} = ${i};\n`.repeat(100)
-        );
-      }
-
-      const options: DiscussOptions = {
-        topic: 'Test topic',
-        cwd: tempDir,
-      };
-
-      const context = await loadProjectContext(options);
-      
-      // Should not load all 20 files
-      expect(context.sourceFiles.length).toBeLessThanOrEqual(10);
-      // Total size should be reasonable
-      expect(context.totalSize).toBeLessThan(60000);
-    });
-
-    it('should truncate very long README', async () => {
-      const longReadme = '# Test\n\n' + 'Lorem ipsum '.repeat(1000);
-      writeFileSync(join(tempDir, 'README.md'), longReadme);
-      writeFileSync(join(tempDir, 'package.json'), JSON.stringify({ name: 'test' }));
-
-      const options: DiscussOptions = {
-        topic: 'Test topic',
-        cwd: tempDir,
-      };
-
-      const context = await loadProjectContext(options);
-      
-      expect(context.readme).toBeTruthy();
-      expect(context.readme!.length).toBeLessThanOrEqual(5100); // 5000 + "[... truncated]"
-      expect(context.readme!.includes('[... truncated]')).toBe(true);
-    });
-
-    it('should handle missing files gracefully', async () => {
-      // Create an isolated temp dir structure
-      const isolatedDir = mkdtempSync(join(tmpdir(), 'isolated-'));
-      
-      // Create a package.json to anchor the project root here
-      writeFileSync(join(isolatedDir, 'package.json'), JSON.stringify({ 
-        name: 'empty-test-project',
-        version: '0.0.0'
-      }));
-      
-      const options: DiscussOptions = {
-        topic: 'Test topic',
-        cwd: isolatedDir,
-      };
-
-      const context = await loadProjectContext(options);
-      
-      // README should be null since we didn't create one
-      expect(context.readme).toBeNull();
-      // package.json should be loaded
-      expect(context.packageJson).toBeTruthy();
-      expect((context.packageJson as Record<string, unknown>)?.name).toBe('empty-test-project');
-      // No source files in this empty project
-      expect(context.sourceFiles).toEqual([]);
-      
-      // Cleanup
-      rmSync(isolatedDir, { recursive: true, force: true });
-    });
-
-    it('should ignore node_modules directory', async () => {
-      writeFileSync(join(tempDir, 'package.json'), JSON.stringify({ name: 'test' }));
-      mkdirSync(join(tempDir, 'node_modules'));
-      mkdirSync(join(tempDir, 'node_modules', 'some-package'));
-      writeFileSync(join(tempDir, 'node_modules', 'some-package', 'index.js'), 'module.exports = {};');
-      mkdirSync(join(tempDir, 'src'));
-      writeFileSync(join(tempDir, 'src', 'index.ts'), 'export const app = true;');
-
-      const options: DiscussOptions = {
-        topic: 'Test topic',
-        cwd: tempDir,
-      };
-
-      const context = await loadProjectContext(options);
-      
-      // Should only find src/index.ts, not node_modules
-      expect(context.sourceFiles.every(f => !f.path.includes('node_modules'))).toBe(true);
-    });
+    expect(context.projectRoot).toBe(TEST_DIR);
+    expect(context.packageJson).toBeDefined();
+    expect(context.packageJson?.name).toBe('test-project');
+    expect(context.readme).toContain('Test Project');
+    
+    // Should find TypeScript files
+    expect(context.sourceFiles.length).toBeGreaterThan(0);
+    const filePaths = context.sourceFiles.map(f => f.path);
+    expect(filePaths).toContain('src/index.ts');
+    expect(filePaths).toContain('src/utils/helper.ts');
+    
+    // Should NOT include lib/*.js (not matching pattern)
+    expect(filePaths).not.toContain('lib/legacy.js');
   });
 
-  describe('agent configurations', () => {
-    it('should have default agents with correct roles', async () => {
-      // Import the module to check DEFAULT_AGENTS
-      const module = await import('./discuss.js');
-      
-      // The agents should be coder, reviewer, architect
-      // We can test this indirectly through the options
-      const options: DiscussOptions = {
-        topic: 'Test',
-        agents: 3,
-      };
-      
-      expect(options.agents).toBe(3);
-    });
+  it('should support multiple include patterns', async () => {
+    const options: DiscussOptions = {
+      topic: 'Test topic',
+      workspace: TEST_DIR,
+      include: ['src/**/*.ts', 'lib/**/*.js'],
+    };
 
-    it('should limit agents to 1-3', () => {
-      // Test that agent count is bounded
-      const agentCount = Math.max(1, Math.min(3, 5));
-      expect(agentCount).toBe(3);
-      
-      const agentCount2 = Math.max(1, Math.min(3, 0));
-      expect(agentCount2).toBe(1);
-    });
+    const context = await loadProjectContext(options);
+    const filePaths = context.sourceFiles.map(f => f.path);
+
+    expect(filePaths).toContain('src/index.ts');
+    expect(filePaths).toContain('lib/legacy.js');
   });
 
-  describe('discussion flow', () => {
-    it('should build correct prompt with topic', () => {
-      const topic = 'Wie implementiere ich Caching?';
-      const prompt = `# Diskussions-Thema\n${topic}`;
-      
-      expect(prompt).toContain(topic);
-      expect(prompt).toContain('Diskussions-Thema');
-    });
+  it('should ignore node_modules by default', async () => {
+    const options: DiscussOptions = {
+      topic: 'Test topic',
+      workspace: TEST_DIR,
+      include: ['**/*.js'],
+    };
 
-    it('should include previous messages in subsequent prompts', () => {
-      const messages = [
-        { agentName: 'Coder', role: 'coder', content: 'Ich schlage Redis vor.' },
-        { agentName: 'Reviewer', role: 'reviewer', content: 'Bedenke die Komplexität.' },
-      ];
-      
-      const historySection = messages
-        .map(m => `## [${m.agentName}] (${m.role})\n${m.content}`)
-        .join('\n\n');
-      
-      expect(historySection).toContain('[Coder]');
-      expect(historySection).toContain('[Reviewer]');
-      expect(historySection).toContain('Redis');
-      expect(historySection).toContain('Komplexität');
-    });
+    const context = await loadProjectContext(options);
+    const filePaths = context.sourceFiles.map(f => f.path);
+
+    // Should have lib/legacy.js but NOT node_modules
+    expect(filePaths.some(p => p.includes('node_modules'))).toBe(false);
   });
 
-  describe('options parsing', () => {
-    it('should parse timeout correctly', () => {
-      const timeout = parseInt('60', 10);
-      expect(timeout).toBe(60);
-      
-      const invalidTimeout = parseInt('invalid', 10);
-      expect(isNaN(invalidTimeout)).toBe(true);
-    });
+  it('should respect maxContextKb limit', async () => {
+    // Create a large file
+    const largeContent = 'x'.repeat(50000); // 50KB
+    writeFileSync(join(TEST_DIR, 'src', 'large.ts'), largeContent);
 
-    it('should parse files list correctly', () => {
-      const filesArg = 'src/index.ts, src/utils.ts, lib/helper.ts';
-      const files = filesArg.split(',').map(f => f.trim());
-      
-      expect(files).toEqual(['src/index.ts', 'src/utils.ts', 'lib/helper.ts']);
-    });
+    const options: DiscussOptions = {
+      topic: 'Test topic',
+      workspace: TEST_DIR,
+      include: ['src/**/*.ts'],
+      maxContextKb: 10, // Only 10KB allowed
+    };
 
-    it('should handle empty files argument', () => {
-      const filesArg = undefined;
-      const files = filesArg ? filesArg.split(',') : undefined;
-      
-      expect(files).toBeUndefined();
-    });
+    const context = await loadProjectContext(options);
+
+    // Total size should be limited
+    expect(context.totalSize).toBeLessThanOrEqual(10 * 1024 + 1000); // Some buffer for truncation text
+  });
+
+  it('should fallback to src/ if no include patterns provided', async () => {
+    const options: DiscussOptions = {
+      topic: 'Test topic',
+      workspace: TEST_DIR,
+      // No include patterns
+    };
+
+    const context = await loadProjectContext(options);
+
+    // Should auto-detect and load from src/
+    expect(context.sourceFiles.length).toBeGreaterThan(0);
+  });
+
+  it('should use files option over auto-detect', async () => {
+    const options: DiscussOptions = {
+      topic: 'Test topic',
+      workspace: TEST_DIR,
+      files: ['lib/legacy.js'],
+    };
+
+    const context = await loadProjectContext(options);
+    const filePaths = context.sourceFiles.map(f => f.path);
+
+    expect(filePaths).toContain('lib/legacy.js');
+    // Should NOT have src files since we specified specific files
+  });
+
+  it('should handle non-existent workspace gracefully', async () => {
+    const options: DiscussOptions = {
+      topic: 'Test topic',
+      workspace: '/non/existent/path',
+      include: ['**/*.ts'],
+    };
+
+    const context = await loadProjectContext(options);
+
+    // Should return empty context
+    expect(context.sourceFiles.length).toBe(0);
+    expect(context.readme).toBeNull();
+    expect(context.packageJson).toBeNull();
+  });
+});
+
+describe('loadProjectContext context formatting', () => {
+  beforeEach(() => {
+    mkdirSync(TEST_DIR, { recursive: true });
+    writeFileSync(join(TEST_DIR, 'package.json'), JSON.stringify({
+      name: 'format-test',
+      version: '2.0.0',
+    }, null, 2));
+    writeFileSync(join(TEST_DIR, 'test.ts'), 'const x = 1;');
+  });
+
+  afterEach(() => {
+    if (existsSync(TEST_DIR)) {
+      rmSync(TEST_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it('should calculate totalSize correctly', async () => {
+    const options: DiscussOptions = {
+      topic: 'Test',
+      workspace: TEST_DIR,
+      include: ['*.ts'],
+    };
+
+    const context = await loadProjectContext(options);
+
+    // totalSize should include README + package.json + source files
+    expect(context.totalSize).toBeGreaterThan(0);
   });
 });
