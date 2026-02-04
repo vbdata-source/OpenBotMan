@@ -10,25 +10,70 @@
  * @see discussions/2026-02-04_18-21_anfrage-rate-limiting-strategie-für-claude-cli-pro.md
  */
 
-// Provider-specific rate limits (milliseconds between requests)
-export const PROVIDER_DELAYS: Record<string, number> = {
-  'claude-cli': 1500,   // Conservative: 1.5s between CLI calls
-  'anthropic': 500,     // Direct API is faster
-  'openai': 200,        // OpenAI allows higher rate
-  'google': 200,        // Gemini also fast
-  'ollama': 100,        // Local, no limit
-  'mock': 0,            // Testing
+/**
+ * Rate Limit Configuration
+ * 
+ * These are DEFAULT values - can be overridden via:
+ * 1. config.yaml → rateLimiting.providers.<provider>.delayMs
+ * 2. Per-agent settings → agent.rateLimitDelayMs
+ */
+export interface RateLimitConfig {
+  providers: Record<string, number>;
+  defaultDelayMs: number;
+  maxRetries: number;
+  initialBackoffMs: number;
+  maxBackoffMs: number;
+}
+
+// Default configuration (can be overridden)
+export const DEFAULT_RATE_LIMIT_CONFIG: RateLimitConfig = {
+  providers: {
+    'claude-cli': 1500,   // Conservative: 1.5s between CLI calls
+    'anthropic': 500,     // Direct API is faster
+    'openai': 200,        // OpenAI allows higher rate
+    'google': 200,        // Gemini also fast
+    'ollama': 100,        // Local, no limit
+    'mock': 0,            // Testing
+  },
+  defaultDelayMs: 1000,
+  maxRetries: 3,
+  initialBackoffMs: 2000,
+  maxBackoffMs: 30000,
 };
 
-// Default delay for unknown providers
-const DEFAULT_DELAY = 1000;
+// Current active configuration (mutable, set from config.yaml)
+let activeConfig: RateLimitConfig = { ...DEFAULT_RATE_LIMIT_CONFIG };
 
-// Max retries before giving up
-const MAX_RETRIES = 3;
+/**
+ * Set rate limit configuration from config.yaml
+ */
+export function setRateLimitConfig(config: Partial<RateLimitConfig>): void {
+  activeConfig = {
+    ...DEFAULT_RATE_LIMIT_CONFIG,
+    ...config,
+    providers: {
+      ...DEFAULT_RATE_LIMIT_CONFIG.providers,
+      ...config.providers,
+    },
+  };
+}
 
-// Backoff configuration
-const INITIAL_BACKOFF_MS = 2000;
-const MAX_BACKOFF_MS = 30000;
+/**
+ * Get current rate limit configuration
+ */
+export function getRateLimitConfig(): RateLimitConfig {
+  return { ...activeConfig };
+}
+
+/**
+ * Get delay for a specific provider (with optional per-agent override)
+ */
+export function getProviderDelay(provider: string, agentOverride?: number): number {
+  if (agentOverride !== undefined && agentOverride >= 0) {
+    return agentOverride;
+  }
+  return activeConfig.providers[provider] ?? activeConfig.defaultDelayMs;
+}
 
 /**
  * Error types for classification
@@ -66,9 +111,10 @@ export function classifyError(error: unknown): ErrorType {
  * Calculate backoff delay with jitter
  */
 export function calculateBackoff(attempt: number): number {
+  const config = getRateLimitConfig();
   const exponentialDelay = Math.min(
-    INITIAL_BACKOFF_MS * Math.pow(2, attempt),
-    MAX_BACKOFF_MS
+    config.initialBackoffMs * Math.pow(2, attempt),
+    config.maxBackoffMs
   );
   // Add 10% jitter to prevent thundering herd
   const jitter = Math.random() * 0.1 * exponentialDelay;
@@ -88,12 +134,23 @@ export function sleep(ms: number): Promise<void> {
 export class RateLimiter {
   private lastRequestTime: Map<string, number> = new Map();
   private requestCounts: Map<string, number> = new Map();
+  private agentOverrides: Map<string, number> = new Map();
+  
+  /**
+   * Set a per-agent delay override
+   */
+  setAgentDelay(agentId: string, delayMs: number): void {
+    this.agentOverrides.set(agentId, delayMs);
+  }
   
   /**
    * Get the delay required before next request for a provider
    */
-  getRequiredDelay(provider: string): number {
-    const delay = PROVIDER_DELAYS[provider] ?? DEFAULT_DELAY;
+  getRequiredDelay(provider: string, agentId?: string): number {
+    // Check for agent-specific override first
+    const agentOverride = agentId ? this.agentOverrides.get(agentId) : undefined;
+    const delay = getProviderDelay(provider, agentOverride);
+    
     const lastTime = this.lastRequestTime.get(provider) ?? 0;
     const elapsed = Date.now() - lastTime;
     
@@ -107,8 +164,8 @@ export class RateLimiter {
   /**
    * Wait for rate limit and mark request
    */
-  async waitForRateLimit(provider: string): Promise<void> {
-    const requiredDelay = this.getRequiredDelay(provider);
+  async waitForRateLimit(provider: string, agentId?: string): Promise<void> {
+    const requiredDelay = this.getRequiredDelay(provider, agentId);
     
     if (requiredDelay > 0) {
       await sleep(requiredDelay);
@@ -202,15 +259,17 @@ export async function executeWithRateLimitAndRetry<T>(
   rateLimiter: RateLimiter,
   options: {
     maxRetries?: number;
+    agentId?: string;
     onRetry?: (attempt: number, error: unknown) => void;
   } = {}
 ): Promise<T> {
-  const maxRetries = options.maxRetries ?? MAX_RETRIES;
+  const config = getRateLimitConfig();
+  const maxRetries = options.maxRetries ?? config.maxRetries;
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       // Wait for rate limit
-      await rateLimiter.waitForRateLimit(provider);
+      await rateLimiter.waitForRateLimit(provider, options.agentId);
       
       // Execute the function
       return await fn();

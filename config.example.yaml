@@ -340,6 +340,29 @@ discussion:
   # Max context size in bytes
   maxContext: 50000
 
+  # Rate Limiting Configuration
+  # Prevents API rate limit errors when multiple agents make requests
+  rateLimiting:
+    # Provider-specific delays (milliseconds between requests)
+    # Can be overridden per-agent with rateLimitDelayMs
+    providers:
+      claude-cli: 1500    # Conservative for CLI subprocess
+      anthropic: 500      # Direct API is faster
+      openai: 200         # OpenAI allows higher rate
+      google: 200         # Gemini also fast
+      ollama: 100         # Local, minimal delay
+      mock: 0             # Testing only
+    
+    # Default delay for unknown providers
+    defaultDelayMs: 1000
+    
+    # Maximum retry attempts on retryable errors
+    maxRetries: 3
+    
+    # Backoff configuration for retries
+    initialBackoffMs: 2000
+    maxBackoffMs: 30000
+
   # Agent configurations with multi-provider support
   # Each agent can use a different provider:
   # - claude-cli: Claude CLI (Pro subscription, no API key needed)
@@ -355,6 +378,7 @@ discussion:
       provider: claude-cli          # Uses Claude CLI
       model: claude-sonnet-4-20250514
       # apiKey: ${GOOGLE_API_KEY}   # Only needed for API providers
+      # rateLimitDelayMs: 2000      # Optional: Override provider default (ms)
       systemPrompt: |
         Du bist ein erfahrener Software-Architekt und Planer.
         ROLLE: Du erstellst und überarbeitest Vorschläge basierend auf Feedback.
