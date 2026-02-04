@@ -881,7 +881,7 @@ async function runAgentTurn(
   agent: DiscussAgentConfig,
   provider: LLMProvider,
   prompt: string,
-  options: DiscussOptions
+  _options: DiscussOptions
 ): Promise<ProviderResponse> {
   const config = getRateLimitConfig();
   
