@@ -85,7 +85,7 @@ export interface DiscussOptions {
   reviewer?: string; // Override reviewer provider
   workspace?: string;  // Project workspace root path
   include?: string[];  // Glob patterns for files to include
-  maxContextKb?: number; // Max context size in KB (default: 100)
+  maxContextKb?: number; // Max context size in KB (default: 30)
 }
 
 export interface DiscussionConfig {
@@ -597,7 +597,7 @@ export async function loadProjectContext(
       ? findProjectRoot(options.cwd)
       : findProjectRoot(process.cwd());
   
-  const maxContextBytes = (options.maxContextKb || 100) * 1024; // Default 100KB
+  const maxContextBytes = (options.maxContextKb || 30) * 1024; // Default 30KB (100KB can cause CLI timeouts)
   
   const context: ProjectContext = {
     readme: null,
@@ -929,10 +929,47 @@ function printAgentHeader(agent: DiscussAgentConfig): void {
 }
 
 /**
+ * Clean agent response by removing echoed context/system prompts
+ * 
+ * Agents sometimes echo back parts of the input context or system prompt.
+ * This function removes those parts for cleaner console output.
+ */
+function cleanAgentResponse(content: string): string {
+  let cleaned = content;
+  
+  // Remove echoed project context headers and their content
+  // Pattern: "## Projekt: ..." until next heading or significant content
+  cleaned = cleaned.replace(/^## Projekt:.*?(?=^#[^#]|\n\n[A-Z])/ms, '');
+  
+  // Remove echoed README sections  
+  cleaned = cleaned.replace(/^## README\.md \(Auszug\)[\s\S]*?(?=^## [^R]|^# |\n\n[A-Z])/m, '');
+  
+  // Remove echoed Source Files sections (these can be large)
+  cleaned = cleaned.replace(/^## Source Files \(\d+ files.*?\n[\s\S]*?(?=^## [^S]|^# |\[POSITION)/m, '');
+  
+  // Remove any leading system prompt echoes (common patterns)
+  cleaned = cleaned.replace(/^(Du bist ein erfahrener|DEINE ROLLE:|DEINE PERSPEKTIVE:|DEIN STIL:)[\s\S]*?(?=\n\n[A-Z#])/m, '');
+  
+  // Remove CONSENSUS_PROTOCOL if echoed
+  cleaned = cleaned.replace(/^## Konsens-Protokoll[\s\S]*?(?=\n\n[A-Z#]|\[POSITION)/m, '');
+  
+  // Clean up multiple blank lines
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  
+  // Trim leading/trailing whitespace
+  cleaned = cleaned.trim();
+  
+  return cleaned;
+}
+
+/**
  * Print contribution with position
  */
 function printContribution(contrib: ConsensusContribution): void {
-  const lines = contrib.content.split('\n');
+  // Clean the content before printing
+  const cleanedContent = cleanAgentResponse(contrib.content);
+  const lines = cleanedContent.split('\n');
+  
   for (const line of lines) {
     let formatted = line;
     formatted = formatted.replace(/\*\*([^*]+)\*\*/g, chalk.bold('$1'));

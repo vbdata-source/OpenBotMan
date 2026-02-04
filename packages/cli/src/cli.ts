@@ -334,7 +334,7 @@ program
   .option('-f, --files <files>', 'Comma-separated list of files to include as context')
   .option('-w, --workspace <path>', 'Project workspace root directory')
   .option('-i, --include <patterns>', 'Glob patterns for files to include (comma-separated, e.g., "src/**/*.ts,lib/**/*.js")')
-  .option('--max-context <kb>', 'Maximum context size in KB (default: 100)', '100')
+  .option('--max-context <kb>', 'Maximum context size in KB (default: 30)', '30')
   .option('-g, --github', 'Include GitHub context (issues, PRs)')
   .option('-a, --agents <count>', 'Number of agents (1-3)', '3')
   .option('-t, --timeout <seconds>', 'Timeout per agent in seconds', '60')
