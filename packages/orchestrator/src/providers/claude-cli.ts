@@ -324,7 +324,28 @@ export class ClaudeCliProvider extends EventEmitter<ClaudeCliProviderEvents> {
         this.emit('end', response);
         
         if (response.isError) {
-          reject(new Error(response.text || stderr || 'Claude CLI error'));
+          // Build detailed error message
+          const errorParts: string[] = [];
+          
+          if (response.text && response.text.trim()) {
+            errorParts.push(response.text.trim());
+          }
+          if (stderr && stderr.trim()) {
+            // Extract meaningful part of stderr
+            const stderrClean = stderr.trim().split('\n').slice(-3).join(' ').substring(0, 200);
+            if (stderrClean && !errorParts.includes(stderrClean)) {
+              errorParts.push(stderrClean);
+            }
+          }
+          if (exitCode !== null && exitCode !== 0) {
+            errorParts.push(`(exit code: ${exitCode})`);
+          }
+          
+          const errorMessage = errorParts.length > 0 
+            ? errorParts.join(' - ')
+            : 'Claude CLI failed without error details. Check if claude is authenticated (run: claude auth status)';
+          
+          reject(new Error(errorMessage));
         } else {
           resolve(response);
         }

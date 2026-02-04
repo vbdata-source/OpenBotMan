@@ -1095,8 +1095,33 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
       }
     } catch (error) {
       proposerSpinner.fail(proposer.color(`[${proposer.name}] Error`));
-      console.log(chalk.red(`  ${error instanceof Error ? error.message : 'Unknown error'}`));
-      break;
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      console.log(chalk.red(`  ${errorMsg}`));
+      
+      // Add error placeholder for proposer with professional formatting
+      const errorContent = [
+        `⚠️ **Agent konnte nicht antworten**`,
+        ``,
+        `**Grund:** ${errorMsg}`,
+        ``,
+        `*Der Planner konnte seinen Vorschlag nicht erstellen. Die Runde wird übersprungen.*`,
+      ].join('\n');
+      
+      contributions.push({
+        agentId: proposer.id,
+        agentName: proposer.name,
+        role: proposer.role,
+        model: proposer.model,
+        provider: proposer.provider === 'claude-cli' ? 'CLI' : 'API',
+        emoji: proposer.emoji,
+        content: errorContent,
+        position: 'PROPOSAL',
+        positionReason: `Agent error: ${errorMsg.substring(0, 50)}`,
+        timestamp: new Date(),
+      });
+      
+      // Don't break - continue to next round instead of stopping completely
+      continue;
     }
     
     // Step 2: Each responder evaluates
@@ -1158,9 +1183,18 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
         }
       } catch (error) {
         responderSpinner.fail(responder.color(`[${responder.name}] Error`));
-        console.log(chalk.red(`  ${error instanceof Error ? error.message : 'Unknown error'}`));
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        console.log(chalk.red(`  ${errorMsg}`));
         
-        // Add error placeholder
+        // Add error placeholder with professional formatting
+        const errorContent = [
+          `⚠️ **Agent konnte nicht antworten**`,
+          ``,
+          `**Grund:** ${errorMsg}`,
+          ``,
+          `*Dieser Agent wurde für diese Runde übersprungen. Die Diskussion wird mit den verbleibenden Teilnehmern fortgesetzt.*`,
+        ].join('\n');
+        
         contributions.push({
           agentId: responder.id,
           agentName: responder.name,
@@ -1168,9 +1202,9 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
           model: responder.model,
           provider: responder.provider === 'claude-cli' ? 'CLI' : 'API',
           emoji: responder.emoji,
-          content: `[Error: ${error instanceof Error ? error.message : 'Unknown error'}]`,
+          content: errorContent,
           position: 'CONCERN',
-          positionReason: 'Agent error',
+          positionReason: `Agent error: ${errorMsg.substring(0, 50)}`,
           timestamp: new Date(),
         });
       }
@@ -1199,10 +1233,24 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
   if (consensusReached) {
     console.log(chalk.bold.green('\n✅ KONSENS ERREICHT!'));
     
-    // Use last proposal as final consensus
-    const lastRound = rounds[rounds.length - 1];
-    const proposalContrib = lastRound?.contributions.find(c => c.position === 'PROPOSAL');
-    finalConsensus = proposalContrib?.content;
+    // Use last successful proposal as final consensus
+    // Search backwards through rounds to find a valid (non-error) proposal
+    for (let i = rounds.length - 1; i >= 0; i--) {
+      const round = rounds[i];
+      const proposalContrib = round?.contributions.find(c => 
+        c.position === 'PROPOSAL' && !c.content.startsWith('⚠️')
+      );
+      if (proposalContrib) {
+        finalConsensus = proposalContrib.content;
+        break;
+      }
+    }
+    
+    // Fallback: if no valid proposal found, note it
+    if (!finalConsensus) {
+      finalConsensus = '*Kein finaler Vorschlag verfügbar - siehe individuelle Beiträge oben.*';
+    }
+    
     summary = `Konsens nach ${rounds.length} Runde(n) erreicht.`;
   } else {
     console.log(chalk.bold.yellow('\n❌ KEIN KONSENS'));
