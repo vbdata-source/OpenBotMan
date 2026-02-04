@@ -35,6 +35,14 @@ import {
   type ConsensusResult,
   type RoundStatus,
 } from './consensus.js';
+import {
+  RateLimiter,
+  FailedQuestionTracker,
+  executeWithRateLimitAndRetry,
+  classifyError,
+  ErrorType,
+  type FailedQuestion,
+} from '../utils/rate-limiter.js';
 
 // ============================================================================
 // Types
@@ -742,16 +750,54 @@ function saveMarkdown(markdown: string, topic: string, outputDir?: string): stri
 // Discussion Engine with Consensus
 // ============================================================================
 
+// Global rate limiter and failed question tracker for this discussion
+const rateLimiter = new RateLimiter();
+const failedTracker = new FailedQuestionTracker();
+
 /**
- * Run a single agent's turn
+ * Run a single agent's turn with rate limiting and retry logic
+ * 
+ * Based on OpenBotMan Expert Discussion (2026-02-04):
+ * - Provider-specific delays between requests
+ * - Single retry with exponential backoff
+ * - Error classification and tracking
  */
 async function runAgentTurn(
-  _agent: DiscussAgentConfig,
+  agent: DiscussAgentConfig,
   provider: LLMProvider,
   prompt: string,
-  _options: DiscussOptions
+  options: DiscussOptions
 ): Promise<ProviderResponse> {
-  return await provider.send(prompt);
+  try {
+    return await executeWithRateLimitAndRetry(
+      () => provider.send(prompt),
+      agent.provider,
+      rateLimiter,
+      {
+        maxRetries: 1, // Single retry as per expert recommendation
+        onRetry: (attempt, error) => {
+          if (options.verbose) {
+            console.log(chalk.yellow(`  ⚠️ Retry ${attempt} for ${agent.name}: ${error instanceof Error ? error.message : 'Unknown error'}`));
+          }
+        },
+      }
+    );
+  } catch (error) {
+    // Track failed question
+    const errorType = classifyError(error);
+    failedTracker.record({
+      agentId: agent.id,
+      agentRole: agent.role,
+      prompt: prompt.substring(0, 200) + '...', // Truncate for storage
+      errorType,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      retryCount: 1,
+      timestamp: new Date(),
+    });
+    
+    // Re-throw to be handled by caller
+    throw error;
+  }
 }
 
 /**
