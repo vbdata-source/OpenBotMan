@@ -26,71 +26,96 @@ OpenBotMan löst ein echtes Problem im "VibeCoding":
 - `bottleneck` Library
 - Provider-spezifische Delays (Claude CLI: 1.5s, API: 500ms)
 - Exponential Backoff mit Jitter
-- Max 3 Retries
+- Max 3 Retries (konfigurierbar)
 - Datei: `packages/cli/src/utils/rate-limiter.ts`
 
-### Error-Handling (implementiert 2026-02-04)
-- Single Retry (2s delay)
-- Fail-Fast danach
-- Transparente Dokumentation im Output
+### Error-Handling (verbessert 2026-02-04)
+- **3 Retries** mit Exponential Backoff (2s → 4s → 8s)
+- Professionelle Fehlerdarstellung im Output
+- Transparente Dokumentation bei Agent-Ausfällen
+- Diskussion wird fortgesetzt auch bei einzelnen Agent-Fehlern
 - `FailedQuestionTracker` Klasse
-- Datei: `packages/cli/src/utils/rate-limiter.ts`
+
+### Workspace-Context (✅ IMPLEMENTIERT 2026-02-04)
+**Das Killer-Feature!** Agenten sehen jetzt den echten Code:
+```bash
+openbotman discuss "Feature X" --workspace . --include "src/**/*.ts"
+```
+- `--workspace <path>`: Projekt-Root
+- `--include <patterns>`: Glob-Patterns für Dateien
+- `--max-context <kb>`: Limit (default: 100KB)
+- Stdin statt CLI-Args (kein ENAMETOOLONG mehr)
+- Auto-Ignore: node_modules, dist, .git
 
 ### IDE-Integration (Diskussion 2026-02-04)
 **Status:** ❌ Kein Konsens, aber klare Tendenz
 
 **Empfohlene Reihenfolge (KISS-Approach):**
 
-1. **Phase 0 - CLI Enhancement (2 Tage)** ← QUICK WIN
-   ```bash
-   openbotman discuss "Feature X" --workspace . --include "src/**/*.ts"
-   ```
-   - Project-Context als CLI-Argument
-   - Minimaler Aufwand, sofort produktiv nutzbar
+1. **Phase 0 - CLI Enhancement** ✅ ERLEDIGT
+   - `--workspace` und `--include` Parameter
+   - Stdin für große Kontexte
+   - Funktioniert produktiv!
 
 2. **Phase 1 - VSCode Extension (1 Woche)**
    - Command Palette Integration
    - Sammelt Workspace-Kontext automatisch
    - Ruft CLI auf, zeigt Output in Panel
-   - "Apply Result" Button für Coding-LLM
 
 3. **Phase 2 - MCP Server (2-3 Wochen)**
    - Erst wenn Phase 1 funktioniert!
-   - MCP-Spec noch jung, könnte sich ändern
-   - Mehr Debugging-Aufwand
+   - Komplexe Security-Anforderungen
 
-**Wichtige Bedenken (müssen adressiert werden):**
-- Memory-Limits bei großen Repos definieren
-- Error-Recovery bei LLM-Ausfällen
-- API-Key-Management klären
-- Timeout-Strategien für langsame APIs
+### MCP-Server Support (Diskussion 2026-02-04)
+**Status:** ❌ Kein Konsens - Security-Bedenken
 
-**Warum MCP nicht zuerst:**
-- Zu komplex für MVP
-- Vendor Lock-in Risk (Spec-Änderungen)
-- VSCode Extension ist schneller zu implementieren
-- Direkter User-Feedback möglich
+**Was gut ankam:**
+- MVP-Ansatz: Ein MCP-Server (filesystem) als PoC
+- Interne Integration statt Plugin-System
+- Error-Handling von Tag 1
+
+**Kritische Bedenken:**
+- Child-Processes = Code Injection Risk
+- Memory-Limits reichen nicht (Fork-Bombs, File-Handles)
+- Zu viel Scope für Alpha-Stadium
+
+**Vorgeschlagene Alternativen:**
+- **WASM-Sandbox** statt Child-Processes (echte Isolation)
+- **Docker-basierte Sandboxes** mit seccomp/AppArmor
+
+**Entscheidung:** MCP wird zurückgestellt bis:
+1. CLI + Workspace Feature stabil
+2. Requirements sauber dokumentiert
+3. Security-Konzept ausgearbeitet
+
+Diskussion: `discussions/2026-02-04_20-37_wie-sollte-ich-mcp-server-support-für-openbotman-i.md`
 
 ---
 
 ## Geplante Features
 
-### 1. IDE-Integration
-Siehe Architektur-Entscheidungen oben.
-- Prompt: `prompts/ide-integration-usecase.md`
-- Diskussion: `discussions/2026-02-04_20-05_openbotman-ide-integration-optimaler-use-case-anal.md`
+### 1. VSCode Extension (Priorität: HOCH)
+- Command Palette → OpenBotMan starten
+- Workspace-Kontext automatisch sammeln
+- Output in Panel anzeigen
+- "Apply Result" für Coding-LLM
 
-### 2. Agent Tool Access (geplant)
+### 2. Agent Tool Access (Priorität: MITTEL)
 - Web-Recherche für Agenten
 - File-Access (Codebase lesen)
-- MCP-Tools für Agenten
+- Erst nach Security-Review
 - Prompt: `prompts/agent-tool-access.md`
 
-### 3. Web-UI (Konsens vom 2026-02-04)
+### 3. Web-UI (Priorität: MITTEL)
 - Hub-and-Spoke Design
 - 3-Klick Team-Erstellung
 - 4-Wochen Roadmap
 - Prompt: `prompts/webui-config-features.md`
+
+### 4. MCP-Server (Priorität: NIEDRIG - zurückgestellt)
+- Braucht Security-Konzept
+- WASM oder Docker Sandbox
+- Frühestens nach VSCode Extension
 
 ---
 
@@ -103,24 +128,55 @@ Siehe Architektur-Entscheidungen oben.
 | 2026-02-04 | Rate-Limiting | ❌ Kein Konsens | bottleneck, 1s delay |
 | 2026-02-04 | Error-Handling | ✅ Konsens | 1 retry, fail-fast |
 | 2026-02-04 | IDE-Integration | ❌ Kein Konsens | CLI→VSCode→MCP (KISS) |
+| 2026-02-04 | Architektur-Analyse | ✅ Konsens | Solide Basis, Memory-Limits definieren |
+| 2026-02-04 | MCP-Server | ❌ Kein Konsens | Security-Bedenken, zurückgestellt |
 
 ---
 
 ## Priorisierte Roadmap
 
-### Sofort (Phase 0)
-- [ ] CLI: `--workspace` und `--include` Parameter
-- [ ] Project-Context an Agenten übergeben
+### ✅ Erledigt (Phase 0)
+- [x] CLI: `--workspace` und `--include` Parameter
+- [x] Project-Context an Agenten übergeben
+- [x] Stdin für große Kontexte (ENAMETOOLONG fix)
+- [x] Retry-Logik (3 Retries mit Backoff)
+- [x] Professionelles Error-Handling
 
 ### Kurzfristig (Phase 1)
 - [ ] VSCode Extension MVP
 - [ ] Command Palette Commands
 - [ ] Output Panel
+- [ ] "Apply Result" Integration
 
 ### Mittelfristig (Phase 2)
-- [ ] MCP Server Implementation
-- [ ] Agent Tool Access (Web, Files)
 - [ ] Web-UI MVP
+- [ ] Agent Tool Access (nach Security-Review)
+
+### Langfristig (Phase 3)
+- [ ] MCP Server (nach Security-Konzept)
+- [ ] WASM/Docker Sandbox für Tools
+
+---
+
+## Technische Details
+
+### CLI-Aufruf mit Workspace
+```bash
+pnpm cli discuss "Deine Frage" \
+  --workspace C:\Sources\MeinProjekt \
+  --include "src/**/*.ts,lib/**/*.js" \
+  --max-context 100 \
+  --agents 3 \
+  --max-rounds 4 \
+  --output C:\Sources\MeinProjekt\discussions \
+  --verbose
+```
+
+### Provider-Konfiguration
+- Claude CLI: 1.5s Delay, 3 Retries
+- OpenAI API: 200ms Delay
+- Gemini API: 200ms Delay
+- Ollama: 100ms (lokal)
 
 ---
 
@@ -148,4 +204,4 @@ Siehe Architektur-Entscheidungen oben.
 
 ---
 
-*Letzte Aktualisierung: 2026-02-04 20:11*
+*Letzte Aktualisierung: 2026-02-04 20:40*
