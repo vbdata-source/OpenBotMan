@@ -41,6 +41,7 @@ import {
   FailedQuestionTracker,
   executeWithRateLimitAndRetry,
   classifyError,
+  getRateLimitConfig,
 } from '../utils/rate-limiter.js';
 
 // ============================================================================
@@ -882,17 +883,20 @@ async function runAgentTurn(
   prompt: string,
   options: DiscussOptions
 ): Promise<ProviderResponse> {
+  const config = getRateLimitConfig();
+  
   try {
     return await executeWithRateLimitAndRetry(
       () => provider.send(prompt),
       agent.provider,
       rateLimiter,
       {
-        maxRetries: 1, // Single retry as per expert recommendation
+        maxRetries: config.maxRetries, // Use config (default: 3 retries)
         onRetry: (attempt, error) => {
-          if (options.verbose) {
-            console.log(chalk.yellow(`  ⚠️ Retry ${attempt} for ${agent.name}: ${error instanceof Error ? error.message : 'Unknown error'}`));
-          }
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          // Always show retry attempts - important feedback for user
+          console.log(chalk.yellow(`  ⚠️ Retry ${attempt}/${config.maxRetries} for ${agent.name}: ${errorMsg.substring(0, 100)}`));
+          console.log(chalk.gray(`     Waiting ${config.initialBackoffMs * attempt}ms before retry...`));
         },
       }
     );
