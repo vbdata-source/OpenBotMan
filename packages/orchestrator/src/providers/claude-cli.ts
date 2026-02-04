@@ -337,8 +337,8 @@ export class ClaudeCliProvider extends EventEmitter<ClaudeCliProviderEvents> {
               errorParts.push(stderrClean);
             }
           }
-          if (exitCode !== null && exitCode !== 0) {
-            errorParts.push(`(exit code: ${exitCode})`);
+          if (code !== null && code !== 0) {
+            errorParts.push(`(exit code: ${code})`);
           }
           
           const errorMessage = errorParts.length > 0 
