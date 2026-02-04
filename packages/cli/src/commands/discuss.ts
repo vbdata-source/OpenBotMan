@@ -40,8 +40,6 @@ import {
   FailedQuestionTracker,
   executeWithRateLimitAndRetry,
   classifyError,
-  ErrorType,
-  type FailedQuestion,
 } from '../utils/rate-limiter.js';
 
 // ============================================================================
