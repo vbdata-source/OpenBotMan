@@ -75,6 +75,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('openbotman.orchestrate', orchestrateTask),
     vscode.commands.registerCommand('openbotman.review', reviewCode),
     vscode.commands.registerCommand('openbotman.discuss', startDiscussion),
+    vscode.commands.registerCommand('openbotman.analyzeProject', analyzeProject),
     vscode.commands.registerCommand('openbotman.knowledge.query', queryKnowledge),
     vscode.commands.registerCommand('openbotman.agents.status', showAgentStatus),
   );
@@ -226,18 +227,234 @@ async function reviewCode() {
 }
 
 /**
- * Start a discussion
+ * Start a discussion with OpenBotMan experts
  */
 async function startDiscussion() {
   const topic = await vscode.window.showInputBox({
-    prompt: 'What topic should the agents discuss?',
-    placeHolder: 'e.g., Should we use MongoDB or PostgreSQL?',
+    prompt: 'Was sollen die Experten diskutieren?',
+    placeHolder: 'z.B. Analysiere dieses Projekt auf Verbesserungsmöglichkeiten',
   });
   
   if (!topic) return;
   
-  vscode.window.showInformationMessage(`Starting discussion: "${topic}"`);
-  // TODO: Implement discussion UI
+  // Get workspace path
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  const workspacePath = workspaceFolders?.[0]?.uri.fsPath;
+  
+  // Ask if workspace should be included
+  let includeWorkspace = false;
+  if (workspacePath) {
+    const choice = await vscode.window.showQuickPick(
+      ['Ja, Projektdateien einbeziehen', 'Nein, nur die Frage'],
+      { placeHolder: 'Soll das aktuelle Projekt analysiert werden?' }
+    );
+    includeWorkspace = choice?.startsWith('Ja') ?? false;
+  }
+  
+  // Build request
+  const requestBody: Record<string, unknown> = {
+    topic,
+    async: true,
+    timeout: 120,
+    agents: 3,
+  };
+  
+  if (includeWorkspace && workspacePath) {
+    requestBody.workspace = workspacePath;
+    requestBody.include = ['**/*.ts', '**/*.js', '**/*.json', '**/*.cs', '**/*.py'];
+    requestBody.maxContext = 200;
+  }
+  
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: 'OpenBotMan Experten diskutieren...',
+      cancellable: true,
+    },
+    async (progress, token) => {
+      try {
+        // Start async job
+        const config = vscode.workspace.getConfiguration('openbotman');
+        const apiUrl = config.get<string>('apiUrl') || 'http://localhost:8080';
+        const apiKey = config.get<string>('apiKey') || 'local-dev-key';
+        
+        const startResponse = await axios.post(
+          `${apiUrl}/api/v1/discuss`,
+          requestBody,
+          { headers: { Authorization: `Bearer ${apiKey}` } }
+        );
+        
+        const jobId = startResponse.data.id;
+        progress.report({ message: `Job gestartet: ${jobId.slice(0, 8)}...` });
+        
+        // Poll for results
+        let attempts = 0;
+        const maxAttempts = 120; // 10 minutes max
+        
+        while (attempts < maxAttempts && !token.isCancellationRequested) {
+          await new Promise(resolve => setTimeout(resolve, 5000)); // 5s poll interval
+          attempts++;
+          
+          const statusResponse = await axios.get(
+            `${apiUrl}/api/v1/jobs/${jobId}`,
+            { headers: { Authorization: `Bearer ${apiKey}` } }
+          );
+          
+          const job = statusResponse.data;
+          progress.report({ message: `Status: ${job.status} (${attempts * 5}s)` });
+          
+          if (job.status === 'complete') {
+            outputChannel.appendLine(`\n${'='.repeat(60)}`);
+            outputChannel.appendLine(`OpenBotMan Experten-Diskussion`);
+            outputChannel.appendLine(`Topic: ${topic}`);
+            outputChannel.appendLine(`${'='.repeat(60)}\n`);
+            outputChannel.appendLine(job.result);
+            
+            if (job.actionItems && job.actionItems.length > 0) {
+              outputChannel.appendLine(`\n--- Action Items ---`);
+              job.actionItems.forEach((item: string) => outputChannel.appendLine(`- ${item}`));
+            }
+            
+            outputChannel.appendLine(`\nDauer: ${Math.round(job.durationMs / 1000)}s`);
+            outputChannel.show();
+            
+            vscode.window.showInformationMessage(
+              'Experten-Diskussion abgeschlossen!',
+              'Ergebnis anzeigen'
+            ).then(action => { if (action) outputChannel.show(); });
+            return;
+          }
+          
+          if (job.status === 'error') {
+            throw new Error(job.error || 'Unbekannter Fehler');
+          }
+        }
+        
+        if (token.isCancellationRequested) {
+          vscode.window.showWarningMessage('Diskussion abgebrochen');
+        } else {
+          throw new Error('Timeout nach 10 Minuten');
+        }
+        
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        vscode.window.showErrorMessage(`OpenBotMan Fehler: ${message}`);
+        outputChannel.appendLine(`ERROR: ${message}`);
+      }
+    }
+  );
+}
+
+/**
+ * Analyze current project with OpenBotMan experts
+ */
+async function analyzeProject() {
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (!workspaceFolders || workspaceFolders.length === 0) {
+    vscode.window.showWarningMessage('Kein Workspace geöffnet');
+    return;
+  }
+  
+  const workspacePath = workspaceFolders[0].uri.fsPath;
+  const workspaceName = workspaceFolders[0].name;
+  
+  // Quick pick for analysis type
+  const analysisType = await vscode.window.showQuickPick([
+    { label: '🔍 Vollständige Analyse', value: 'full', description: 'Architektur, Code-Qualität, Security, Performance' },
+    { label: '🛡️ Security Review', value: 'security', description: 'Sicherheitslücken und Best Practices' },
+    { label: '⚡ Performance', value: 'performance', description: 'Performance-Probleme und Optimierungen' },
+    { label: '🧹 Code-Qualität', value: 'quality', description: 'Clean Code, DRY, SOLID' },
+    { label: '🏗️ Architektur', value: 'architecture', description: 'Struktur und Design Patterns' },
+  ], { placeHolder: 'Welche Analyse soll durchgeführt werden?' });
+  
+  if (!analysisType) return;
+  
+  const topics: Record<string, string> = {
+    full: `Analysiere das Projekt "${workspaceName}" umfassend: Architektur, Code-Qualität, Security, Performance, Testbarkeit. Gib konkrete Verbesserungsvorschläge.`,
+    security: `Führe einen Security-Review für "${workspaceName}" durch. Finde Sicherheitslücken, SQL Injection, XSS, Authentication-Probleme.`,
+    performance: `Analysiere "${workspaceName}" auf Performance-Probleme: N+1 Queries, Memory Leaks, Caching-Möglichkeiten.`,
+    quality: `Prüfe "${workspaceName}" auf Code-Qualität: DRY-Verletzungen, SOLID-Prinzipien, Code Smells, Refactoring-Möglichkeiten.`,
+    architecture: `Bewerte die Architektur von "${workspaceName}": Schichttrennung, Design Patterns, Modularität, Erweiterbarkeit.`,
+  };
+  
+  const topic = topics[analysisType.value];
+  
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: `OpenBotMan analysiert ${workspaceName}...`,
+      cancellable: true,
+    },
+    async (progress, token) => {
+      try {
+        const config = vscode.workspace.getConfiguration('openbotman');
+        const apiUrl = config.get<string>('apiUrl') || 'http://localhost:8080';
+        const apiKey = config.get<string>('apiKey') || 'local-dev-key';
+        
+        // Start async job
+        const startResponse = await axios.post(
+          `${apiUrl}/api/v1/discuss`,
+          {
+            topic,
+            workspace: workspacePath,
+            include: ['**/*.ts', '**/*.js', '**/*.cs', '**/*.py', '**/*.java', '**/*.json', '**/*.yaml', '**/*.yml'],
+            maxContext: 200,
+            async: true,
+            timeout: 180,
+            agents: 3,
+          },
+          { headers: { Authorization: `Bearer ${apiKey}` } }
+        );
+        
+        const jobId = startResponse.data.id;
+        progress.report({ message: 'Experten analysieren...' });
+        
+        // Poll for results
+        let attempts = 0;
+        const maxAttempts = 120;
+        
+        while (attempts < maxAttempts && !token.isCancellationRequested) {
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          attempts++;
+          
+          const statusResponse = await axios.get(
+            `${apiUrl}/api/v1/jobs/${jobId}`,
+            { headers: { Authorization: `Bearer ${apiKey}` } }
+          );
+          
+          const job = statusResponse.data;
+          progress.report({ message: `${job.status} (${attempts * 5}s)` });
+          
+          if (job.status === 'complete') {
+            outputChannel.appendLine(`\n${'='.repeat(60)}`);
+            outputChannel.appendLine(`🔍 ${analysisType.label} - ${workspaceName}`);
+            outputChannel.appendLine(`${'='.repeat(60)}\n`);
+            outputChannel.appendLine(job.result);
+            outputChannel.appendLine(`\nDauer: ${Math.round(job.durationMs / 1000)}s`);
+            outputChannel.show();
+            
+            vscode.window.showInformationMessage(
+              `${analysisType.label} abgeschlossen!`,
+              'Ergebnis anzeigen'
+            ).then(action => { if (action) outputChannel.show(); });
+            return;
+          }
+          
+          if (job.status === 'error') {
+            throw new Error(job.error || 'Analyse fehlgeschlagen');
+          }
+        }
+        
+        if (token.isCancellationRequested) {
+          vscode.window.showWarningMessage('Analyse abgebrochen');
+        }
+        
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        vscode.window.showErrorMessage(`Analyse-Fehler: ${message}`);
+      }
+    }
+  );
 }
 
 /**

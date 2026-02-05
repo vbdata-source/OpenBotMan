@@ -32,7 +32,13 @@
       },
       {
         "command": "openbotman.discuss",
-        "title": "OpenBotMan: Start Discussion"
+        "title": "OpenBotMan: Experten fragen",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "openbotman.analyzeProject",
+        "title": "OpenBotMan: Projekt analysieren",
+        "icon": "$(search)"
       },
       {
         "command": "openbotman.knowledge.query",
@@ -68,6 +74,18 @@
         }
       }
     },
+    "keybindings": [
+      {
+        "command": "openbotman.discuss",
+        "key": "ctrl+shift+o",
+        "mac": "cmd+shift+o"
+      },
+      {
+        "command": "openbotman.analyzeProject",
+        "key": "ctrl+shift+alt+o",
+        "mac": "cmd+shift+alt+o"
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
