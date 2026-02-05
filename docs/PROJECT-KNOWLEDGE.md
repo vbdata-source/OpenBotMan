@@ -158,6 +158,33 @@ Diskussion: `discussions/2026-02-04_20-37_wie-sollte-ich-mcp-server-support-für
 
 ---
 
+## HIGH PRIORITY: AJBot ↔ OpenBotMan Integration
+
+**Ziel:** AJBot (OpenClaw) kann OpenBotMan direkt aufrufen ohne Juergen als Mittelsmann.
+
+**Warum wichtig:**
+- AJBot kann selbständig Experten-Analysen machen
+- Schnellerer Workflow (kein Copy-Paste von Befehlen)
+- AJBot wird mächtiger durch Multi-Agent-Support
+
+**Optionen:**
+1. **HTTP API** (schnellste Lösung)
+   - Einfacher REST-Endpoint
+   - `POST /discuss` mit topic, workspace, include
+   - AJBot fetcht das Ergebnis
+
+2. **MCP Server** (eleganteste Lösung)
+   - OpenBotMan als MCP-Tool für andere LLMs
+   - Standard-Protokoll, zukunftssicher
+
+3. **OpenClaw Skill** (einfachste Lösung)
+   - Shell-Wrapper der CLI aufruft
+   - Schnell implementierbar
+
+**Status:** GEPLANT - nach VSCode Extension
+
+---
+
 ## Technische Details
 
 ### CLI-Aufruf mit Workspace
