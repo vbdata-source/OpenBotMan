@@ -171,7 +171,12 @@ export function createServer(config: ApiServerConfig): Express {
    * GET /api/v1/jobs/:jobId - Get job status and results
    */
   app.get('/api/v1/jobs/:jobId', (req: Request, res: Response) => {
-    const job = jobStore.get(req.params.jobId);
+    const jobId = req.params.jobId;
+    if (!jobId) {
+      res.status(400).json({ error: 'Job ID required' });
+      return;
+    }
+    const job = jobStore.get(jobId);
     
     if (!job) {
       res.status(404).json({
