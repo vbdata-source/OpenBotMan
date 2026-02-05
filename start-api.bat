@@ -5,13 +5,10 @@
 cd /d C:\Sources\OpenBotMan\packages\api-server
 
 :: Claude CLI zum PATH hinzufügen
-set PATH=%PATH%;%APPDATA%\npm
+set PATH=%PATH%;%APPDATA%\npm;%LOCALAPPDATA%\npm
 
-:: API Key setzen (ändere dies für Production!)
+:: API Key für Authentifizierung
 set OPENBOTMAN_API_KEYS=local-dev-key
-
-:: Optional: Anthropic API Key für claude-api Provider
-:: set ANTHROPIC_API_KEY=sk-ant-xxxxx
 
 echo.
 echo ========================================
@@ -21,5 +18,16 @@ echo   URL:     http://localhost:8080
 echo   API Key: local-dev-key
 echo ========================================
 echo.
+echo Starte mit claude-cli Provider...
+echo (Falls Fehler: Pruefe ob "claude --version" funktioniert)
+echo.
+
+:: Teste ob claude verfuegbar ist
+where claude.cmd >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo WARNUNG: claude.cmd nicht im PATH gefunden!
+    echo Versuche direkten Pfad...
+    set PATH=%PATH%;C:\Users\LocalUser\AppData\Roaming\npm
+)
 
 pnpm start
