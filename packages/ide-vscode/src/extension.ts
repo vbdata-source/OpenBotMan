@@ -109,9 +109,9 @@ async function startServer(): Promise<boolean> {
   
   // Windows vs Unix command
   if (process.platform === 'win32') {
-    terminal.sendText('start-api.bat');
+    terminal.sendText('.\\start-api.bat');
   } else {
-    terminal.sendText('pnpm start');
+    terminal.sendText('./start-api.sh || pnpm start');
   }
   
   // Wait a bit for server to start
