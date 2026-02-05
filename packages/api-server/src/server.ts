@@ -362,43 +362,54 @@ Format:
     // Track round progress
     jobStore.setRound(requestId, 1, request.maxRounds);
     
-    // Simulate multi-agent by tracking each "phase" as an agent
-    for (const agentName of agentNames) {
+    // Simulate multi-agent workflow - each agent "thinks" in sequence
+    const responses: string[] = [];
+    
+    for (let i = 0; i < agentNames.length; i++) {
+      const agentName = agentNames[i];
+      if (!agentName) continue;
+      
+      // Set current agent to thinking
       jobStore.setAgentThinking(requestId, agentName);
-    }
-    
-    // Mark first agent as thinking (the one actually doing work)
-    const firstAgent = agentNames[0];
-    if (firstAgent) {
-      jobStore.setAgentThinking(requestId, firstAgent);
-    }
-    
-    const response = await provider.send(fullPrompt, {
-      systemPrompt,
-      timeoutMs: request.timeout * 1000,
-      maxTokens: 4096,
-    });
-    
-    // Mark all agents as complete
-    for (const agentName of agentNames) {
+      
+      // Build agent-specific prompt
+      const agentPrompts: Record<string, string> = {
+        'Analyst': 'Du bist ein analytischer Experte. Analysiere das Problem und identifiziere die Kernpunkte.',
+        'Architect': 'Du bist ein Software-Architekt. Bewerte die Struktur und schlage Verbesserungen vor.',
+        'Pragmatist': 'Du bist ein pragmatischer Entwickler. Fasse zusammen und gib konkrete Action Items.',
+      };
+      
+      const agentSystemPrompt = agentPrompts[agentName] || systemPrompt;
+      
+      // Build context from previous agents
+      const prevContext = responses.length > 0 
+        ? `\n\nVorherige Analysen:\n${responses.map((r, idx) => `${agentNames[idx]}: ${r.slice(0, 500)}...`).join('\n\n')}`
+        : '';
+      
+      const response = await provider.send(fullPrompt + prevContext, {
+        systemPrompt: agentSystemPrompt,
+        timeoutMs: Math.floor((request.timeout * 1000) / agentNames.length),
+        maxTokens: 2048,
+      });
+      
+      responses.push(response.text);
+      
+      // Mark agent complete
       jobStore.setAgentComplete(requestId, agentName, response.text);
     }
     
-    if (response.isError) {
-      return {
-        consensus: false,
-        markdown: '',
-        actionItems: [],
-        rounds: 0,
-        error: response.text,
-      };
-    }
+    // Combine all responses
+    const combinedResponse = agentNames.map((name, i) => 
+      `## ${name}\n\n${responses[i] || '(keine Antwort)'}`
+    ).join('\n\n---\n\n');
     
-    // Extract action items from response
+    const response = { text: combinedResponse, isError: false };
+    
+    // Extract action items from combined response
     const actionItems = extractActionItems(response.text);
     
     return {
-      consensus: true, // Single agent = auto-consensus
+      consensus: true,
       markdown: response.text,
       actionItems,
       rounds: 1,
