@@ -432,41 +432,80 @@ class JobsTreeProvider implements vscode.TreeDataProvider<JobTreeItem> {
     if (!element) {
       // Root level: show jobs
       if (activeJobs.size === 0) {
-        return [new JobTreeItem('Keine aktiven Jobs', '', 'none', vscode.TreeItemCollapsibleState.None)];
+        const empty = new JobTreeItem('Keine aktiven Jobs', '', 'none', vscode.TreeItemCollapsibleState.None);
+        empty.iconPath = new vscode.ThemeIcon('info');
+        return [empty];
       }
       
       return Array.from(activeJobs.values()).map(job => {
         const hasAgents = job.agents && job.agents.length > 0;
-        return new JobTreeItem(
+        const elapsed = Math.round((Date.now() - job.startTime) / 1000);
+        
+        const item = new JobTreeItem(
           job.topic,
           job.id,
           job.status,
           hasAgents ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None,
           job
         );
+        
+        // Job icon based on status
+        if (job.status === 'running' || job.status === 'pending') {
+          item.iconPath = new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.blue'));
+        } else if (job.status === 'complete') {
+          item.iconPath = new vscode.ThemeIcon('pass-filled', new vscode.ThemeColor('charts.green'));
+        } else if (job.status === 'error') {
+          item.iconPath = new vscode.ThemeIcon('error', new vscode.ThemeColor('charts.red'));
+        }
+        
+        // Description with time and round info
+        let desc = `${job.status}, ${elapsed}s`;
+        if (job.currentRound && job.maxRounds) {
+          desc = `Runde ${job.currentRound}/${job.maxRounds}, ${elapsed}s`;
+        }
+        item.description = desc;
+        
+        return item;
       });
     }
     
     // Child level: show agents
     if (element.job?.agents) {
       return element.job.agents.map(agent => {
-        const duration = agent.durationMs ? ` (${Math.round(agent.durationMs / 1000)}s)` : '';
+        const duration = agent.durationMs ? `${Math.round(agent.durationMs / 1000)}s` : '';
+        
+        // Status text
+        let statusText = '';
+        if (agent.status === 'thinking') {
+          statusText = 'denkt nach...';
+        } else if (agent.status === 'complete' && duration) {
+          statusText = duration;
+        } else if (agent.status === 'waiting') {
+          statusText = 'wartet';
+        } else if (agent.status === 'error') {
+          statusText = 'Fehler';
+        }
+        
         const item = new JobTreeItem(
-          `${agent.name}${duration}`,
+          agent.name,
           agent.name,
           agent.status,
           vscode.TreeItemCollapsibleState.None
         );
+        
+        item.description = statusText;
+        
         // Set icon based on agent status
         if (agent.status === 'thinking') {
-          item.iconPath = new vscode.ThemeIcon('sync~spin');
+          item.iconPath = new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.yellow'));
         } else if (agent.status === 'complete') {
-          item.iconPath = new vscode.ThemeIcon('pass-filled');
+          item.iconPath = new vscode.ThemeIcon('pass-filled', new vscode.ThemeColor('charts.green'));
         } else if (agent.status === 'error') {
-          item.iconPath = new vscode.ThemeIcon('error');
+          item.iconPath = new vscode.ThemeIcon('error', new vscode.ThemeColor('charts.red'));
         } else {
-          item.iconPath = new vscode.ThemeIcon('circle-outline');
+          item.iconPath = new vscode.ThemeIcon('circle-outline', new vscode.ThemeColor('charts.foreground'));
         }
+        
         return item;
       });
     }
@@ -480,30 +519,13 @@ class JobsTreeProvider implements vscode.TreeDataProvider<JobTreeItem> {
  */
 class JobTreeItem extends vscode.TreeItem {
   constructor(
-    public readonly label: string,
+    label: string,
     public readonly jobId: string,
     public readonly status: string,
-    public readonly collapsibleState: vscode.TreeItemCollapsibleState,
+    collapsibleState: vscode.TreeItemCollapsibleState,
     public readonly job?: JobInfo
   ) {
     super(label, collapsibleState);
-    
-    // Set icon based on status
-    if (status === 'running' || status === 'pending') {
-      this.iconPath = new vscode.ThemeIcon('sync~spin');
-    } else if (status === 'complete') {
-      this.iconPath = new vscode.ThemeIcon('check');
-    } else if (status === 'error') {
-      this.iconPath = new vscode.ThemeIcon('error');
-    } else if (status === 'none') {
-      this.iconPath = new vscode.ThemeIcon('info');
-    }
-    
-    // Description shows status
-    if (job) {
-      const elapsed = Math.round((Date.now() - job.startTime) / 1000);
-      this.description = `${status} (${elapsed}s)`;
-    }
   }
 }
 
