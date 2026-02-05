@@ -296,6 +296,78 @@ Hier werden Agents, Provider, Modelle und mehr definiert.
 
 ---
 
+## Provider: CLI vs API
+
+OpenBotMan unterstützt zwei Wege um mit Claude zu kommunizieren:
+
+### `claude-cli` (Standard für lokale Entwicklung)
+
+Nutzt die Claude Code CLI als Subprocess.
+
+**Vorteile:**
+- ✅ Nutzt dein Claude Pro/Max Abo (keine Extra-Kosten)
+- ✅ Einfach einzurichten (nur `claude setup-token`)
+- ✅ Funktioniert auf deinem PC mit Browser
+
+**Nachteile:**
+- ❌ Braucht interaktive Authentifizierung (Browser)
+- ❌ Nicht für Server ohne GUI geeignet
+
+```yaml
+# config.yaml
+discussion:
+  agents:
+    - id: planner
+      provider: claude-cli  # ← Nutzt Claude CLI
+      model: claude-sonnet-4-20250514
+```
+
+### `claude-api` (Für Server-Deployments)
+
+Nutzt das Anthropic SDK direkt mit API-Key.
+
+**Vorteile:**
+- ✅ Funktioniert auf Servern ohne Browser
+- ✅ Stabiler für Production
+- ✅ Keine CLI-Installation nötig
+
+**Nachteile:**
+- ❌ Kostet Geld pro Token (~$3-15 pro 1M Tokens)
+- ❌ Braucht ANTHROPIC_API_KEY
+
+```yaml
+# config.yaml für Server
+discussion:
+  agents:
+    - id: planner
+      provider: claude-api  # ← Nutzt Anthropic API direkt
+      model: claude-sonnet-4-20250514
+      apiKey: ${ANTHROPIC_API_KEY}
+```
+
+### Wann was verwenden?
+
+| Szenario | Empfohlener Provider |
+|----------|---------------------|
+| Lokale Entwicklung (dein PC) | `claude-cli` |
+| Server ohne GUI | `claude-api` |
+| CI/CD Pipeline | `claude-api` |
+| Docker Container | `claude-api` |
+| Kostenbewusst | `claude-cli` |
+
+### Umgebungsvariablen für API:
+
+```bash
+# Für claude-api
+export ANTHROPIC_API_KEY=sk-ant-xxxxx
+
+# Für andere Provider
+export OPENAI_API_KEY=sk-xxxxx
+export GOOGLE_API_KEY=xxxxx
+```
+
+---
+
 ## Nützliche Pfade
 
 | Was | Pfad |

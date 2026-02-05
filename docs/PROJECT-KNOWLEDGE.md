@@ -130,6 +130,8 @@ Diskussion: `discussions/2026-02-04_20-37_wie-sollte-ich-mcp-server-support-für
 | 2026-02-04 | IDE-Integration | ❌ Kein Konsens | CLI→VSCode→MCP (KISS) |
 | 2026-02-04 | Architektur-Analyse | ✅ Konsens | Solide Basis, Memory-Limits definieren |
 | 2026-02-04 | MCP-Server | ❌ Kein Konsens | Security-Bedenken, zurückgestellt |
+| 2026-02-05 | AJBot Integration | ✅ Konsens | HTTP API + Provider Abstraction |
+| 2026-02-05 | Deployment | ✅ Konsens | Cloud (claude-api) + Local Dev (claude-cli) |
 
 ---
 
@@ -141,6 +143,8 @@ Diskussion: `discussions/2026-02-04_20-37_wie-sollte-ich-mcp-server-support-für
 - [x] Stdin für große Kontexte (ENAMETOOLONG fix)
 - [x] Retry-Logik (3 Retries mit Backoff)
 - [x] Professionelles Error-Handling
+- [x] **Provider Abstraction** - `claude-api` für Server
+- [x] Windows-Support (`claude.cmd`, `shell: true`)
 
 ### Kurzfristig (Phase 1)
 - [ ] VSCode Extension MVP
@@ -167,21 +171,50 @@ Diskussion: `discussions/2026-02-04_20-37_wie-sollte-ich-mcp-server-support-für
 - Schnellerer Workflow (kein Copy-Paste von Befehlen)
 - AJBot wird mächtiger durch Multi-Agent-Support
 
-**Optionen:**
-1. **HTTP API** (schnellste Lösung)
-   - Einfacher REST-Endpoint
-   - `POST /discuss` mit topic, workspace, include
-   - AJBot fetcht das Ergebnis
+### Deployment-Architektur (Konsens 2026-02-05)
 
-2. **MCP Server** (eleganteste Lösung)
-   - OpenBotMan als MCP-Tool für andere LLMs
-   - Standard-Protokoll, zukunftssicher
+```
+Hetzner Server (Production)
+├── AJBot (OpenClaw) ← läuft schon
+└── OpenBotMan API  ← NEU
+    └── claude-api Provider (NICHT CLI!)
 
-3. **OpenClaw Skill** (einfachste Lösung)
-   - Shell-Wrapper der CLI aufruft
-   - Schnell implementierbar
+Juergens PC (Development)
+└── OpenBotMan CLI
+    └── claude-cli Provider (nutzt Pro Abo)
+```
 
-**Status:** GEPLANT - nach VSCode Extension
+**Kritische Entscheidung:** Server nutzt `claude-api` (Direct SDK), NICHT `claude-cli`!
+- Claude CLI Auth auf Server ist zu fragil (experimentelle Setup Tokens)
+- Direct API ist stabiler für Production
+
+**Geschätzte Kosten:** ~$60-120/Monat für API vs $40/Monat für 2x Pro
+→ API ist teurer aber zuverlässiger
+
+### Nächste Schritte
+
+1. ✅ **Provider Abstraction** (2026-02-05)
+   - `claude-api` Provider implementiert
+   - Factory erweitert
+   - Dokumentation erstellt
+
+2. 🔄 **HTTP API Server** (IN PROGRESS)
+   - `POST /api/v1/discuss` Endpoint
+   - Basic Auth mit API Keys
+   - Health Check `/health`
+
+3. ⏳ **Docker Container**
+   - OpenBotMan als Docker Image
+   - Coolify Integration
+   - Secrets Management
+
+4. ⏳ **AJBot Integration**
+   - HTTP Client für OpenBotMan
+   - Automatische Experten-Konsultation
+
+**Diskussionen:**
+- `discussions/2026-02-05_11-36_ajbot-openbotman-integration-*.md`
+- `discussions/2026-02-05_12-02_openbotman-deployment-architektur-*.md`
 
 ---
 
@@ -200,10 +233,36 @@ pnpm cli discuss "Deine Frage" \
 ```
 
 ### Provider-Konfiguration
+
+**Verfügbare Provider (Stand 2026-02-05):**
+
+| Provider | Auth | Für | Kosten |
+|----------|------|-----|--------|
+| `claude-cli` | Pro/Max Abo | Lokale Entwicklung | Im Abo |
+| `claude-api` | API Key | Server/Docker | Per Token |
+| `openai` | API Key | Alternative | Per Token |
+| `google` | API Key | Reviews, Research | Per Token |
+| `ollama` | Keine | Lokal, Offline | Kostenlos |
+
+**Rate Limiting:**
 - Claude CLI: 1.5s Delay, 3 Retries
+- Claude API: 500ms Delay
 - OpenAI API: 200ms Delay
 - Gemini API: 200ms Delay
 - Ollama: 100ms (lokal)
+
+**Deployment-Szenarien:**
+
+```yaml
+# LOKAL (dein PC mit Claude Pro)
+provider: claude-cli
+
+# SERVER (Hetzner, Docker, CI/CD)
+provider: claude-api
+apiKey: ${ANTHROPIC_API_KEY}
+```
+
+**Dokumentation:** `docs/PROVIDERS.md`
 
 ---
 
@@ -231,4 +290,4 @@ pnpm cli discuss "Deine Frage" \
 
 ---
 
-*Letzte Aktualisierung: 2026-02-04 20:40*
+*Letzte Aktualisierung: 2026-02-05 12:20*

@@ -7,9 +7,12 @@
 # Orchestrator Settings
 # ============================================
 orchestrator:
-  # Provider: 'claude-cli' (recommended) or 'anthropic' (direct API)
-  # claude-cli: Uses Claude Code CLI as subprocess (works with Claude Pro subscription)
-  # anthropic: Direct API calls (requires ANTHROPIC_API_KEY)
+  # Provider options:
+  # - 'claude-cli': Uses Claude Code CLI (works with Claude Pro subscription, no API key)
+  #                 Best for: Local development on your machine
+  # - 'claude-api': Direct Anthropic SDK (requires ANTHROPIC_API_KEY)
+  #                 Best for: Server deployments without browser/CLI access
+  # - 'anthropic':  Alias for 'claude-api' (legacy)
   provider: claude-cli
   
   # Model for the main orchestrator
@@ -365,7 +368,8 @@ discussion:
 
   # Agent configurations with multi-provider support
   # Each agent can use a different provider:
-  # - claude-cli: Claude CLI (Pro subscription, no API key needed)
+  # - claude-cli: Claude CLI (Pro subscription, no API key needed) - LOCAL DEV
+  # - claude-api: Direct Anthropic SDK (requires ANTHROPIC_API_KEY) - SERVER
   # - openai: OpenAI API (requires OPENAI_API_KEY)
   # - google: Google Gemini API (requires GOOGLE_API_KEY)
   # - mock: Mock provider for testing
@@ -430,3 +434,25 @@ discussion:
   #     model: gpt-4-turbo
   #     apiKey: ${OPENAI_API_KEY}
   #     ...
+
+  # ============================================
+  # SERVER DEPLOYMENT (claude-api instead of CLI)
+  # ============================================
+  # When deploying on a headless server without Claude CLI:
+  # 
+  # 1. Set environment variable:
+  #    export ANTHROPIC_API_KEY=sk-ant-xxxxx
+  #
+  # 2. Change provider in agents:
+  #    provider: claude-api    # instead of claude-cli
+  #
+  # Example server config:
+  # agents:
+  #   - id: planner
+  #     role: architect
+  #     provider: claude-api      # Direct API - no CLI needed
+  #     model: claude-sonnet-4-20250514
+  #     apiKey: ${ANTHROPIC_API_KEY}
+  #     ...
+  #
+  # Note: API calls are billed per token, while CLI uses your Pro subscription
