@@ -4,6 +4,9 @@
 
 cd /d C:\Sources\OpenBotMan\packages\api-server
 
+:: Claude CLI zum PATH hinzufügen
+set PATH=%PATH%;%APPDATA%\npm
+
 :: API Key setzen (ändere dies für Production!)
 set OPENBOTMAN_API_KEYS=local-dev-key
 
