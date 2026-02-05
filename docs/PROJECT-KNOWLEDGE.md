@@ -204,12 +204,13 @@ Juergens PC (Development)
    - Health Check `/health`
    - Package: `@openbotman/api-server`
 
-3. ⏳ **Docker Container**
+3. ⏳ **Docker Container** (VERSCHOBEN)
    - OpenBotMan als Docker Image
    - Coolify Integration
    - Secrets Management
+   - **Status:** Warten bis Juergen Zeit hat
 
-4. ⏳ **AJBot Integration**
+4. ⏳ **AJBot Integration** (nach Deploy)
    - HTTP Client für OpenBotMan
    - Automatische Experten-Konsultation
 
