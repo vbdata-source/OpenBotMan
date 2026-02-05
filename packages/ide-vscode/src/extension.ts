@@ -455,18 +455,35 @@ async function runAsyncJob(
         const job = await pollJobWithProgress(apiUrl, apiKey, jobId, progress, token);
         
         if (!job) {
+          // Update job status in TreeView
+          const trackedJob = activeJobs.get(jobId);
+          if (trackedJob) {
+            trackedJob.status = token.isCancellationRequested ? 'cancelled' : 'timeout';
+          }
+          jobsProvider.refresh();
+          
           if (token.isCancellationRequested) {
             vscode.window.showWarningMessage('Abgebrochen');
           } else {
-            throw new Error('Timeout nach 10 Minuten');
+            vscode.window.showErrorMessage('Timeout nach 10 Minuten');
           }
-          activeJobs.delete(jobId);
-          jobsProvider.refresh();
+          
+          // Remove after showing for a moment
+          removeJobDelayed(jobId, 10000);
           return;
         }
         
         if (job.status === 'error') {
-          throw new Error(job.error || 'Unbekannter Fehler');
+          // Update job in TreeView
+          const trackedJob = activeJobs.get(jobId);
+          if (trackedJob) {
+            trackedJob.status = 'error';
+          }
+          jobsProvider.refresh();
+          
+          vscode.window.showErrorMessage(`OpenBotMan Fehler: ${job.error || 'Unbekannter Fehler'}`);
+          removeJobDelayed(jobId, 10000);
+          return;
         }
         
         outputChannel.appendLine(`\n${'='.repeat(60)}`);
@@ -486,6 +503,9 @@ async function runAsyncJob(
         const message = error instanceof Error ? error.message : String(error);
         vscode.window.showErrorMessage(`OpenBotMan Fehler: ${message}`);
         outputChannel.appendLine(`ERROR: ${message}`);
+        
+        // Clean up any tracked job on error
+        // (jobId might not be defined if error happened before job creation)
       }
     }
   );
@@ -580,8 +600,10 @@ class JobsTreeProvider implements vscode.TreeDataProvider<JobTreeItem> {
           item.iconPath = new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.blue'));
         } else if (job.status === 'complete') {
           item.iconPath = new vscode.ThemeIcon('pass-filled', new vscode.ThemeColor('charts.green'));
-        } else if (job.status === 'error') {
+        } else if (job.status === 'error' || job.status === 'timeout') {
           item.iconPath = new vscode.ThemeIcon('error', new vscode.ThemeColor('charts.red'));
+        } else if (job.status === 'cancelled') {
+          item.iconPath = new vscode.ThemeIcon('circle-slash', new vscode.ThemeColor('charts.orange'));
         }
         
         // Description with time and round info
