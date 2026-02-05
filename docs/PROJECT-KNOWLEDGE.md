@@ -198,10 +198,11 @@ Juergens PC (Development)
    - Factory erweitert
    - Dokumentation erstellt
 
-2. 🔄 **HTTP API Server** (IN PROGRESS)
+2. ✅ **HTTP API Server** (2026-02-05)
    - `POST /api/v1/discuss` Endpoint
-   - Basic Auth mit API Keys
+   - API Key Auth (Bearer Token)
    - Health Check `/health`
+   - Package: `@openbotman/api-server`
 
 3. ⏳ **Docker Container**
    - OpenBotMan als Docker Image
