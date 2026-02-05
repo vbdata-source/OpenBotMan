@@ -13,7 +13,7 @@ import { createAuthMiddleware } from './middleware/auth.js';
 import { DiscussRequestSchema, type DiscussResponse, type HealthResponse, type ApiServerConfig } from './types.js';
 
 // Import from orchestrator (we'll use the discussion logic)
-import { createProvider, type LLMProvider } from '@openbotman/orchestrator';
+import { createProvider } from '@openbotman/orchestrator';
 
 /**
  * Create and configure the Express server

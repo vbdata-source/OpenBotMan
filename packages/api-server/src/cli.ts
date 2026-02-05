@@ -17,7 +17,8 @@
  */
 
 import 'dotenv/config';
-import { startServer, type ApiServerConfig } from './server.js';
+import { startServer } from './server.js';
+import type { ApiServerConfig } from './types.js';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
