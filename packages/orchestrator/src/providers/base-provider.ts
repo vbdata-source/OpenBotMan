@@ -66,7 +66,7 @@ export interface ProviderResponse {
  */
 export interface ProviderConfig {
   /** Provider type */
-  provider: 'claude-cli' | 'openai' | 'google' | 'ollama' | 'mock';
+  provider: 'claude-cli' | 'claude-api' | 'openai' | 'google' | 'ollama' | 'mock';
   
   /** Model identifier */
   model: string;
@@ -154,6 +154,7 @@ export abstract class BaseProvider implements LLMProvider {
   protected getProviderLabel(): string {
     switch (this.config.provider) {
       case 'claude-cli': return 'CLI';
+      case 'claude-api': return 'API';
       case 'openai': return 'API';
       case 'google': return 'API';
       case 'ollama': return 'Local';

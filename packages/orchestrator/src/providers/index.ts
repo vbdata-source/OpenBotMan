@@ -35,6 +35,13 @@ export {
   type ClaudeCliAdapterConfig,
 } from './claude-cli-adapter.js';
 
+// Claude API Provider (Direct Anthropic SDK)
+export {
+  ClaudeApiProvider,
+  createClaudeApiProvider,
+  type ClaudeApiProviderConfig,
+} from './claude-api.js';
+
 // OpenAI Provider
 export {
   OpenAIProvider,

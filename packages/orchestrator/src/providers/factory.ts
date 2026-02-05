@@ -8,6 +8,7 @@
 import type { LLMProvider, ProviderConfig, ProviderOptions } from './base-provider.js';
 import { MockProvider } from './base-provider.js';
 import { ClaudeCliAdapter, type ClaudeCliAdapterConfig } from './claude-cli-adapter.js';
+import { ClaudeApiProvider, type ClaudeApiProviderConfig } from './claude-api.js';
 import { OpenAIProvider, type OpenAIProviderConfig } from './openai.js';
 import { GoogleProvider, type GoogleProviderConfig } from './google.js';
 
@@ -16,7 +17,7 @@ import { GoogleProvider, type GoogleProviderConfig } from './google.js';
  */
 export interface CreateProviderOptions {
   /** Provider type */
-  provider: 'claude-cli' | 'openai' | 'google' | 'ollama' | 'mock';
+  provider: 'claude-cli' | 'claude-api' | 'openai' | 'google' | 'ollama' | 'mock';
   
   /** Model identifier */
   model: string;
@@ -62,6 +63,20 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
         defaults: options.defaults,
       };
       return new ClaudeCliAdapter(config);
+    }
+    
+    case 'claude-api': {
+      if (!options.apiKey) {
+        throw new Error('Claude API provider requires apiKey (ANTHROPIC_API_KEY)');
+      }
+      const config: ClaudeApiProviderConfig = {
+        provider: 'claude-api',
+        model: options.model,
+        apiKey: options.apiKey,
+        baseUrl: options.baseUrl,
+        defaults: options.defaults,
+      };
+      return new ClaudeApiProvider(config);
     }
     
     case 'openai': {
@@ -146,6 +161,7 @@ export async function isProviderAvailable(
 export function getProviderDisplayName(provider: CreateProviderOptions['provider']): string {
   switch (provider) {
     case 'claude-cli': return 'Claude CLI';
+    case 'claude-api': return 'Claude API';
     case 'openai': return 'OpenAI';
     case 'google': return 'Google Gemini';
     case 'ollama': return 'Ollama';
