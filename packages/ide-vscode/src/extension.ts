@@ -5,44 +5,56 @@
  */
 
 import * as vscode from 'vscode';
-import axios, { AxiosInstance } from 'axios';
 
 /**
- * API client for OpenBotMan
+ * API client for OpenBotMan (using native fetch)
  */
 class OpenBotManClient {
-  private client: AxiosInstance;
+  private baseUrl: string;
+  private headers: Record<string, string>;
   
   constructor(baseUrl: string, apiKey?: string) {
-    this.client = axios.create({
-      baseURL: baseUrl,
-      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+    this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.headers = {
+      'Content-Type': 'application/json',
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+    };
+  }
+  
+  private async request(method: string, path: string, body?: unknown): Promise<unknown> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method,
+      headers: this.headers,
+      body: body ? JSON.stringify(body) : undefined,
     });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    return response.json();
   }
   
   async chat(message: string): Promise<string> {
-    const response = await this.client.post('/chat', { message });
-    return response.data.response;
+    const data = await this.request('POST', '/chat', { message }) as { response: string };
+    return data.response;
   }
   
   async orchestrate(task: string, options?: { agents?: string[]; workflow?: string }): Promise<string> {
-    const response = await this.client.post('/orchestrate', { task, ...options });
-    return response.data.result;
+    const data = await this.request('POST', '/orchestrate', { task, ...options }) as { result: string };
+    return data.result;
   }
   
   async getAgents(): Promise<Array<{ id: string; role: string; status: string }>> {
-    const response = await this.client.get('/agents');
-    return response.data.agents;
+    const data = await this.request('GET', '/agents') as { agents: Array<{ id: string; role: string; status: string }> };
+    return data.agents || [];
   }
   
   async getStatus(): Promise<Record<string, unknown>> {
-    const response = await this.client.get('/status');
-    return response.data;
+    return await this.request('GET', '/health') as Record<string, unknown>;
   }
   
   async queryKnowledge(query: string): Promise<Array<{ title: string; content: string; score: number }>> {
-    const response = await this.client.post('/knowledge/query', { query });
-    return response.data.results;
+    const data = await this.request('POST', '/knowledge/query', { query }) as { results: Array<{ title: string; content: string; score: number }> };
+    return data.results || [];
   }
 }
 
@@ -55,6 +67,7 @@ let statusBarItem: vscode.StatusBarItem;
  */
 export function activate(context: vscode.ExtensionContext) {
   outputChannel = vscode.window.createOutputChannel('OpenBotMan');
+  outputChannel.appendLine('OpenBotMan extension starting...');
   
   // Initialize client
   const config = vscode.workspace.getConfiguration('openbotman');
@@ -84,7 +97,7 @@ export function activate(context: vscode.ExtensionContext) {
   const agentsProvider = new AgentsTreeProvider();
   vscode.window.registerTreeDataProvider('openbotman.agents', agentsProvider);
   
-  outputChannel.appendLine('OpenBotMan extension activated');
+  outputChannel.appendLine('OpenBotMan extension activated successfully!');
 }
 
 /**
@@ -108,20 +121,16 @@ async function chatWithAgents() {
       try {
         const response = await client.chat(message);
         
-        // Show in output channel
         outputChannel.appendLine(`\n--- Chat ---`);
         outputChannel.appendLine(`You: ${message}`);
         outputChannel.appendLine(`OpenBotMan: ${response}`);
         outputChannel.show();
         
-        // Also show as information message
         vscode.window.showInformationMessage(
           response.length > 200 ? response.slice(0, 200) + '...' : response,
           'Show Full Response'
         ).then(action => {
-          if (action) {
-            outputChannel.show();
-          }
+          if (action) outputChannel.show();
         });
       } catch (error) {
         vscode.window.showErrorMessage(
@@ -227,6 +236,38 @@ async function reviewCode() {
 }
 
 /**
+ * Helper to poll job status
+ */
+async function pollJobStatus(
+  apiUrl: string,
+  apiKey: string,
+  jobId: string,
+  progress: vscode.Progress<{ message?: string }>,
+  token: vscode.CancellationToken
+): Promise<{ status: string; result?: string; error?: string; durationMs?: number; actionItems?: string[] } | null> {
+  let attempts = 0;
+  const maxAttempts = 120; // 10 minutes max
+  
+  while (attempts < maxAttempts && !token.isCancellationRequested) {
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    attempts++;
+    
+    const response = await fetch(`${apiUrl}/api/v1/jobs/${jobId}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    
+    const job = await response.json() as { status: string; result?: string; error?: string; durationMs?: number; actionItems?: string[] };
+    progress.report({ message: `Status: ${job.status} (${attempts * 5}s)` });
+    
+    if (job.status === 'complete' || job.status === 'error') {
+      return job;
+    }
+  }
+  
+  return null;
+}
+
+/**
  * Start a discussion with OpenBotMan experts
  */
 async function startDiscussion() {
@@ -237,11 +278,9 @@ async function startDiscussion() {
   
   if (!topic) return;
   
-  // Get workspace path
   const workspaceFolders = vscode.workspace.workspaceFolders;
   const workspacePath = workspaceFolders?.[0]?.uri.fsPath;
   
-  // Ask if workspace should be included
   let includeWorkspace = false;
   if (workspacePath) {
     const choice = await vscode.window.showQuickPick(
@@ -251,7 +290,6 @@ async function startDiscussion() {
     includeWorkspace = choice?.startsWith('Ja') ?? false;
   }
   
-  // Build request
   const requestBody: Record<string, unknown> = {
     topic,
     async: true,
@@ -273,68 +311,50 @@ async function startDiscussion() {
     },
     async (progress, token) => {
       try {
-        // Start async job
         const config = vscode.workspace.getConfiguration('openbotman');
-        const apiUrl = config.get<string>('apiUrl') || 'http://localhost:8080';
+        const apiUrl = (config.get<string>('apiUrl') || 'http://localhost:8080').replace(/\/$/, '');
         const apiKey = config.get<string>('apiKey') || 'local-dev-key';
         
-        const startResponse = await axios.post(
-          `${apiUrl}/api/v1/discuss`,
-          requestBody,
-          { headers: { Authorization: `Bearer ${apiKey}` } }
-        );
-        
-        const jobId = startResponse.data.id;
+        const startResponse = await fetch(`${apiUrl}/api/v1/discuss`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify(requestBody),
+        });
+        const startData = await startResponse.json() as { id: string };
+        const jobId = startData.id;
         progress.report({ message: `Job gestartet: ${jobId.slice(0, 8)}...` });
         
-        // Poll for results
-        let attempts = 0;
-        const maxAttempts = 120; // 10 minutes max
+        const job = await pollJobStatus(apiUrl, apiKey, jobId, progress, token);
         
-        while (attempts < maxAttempts && !token.isCancellationRequested) {
-          await new Promise(resolve => setTimeout(resolve, 5000)); // 5s poll interval
-          attempts++;
-          
-          const statusResponse = await axios.get(
-            `${apiUrl}/api/v1/jobs/${jobId}`,
-            { headers: { Authorization: `Bearer ${apiKey}` } }
-          );
-          
-          const job = statusResponse.data;
-          progress.report({ message: `Status: ${job.status} (${attempts * 5}s)` });
-          
-          if (job.status === 'complete') {
-            outputChannel.appendLine(`\n${'='.repeat(60)}`);
-            outputChannel.appendLine(`OpenBotMan Experten-Diskussion`);
-            outputChannel.appendLine(`Topic: ${topic}`);
-            outputChannel.appendLine(`${'='.repeat(60)}\n`);
-            outputChannel.appendLine(job.result);
-            
-            if (job.actionItems && job.actionItems.length > 0) {
-              outputChannel.appendLine(`\n--- Action Items ---`);
-              job.actionItems.forEach((item: string) => outputChannel.appendLine(`- ${item}`));
-            }
-            
-            outputChannel.appendLine(`\nDauer: ${Math.round(job.durationMs / 1000)}s`);
-            outputChannel.show();
-            
-            vscode.window.showInformationMessage(
-              'Experten-Diskussion abgeschlossen!',
-              'Ergebnis anzeigen'
-            ).then(action => { if (action) outputChannel.show(); });
-            return;
+        if (!job) {
+          if (token.isCancellationRequested) {
+            vscode.window.showWarningMessage('Diskussion abgebrochen');
+          } else {
+            throw new Error('Timeout nach 10 Minuten');
           }
-          
-          if (job.status === 'error') {
-            throw new Error(job.error || 'Unbekannter Fehler');
-          }
+          return;
         }
         
-        if (token.isCancellationRequested) {
-          vscode.window.showWarningMessage('Diskussion abgebrochen');
-        } else {
-          throw new Error('Timeout nach 10 Minuten');
+        if (job.status === 'error') {
+          throw new Error(job.error || 'Unbekannter Fehler');
         }
+        
+        outputChannel.appendLine(`\n${'='.repeat(60)}`);
+        outputChannel.appendLine(`OpenBotMan Experten-Diskussion`);
+        outputChannel.appendLine(`Topic: ${topic}`);
+        outputChannel.appendLine(`${'='.repeat(60)}\n`);
+        outputChannel.appendLine(job.result || '(No result)');
+        
+        if (job.actionItems && job.actionItems.length > 0) {
+          outputChannel.appendLine(`\n--- Action Items ---`);
+          job.actionItems.forEach((item: string) => outputChannel.appendLine(`- ${item}`));
+        }
+        
+        outputChannel.appendLine(`\nDauer: ${Math.round((job.durationMs || 0) / 1000)}s`);
+        outputChannel.show();
+        
+        vscode.window.showInformationMessage('Experten-Diskussion abgeschlossen!', 'Ergebnis anzeigen')
+          .then(action => { if (action) outputChannel.show(); });
         
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -358,7 +378,6 @@ async function analyzeProject() {
   const workspacePath = workspaceFolders[0].uri.fsPath;
   const workspaceName = workspaceFolders[0].name;
   
-  // Quick pick for analysis type
   const analysisType = await vscode.window.showQuickPick([
     { label: '🔍 Vollständige Analyse', value: 'full', description: 'Architektur, Code-Qualität, Security, Performance' },
     { label: '🛡️ Security Review', value: 'security', description: 'Sicherheitslücken und Best Practices' },
@@ -388,13 +407,13 @@ async function analyzeProject() {
     async (progress, token) => {
       try {
         const config = vscode.workspace.getConfiguration('openbotman');
-        const apiUrl = config.get<string>('apiUrl') || 'http://localhost:8080';
+        const apiUrl = (config.get<string>('apiUrl') || 'http://localhost:8080').replace(/\/$/, '');
         const apiKey = config.get<string>('apiKey') || 'local-dev-key';
         
-        // Start async job
-        const startResponse = await axios.post(
-          `${apiUrl}/api/v1/discuss`,
-          {
+        const startResponse = await fetch(`${apiUrl}/api/v1/discuss`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({
             topic,
             workspace: workspacePath,
             include: ['**/*.ts', '**/*.js', '**/*.cs', '**/*.py', '**/*.java', '**/*.json', '**/*.yaml', '**/*.yml'],
@@ -402,52 +421,35 @@ async function analyzeProject() {
             async: true,
             timeout: 180,
             agents: 3,
-          },
-          { headers: { Authorization: `Bearer ${apiKey}` } }
-        );
+          }),
+        });
         
-        const jobId = startResponse.data.id;
+        const startData = await startResponse.json() as { id: string };
+        const jobId = startData.id;
         progress.report({ message: 'Experten analysieren...' });
         
-        // Poll for results
-        let attempts = 0;
-        const maxAttempts = 120;
+        const job = await pollJobStatus(apiUrl, apiKey, jobId, progress, token);
         
-        while (attempts < maxAttempts && !token.isCancellationRequested) {
-          await new Promise(resolve => setTimeout(resolve, 5000));
-          attempts++;
-          
-          const statusResponse = await axios.get(
-            `${apiUrl}/api/v1/jobs/${jobId}`,
-            { headers: { Authorization: `Bearer ${apiKey}` } }
-          );
-          
-          const job = statusResponse.data;
-          progress.report({ message: `${job.status} (${attempts * 5}s)` });
-          
-          if (job.status === 'complete') {
-            outputChannel.appendLine(`\n${'='.repeat(60)}`);
-            outputChannel.appendLine(`🔍 ${analysisType.label} - ${workspaceName}`);
-            outputChannel.appendLine(`${'='.repeat(60)}\n`);
-            outputChannel.appendLine(job.result);
-            outputChannel.appendLine(`\nDauer: ${Math.round(job.durationMs / 1000)}s`);
-            outputChannel.show();
-            
-            vscode.window.showInformationMessage(
-              `${analysisType.label} abgeschlossen!`,
-              'Ergebnis anzeigen'
-            ).then(action => { if (action) outputChannel.show(); });
-            return;
+        if (!job) {
+          if (token.isCancellationRequested) {
+            vscode.window.showWarningMessage('Analyse abgebrochen');
           }
-          
-          if (job.status === 'error') {
-            throw new Error(job.error || 'Analyse fehlgeschlagen');
-          }
+          return;
         }
         
-        if (token.isCancellationRequested) {
-          vscode.window.showWarningMessage('Analyse abgebrochen');
+        if (job.status === 'error') {
+          throw new Error(job.error || 'Analyse fehlgeschlagen');
         }
+        
+        outputChannel.appendLine(`\n${'='.repeat(60)}`);
+        outputChannel.appendLine(`🔍 ${analysisType.label} - ${workspaceName}`);
+        outputChannel.appendLine(`${'='.repeat(60)}\n`);
+        outputChannel.appendLine(job.result || '(No result)');
+        outputChannel.appendLine(`\nDauer: ${Math.round((job.durationMs || 0) / 1000)}s`);
+        outputChannel.show();
+        
+        vscode.window.showInformationMessage(`${analysisType.label} abgeschlossen!`, 'Ergebnis anzeigen')
+          .then(action => { if (action) outputChannel.show(); });
         
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -508,13 +510,12 @@ async function showAgentStatus() {
   try {
     const status = await client.getStatus();
     
-    outputChannel.appendLine(`\n--- Agent Status ---`);
+    outputChannel.appendLine(`\n--- OpenBotMan Status ---`);
     outputChannel.appendLine(JSON.stringify(status, null, 2));
     outputChannel.show();
     
-    const agents = await client.getAgents();
-    const statusText = agents.map(a => `${a.id}: ${a.status}`).join(' | ');
-    statusBarItem.tooltip = statusText;
+    statusBarItem.tooltip = 'Connected';
+    vscode.window.showInformationMessage('OpenBotMan: Connected!');
   } catch (error) {
     vscode.window.showErrorMessage(
       `Status error: ${error instanceof Error ? error.message : String(error)}`
@@ -544,10 +545,10 @@ class AgentsTreeProvider implements vscode.TreeDataProvider<AgentItem> {
       return agents.map(a => new AgentItem(
         a.id,
         a.role,
-        a.status === 'idle' ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.Collapsed
+        vscode.TreeItemCollapsibleState.None
       ));
     } catch {
-      return [new AgentItem('Unable to connect', 'error', vscode.TreeItemCollapsibleState.None)];
+      return [new AgentItem('Not connected', 'Click status to test', vscode.TreeItemCollapsibleState.None)];
     }
   }
 }
@@ -571,5 +572,5 @@ class AgentItem extends vscode.TreeItem {
  * Deactivate extension
  */
 export function deactivate() {
-  outputChannel.appendLine('OpenBotMan extension deactivated');
+  outputChannel?.appendLine('OpenBotMan extension deactivated');
 }
