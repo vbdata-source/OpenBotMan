@@ -100,14 +100,6 @@
         {
           "id": "openbotman.agents",
           "name": "Agents"
-        },
-        {
-          "id": "openbotman.tasks",
-          "name": "Tasks"
-        },
-        {
-          "id": "openbotman.knowledge",
-          "name": "Knowledge"
         }
       ]
     }
