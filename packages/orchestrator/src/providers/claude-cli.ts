@@ -484,6 +484,12 @@ export class ClaudeCliProvider extends EventEmitter<ClaudeCliProviderEvents> {
     exitCode: number | null,
     stderr: string
   ): ClaudeCliResponse {
+    // Debug: Log raw messages count
+    console.log(`[ClaudeCliProvider] Building response from ${messages.length} messages, exitCode=${exitCode}`);
+    if (messages.length > 0) {
+      console.log(`[ClaudeCliProvider] Message types: ${messages.map(m => m.type).join(', ')}`);
+    }
+    
     // Find the result message
     const resultMsg = messages.find(m => m.type === 'result');
     
