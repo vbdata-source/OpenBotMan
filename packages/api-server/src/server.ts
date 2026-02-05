@@ -103,7 +103,7 @@ export function createServer(config: ApiServerConfig): Express {
       
       // ASYNC MODE: Return job ID immediately
       if (request.async) {
-        const job = jobStore.create(requestId);
+        jobStore.create(requestId);
         jobStore.setRunning(requestId, 'Starting discussion...');
         
         // Run discussion in background
