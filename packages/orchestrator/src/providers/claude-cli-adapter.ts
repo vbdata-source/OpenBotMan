@@ -34,8 +34,8 @@ export class ClaudeCliAdapter extends BaseProvider {
   
   constructor(config: ClaudeCliAdapterConfig) {
     super(config);
-    // On Windows, use 'claude.cmd' for npm global installs
-    const defaultCommand = process.platform === 'win32' ? 'claude.cmd' : 'claude';
+    // On Windows, shell:true lets Windows find .exe/.cmd automatically
+    const defaultCommand = 'claude';
     this.command = config.command ?? defaultCommand;
     this.cwd = config.cwd;
     this.verbose = config.verbose ?? false;

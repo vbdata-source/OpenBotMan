@@ -61,7 +61,7 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
     if (config.provider === 'claude-cli') {
       console.log(`[Orchestrator] Using Claude CLI provider`);
       this.cliProvider = new ClaudeCliProvider({
-        command: config.cli?.command, // Let constructor handle Windows default (claude.cmd)
+        command: config.cli?.command, // Let constructor handle default
         model: config.model,
         maxTurns: config.cli?.maxTurns ?? config.maxIterations,
       });
