@@ -1,0 +1,70 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "OpenBotMan: Start API Server",
+      "type": "shell",
+      "command": "${workspaceFolder}/start-api.bat",
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "OpenBotMan: Discuss Current File",
+      "type": "shell",
+      "command": "curl.exe",
+      "args": [
+        "-X", "POST",
+        "http://localhost:8080/api/v1/discuss",
+        "-H", "Authorization: Bearer local-dev-key",
+        "-H", "Content-Type: application/json",
+        "-d", "{\"topic\": \"Analysiere diese Datei und gib Verbesserungsvorschläge\", \"workspace\": \"${workspaceFolder}\", \"include\": [\"${relativeFile}\"], \"maxContext\": 100, \"timeout\": 120}"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "OpenBotMan: Discuss Selection",
+      "type": "shell",
+      "command": "curl.exe",
+      "args": [
+        "-X", "POST",
+        "http://localhost:8080/api/v1/discuss",
+        "-H", "Authorization: Bearer local-dev-key",
+        "-H", "Content-Type: application/json",
+        "-d", "{\"topic\": \"${selectedText}\", \"agents\": 3, \"timeout\": 120}"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "OpenBotMan: Discuss Workspace",
+      "type": "shell",
+      "command": "curl.exe",
+      "args": [
+        "-X", "POST",
+        "http://localhost:8080/api/v1/discuss",
+        "-H", "Authorization: Bearer local-dev-key",
+        "-H", "Content-Type: application/json",
+        "-d", "{\"topic\": \"Analysiere dieses Projekt und gib einen Überblick über Architektur und Verbesserungsmöglichkeiten\", \"workspace\": \"${workspaceFolder}\", \"include\": [\"**/*.ts\", \"**/*.js\", \"**/*.json\"], \"maxContext\": 200, \"timeout\": 180}"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

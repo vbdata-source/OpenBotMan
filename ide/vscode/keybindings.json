@@ -1,0 +1,14 @@
+// Keyboard shortcuts für OpenBotMan
+// Kopiere diese in deine VSCode keybindings.json (Ctrl+K Ctrl+S → Open Keyboard Shortcuts JSON)
+[
+  {
+    "key": "ctrl+shift+o",
+    "command": "workbench.action.tasks.runTask",
+    "args": "OpenBotMan: Discuss Current File"
+  },
+  {
+    "key": "ctrl+shift+alt+o",
+    "command": "workbench.action.tasks.runTask", 
+    "args": "OpenBotMan: Discuss Workspace"
+  }
+]
