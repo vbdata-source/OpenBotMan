@@ -450,16 +450,24 @@ class JobsTreeProvider implements vscode.TreeDataProvider<JobTreeItem> {
     // Child level: show agents
     if (element.job?.agents) {
       return element.job.agents.map(agent => {
-        const icon = agent.status === 'thinking' ? '$(sync~spin)' :
-                     agent.status === 'complete' ? '$(check)' :
-                     agent.status === 'error' ? '$(error)' : '$(clock)';
         const duration = agent.durationMs ? ` (${Math.round(agent.durationMs / 1000)}s)` : '';
-        return new JobTreeItem(
-          `${icon} ${agent.name}${duration}`,
+        const item = new JobTreeItem(
+          `${agent.name}${duration}`,
           agent.name,
           agent.status,
           vscode.TreeItemCollapsibleState.None
         );
+        // Set icon based on agent status
+        if (agent.status === 'thinking') {
+          item.iconPath = new vscode.ThemeIcon('sync~spin');
+        } else if (agent.status === 'complete') {
+          item.iconPath = new vscode.ThemeIcon('pass-filled');
+        } else if (agent.status === 'error') {
+          item.iconPath = new vscode.ThemeIcon('error');
+        } else {
+          item.iconPath = new vscode.ThemeIcon('circle-outline');
+        }
+        return item;
       });
     }
     
