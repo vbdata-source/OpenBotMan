@@ -26,7 +26,7 @@ export const DiscussRequestSchema = z.object({
   /** Workspace path - directory to load files from */
   workspace: z.string().optional(),
   
-  /** Include patterns - glob patterns for files (e.g., ["src/**/*.ts", "docs/**/*.md"]) */
+  /** Include patterns - glob patterns for files to load from workspace */
   include: z.array(z.string()).optional(),
   
   /** Max context size in KB (files loaded from workspace) */
