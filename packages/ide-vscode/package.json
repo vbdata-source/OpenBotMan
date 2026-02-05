@@ -106,8 +106,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "compile": "webpack --mode production",
+    "watch": "webpack --mode development --watch",
     "pretest": "npm run compile",
     "test": "echo 'VS Code extension tests require VS Code. Skipping.'",
     "package": "vsce package",
@@ -117,7 +117,10 @@
     "@types/vscode": "^1.85.0",
     "@types/node": "^20.11.0",
     "typescript": "^5.3.0",
-    "@vscode/vsce": "^2.22.0"
+    "@vscode/vsce": "^2.22.0",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "ts-loader": "^9.5.1"
   },
   "dependencies": {
     "axios": "^1.6.0"
