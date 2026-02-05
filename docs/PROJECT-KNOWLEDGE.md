@@ -199,20 +199,35 @@ Juergens PC (Development)
    - Dokumentation erstellt
 
 2. ✅ **HTTP API Server** (2026-02-05)
-   - `POST /api/v1/discuss` Endpoint
+   - `POST /api/v1/discuss` Endpoint (sync + async mode)
+   - `GET /api/v1/jobs/:jobId` - Job status polling
    - API Key Auth (Bearer Token)
    - Health Check `/health`
+   - Workspace/Include für Datei-Analyse
    - Package: `@openbotman/api-server`
 
-3. ⏳ **Docker Container** (VERSCHOBEN)
+3. ✅ **Async Job Queue** (2026-02-05)
+   - `async: true` startet Job im Hintergrund
+   - Polling alle 5 Sekunden
+   - Kein HTTP-Timeout mehr
+   - Jobs 30 Minuten gültig
+
+4. ✅ **Claude Code Skill** (2026-02-05)
+   - Global installiert: `~/.claude/skills/openbotman-discuss/`
+   - PowerShell Script mit async Polling
+   - Trigger: "Frag die OpenBotMan Experten..."
+   - Von jedem Projekt aus nutzbar!
+
+5. ⏳ **Docker Container** (VERSCHOBEN)
    - OpenBotMan als Docker Image
-   - Coolify Integration
+   - Coolify Integration auf Hetzner
    - Secrets Management
    - **Status:** Warten bis Juergen Zeit hat
 
-4. ⏳ **AJBot Integration** (nach Deploy)
-   - HTTP Client für OpenBotMan
+6. ⏳ **AJBot Integration** (nach Deploy)
+   - HTTP Client für OpenBotMan API
    - Automatische Experten-Konsultation
+   - Läuft dann auf Hetzner Server
 
 **Diskussionen:**
 - `discussions/2026-02-05_11-36_ajbot-openbotman-integration-*.md`
