@@ -167,8 +167,11 @@ export class ClaudeCliProvider extends EventEmitter<ClaudeCliProviderEvents> {
   constructor(options: ClaudeCliProviderOptions = {}) {
     super();
     
+    // On Windows, use 'claude.cmd' instead of 'claude' for npm global installs
+    const defaultCommand = process.platform === 'win32' ? 'claude.cmd' : 'claude';
+    
     this.options = {
-      command: options.command ?? 'claude',
+      command: options.command ?? defaultCommand,
       args: options.args ?? [],
       model: options.model ?? 'claude-sonnet-4-20250514',
       systemPrompt: options.systemPrompt ?? '',
@@ -188,9 +191,10 @@ export class ClaudeCliProvider extends EventEmitter<ClaudeCliProviderEvents> {
   /**
    * Check if Claude CLI is available
    */
-  static async isAvailable(command: string = 'claude'): Promise<boolean> {
+  static async isAvailable(command?: string): Promise<boolean> {
+    const cmd = command ?? (process.platform === 'win32' ? 'claude.cmd' : 'claude');
     return new Promise((resolve) => {
-      const proc = spawn(command, ['--version'], {
+      const proc = spawn(cmd, ['--version'], {
         stdio: ['ignore', 'pipe', 'pipe'],
         timeout: 5000,
       });
@@ -208,9 +212,10 @@ export class ClaudeCliProvider extends EventEmitter<ClaudeCliProviderEvents> {
   /**
    * Get Claude CLI version
    */
-  static async getVersion(command: string = 'claude'): Promise<string | null> {
+  static async getVersion(command?: string): Promise<string | null> {
+    const cmd = command ?? (process.platform === 'win32' ? 'claude.cmd' : 'claude');
     return new Promise((resolve) => {
-      const proc = spawn(command, ['--version'], {
+      const proc = spawn(cmd, ['--version'], {
         stdio: ['ignore', 'pipe', 'pipe'],
         timeout: 5000,
       });
