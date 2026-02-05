@@ -24,6 +24,11 @@
         "icon": "$(comment-discussion)"
       },
       {
+        "command": "openbotman.reviewCode",
+        "title": "OpenBotMan: Code Review (aktuelle Datei)",
+        "icon": "$(eye)"
+      },
+      {
         "command": "openbotman.analyzeProject",
         "title": "OpenBotMan: Projekt analysieren",
         "icon": "$(search)"
@@ -53,6 +58,11 @@
         "command": "openbotman.discuss",
         "key": "ctrl+shift+o",
         "mac": "cmd+shift+o"
+      },
+      {
+        "command": "openbotman.reviewCode",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r"
       },
       {
         "command": "openbotman.analyzeProject",

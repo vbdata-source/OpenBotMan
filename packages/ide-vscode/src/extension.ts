@@ -37,6 +37,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Register commands
   context.subscriptions.push(
     vscode.commands.registerCommand('openbotman.discuss', startDiscussion),
+    vscode.commands.registerCommand('openbotman.reviewCode', reviewCode),
     vscode.commands.registerCommand('openbotman.analyzeProject', analyzeProject),
     vscode.commands.registerCommand('openbotman.agents.status', showStatus),
   );
@@ -171,6 +172,109 @@ async function startDiscussion() {
         const message = error instanceof Error ? error.message : String(error);
         vscode.window.showErrorMessage(`OpenBotMan Fehler: ${message}`);
         outputChannel.appendLine(`ERROR: ${message}`);
+      }
+    }
+  );
+}
+
+/**
+ * Review current file or selection
+ */
+async function reviewCode() {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    vscode.window.showWarningMessage('Keine Datei geöffnet');
+    return;
+  }
+  
+  const selection = editor.selection;
+  const code = selection.isEmpty
+    ? editor.document.getText()
+    : editor.document.getText(selection);
+  
+  if (!code || code.trim().length === 0) {
+    vscode.window.showWarningMessage('Kein Code zum Reviewen');
+    return;
+  }
+  
+  const fileName = editor.document.fileName.split(/[/\\]/).pop() || 'unknown';
+  const language = editor.document.languageId;
+  const isSelection = !selection.isEmpty;
+  
+  const topic = `Code Review für ${fileName} (${language}):
+
+Analysiere diesen Code auf:
+- Bugs und potenzielle Fehler
+- Security-Probleme
+- Performance-Optimierungen  
+- Clean Code / Best Practices
+- Verbesserungsvorschläge
+
+\`\`\`${language}
+${code}
+\`\`\``;
+
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: `Code Review: ${fileName}${isSelection ? ' (Auswahl)' : ''}...`,
+      cancellable: true,
+    },
+    async (progress, token) => {
+      try {
+        const { apiUrl, apiKey } = getApiConfig();
+        
+        if (!apiKey) {
+          vscode.window.showErrorMessage('Bitte API Key in den Settings konfigurieren!');
+          return;
+        }
+        
+        const startResponse = await fetch(`${apiUrl}/api/v1/discuss`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            topic,
+            async: true,
+            timeout: 120,
+            agents: 3,
+          }),
+        });
+        
+        if (!startResponse.ok) {
+          throw new Error(`HTTP ${startResponse.status}: ${startResponse.statusText}`);
+        }
+        
+        const startData = await startResponse.json() as { id: string };
+        const jobId = startData.id;
+        progress.report({ message: 'Experten analysieren Code...' });
+        
+        const job = await pollJobStatus(apiUrl, apiKey, jobId, progress, token);
+        
+        if (!job) {
+          if (token.isCancellationRequested) {
+            vscode.window.showWarningMessage('Code Review abgebrochen');
+          }
+          return;
+        }
+        
+        if (job.status === 'error') {
+          throw new Error(job.error || 'Review fehlgeschlagen');
+        }
+        
+        outputChannel.appendLine(`\n${'='.repeat(60)}`);
+        outputChannel.appendLine(`Code Review: ${fileName}${isSelection ? ' (Auswahl)' : ''}`);
+        outputChannel.appendLine(`Sprache: ${language}`);
+        outputChannel.appendLine(`${'='.repeat(60)}\n`);
+        outputChannel.appendLine(job.result || '(Keine Antwort)');
+        outputChannel.appendLine(`\nDauer: ${Math.round((job.durationMs || 0) / 1000)}s`);
+        outputChannel.show();
+        
+        vscode.window.showInformationMessage('Code Review abgeschlossen!', 'Ergebnis anzeigen')
+          .then(action => { if (action) outputChannel.show(); });
+        
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        vscode.window.showErrorMessage(`Code Review Fehler: ${message}`);
       }
     }
   );
