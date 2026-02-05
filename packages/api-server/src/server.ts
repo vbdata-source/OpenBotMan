@@ -13,6 +13,7 @@ import { readFileSync, existsSync } from 'fs';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { DiscussRequestSchema, type DiscussResponse, type HealthResponse, type ApiServerConfig } from './types.js';
 import { loadWorkspaceContext, formatWorkspaceContext } from './workspace.js';
+import { jobStore, type Job } from './jobs.js';
 
 // Import from orchestrator (we'll use the discussion logic)
 import { createProvider } from '@openbotman/orchestrator';
@@ -75,6 +76,9 @@ export function createServer(config: ApiServerConfig): Express {
   
   /**
    * POST /api/v1/discuss - Start a multi-agent discussion
+   * 
+   * With async=true: Returns job ID immediately, poll /api/v1/jobs/:id for results
+   * Without async: Waits for completion (may timeout for long discussions)
    */
   app.post('/api/v1/discuss', async (req: Request, res: Response) => {
     const requestId = uuid();
@@ -95,9 +99,39 @@ export function createServer(config: ApiServerConfig): Express {
       
       const request = parseResult.data;
       
-      console.log(`[${requestId}] Starting discussion: "${request.topic.slice(0, 50)}..." (${request.agents} agents, ${request.maxRounds} rounds)`);
+      console.log(`[${requestId}] Starting discussion: "${request.topic.slice(0, 50)}..." (${request.agents} agents, async=${request.async})`);
       
-      // Run the discussion
+      // ASYNC MODE: Return job ID immediately
+      if (request.async) {
+        const job = jobStore.create(requestId);
+        jobStore.setRunning(requestId, 'Starting discussion...');
+        
+        // Run discussion in background
+        runDiscussion(request, config, requestId)
+          .then(result => {
+            if (result.error) {
+              jobStore.setError(requestId, result.error, Date.now() - startTime);
+            } else {
+              jobStore.setComplete(requestId, result.markdown, result.actionItems, Date.now() - startTime);
+            }
+            console.log(`[${requestId}] Async discussion complete`);
+          })
+          .catch(error => {
+            jobStore.setError(requestId, error instanceof Error ? error.message : 'Unknown error', Date.now() - startTime);
+            console.error(`[${requestId}] Async discussion error:`, error);
+          });
+        
+        // Return immediately with job ID
+        res.status(202).json({
+          id: requestId,
+          status: 'accepted',
+          message: 'Discussion started. Poll /api/v1/jobs/' + requestId + ' for results.',
+          jobUrl: '/api/v1/jobs/' + requestId,
+        });
+        return;
+      }
+      
+      // SYNC MODE: Wait for completion
       const result = await runDiscussion(request, config, requestId);
       
       const response: DiscussResponse = {
@@ -131,6 +165,47 @@ export function createServer(config: ApiServerConfig): Express {
       
       res.status(500).json(response);
     }
+  });
+  
+  /**
+   * GET /api/v1/jobs/:jobId - Get job status and results
+   */
+  app.get('/api/v1/jobs/:jobId', (req: Request, res: Response) => {
+    const job = jobStore.get(req.params.jobId);
+    
+    if (!job) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'Job not found. It may have expired or never existed.',
+      });
+      return;
+    }
+    
+    res.json({
+      id: job.id,
+      status: job.status,
+      progress: job.progress,
+      result: job.result,
+      actionItems: job.actionItems,
+      error: job.error,
+      durationMs: job.durationMs,
+      createdAt: job.createdAt.toISOString(),
+      completedAt: job.completedAt?.toISOString(),
+    });
+  });
+  
+  /**
+   * GET /api/v1/jobs - List all jobs (for debugging)
+   */
+  app.get('/api/v1/jobs', (_req: Request, res: Response) => {
+    const jobs = jobStore.list().map(job => ({
+      id: job.id,
+      status: job.status,
+      createdAt: job.createdAt.toISOString(),
+      completedAt: job.completedAt?.toISOString(),
+    }));
+    
+    res.json({ jobs, count: jobs.length });
   });
   
   // 404 handler

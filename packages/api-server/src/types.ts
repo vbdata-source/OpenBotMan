@@ -34,6 +34,9 @@ export const DiscussRequestSchema = z.object({
   
   /** Prompt file path - load topic from a markdown file */
   promptFile: z.string().optional(),
+  
+  /** Async mode - return job ID immediately, poll for results */
+  async: z.boolean().optional().default(false),
 });
 
 export type DiscussRequest = z.infer<typeof DiscussRequestSchema>;

@@ -29,3 +29,4 @@ export type { ApiServerConfig, DiscussRequest, DiscussResponse, HealthResponse }
 export { DiscussRequestSchema } from './types.js';
 export { createAuthMiddleware } from './middleware/auth.js';
 export { loadWorkspaceContext, formatWorkspaceContext, type WorkspaceContext, type WorkspaceFile } from './workspace.js';
+export { jobStore, type Job, type JobStatus } from './jobs.js';
