@@ -197,6 +197,7 @@ export class ClaudeCliProvider extends EventEmitter<ClaudeCliProviderEvents> {
       const proc = spawn(cmd, ['--version'], {
         stdio: ['ignore', 'pipe', 'pipe'],
         timeout: 5000,
+        shell: process.platform === 'win32', // Required for .cmd files on Windows
       });
       
       proc.on('close', (code) => {
@@ -218,6 +219,7 @@ export class ClaudeCliProvider extends EventEmitter<ClaudeCliProviderEvents> {
       const proc = spawn(cmd, ['--version'], {
         stdio: ['ignore', 'pipe', 'pipe'],
         timeout: 5000,
+        shell: process.platform === 'win32', // Required for .cmd files on Windows
       });
       
       let output = '';
@@ -259,6 +261,7 @@ export class ClaudeCliProvider extends EventEmitter<ClaudeCliProviderEvents> {
         cwd: this.options.cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
         timeout: this.options.timeoutMs,
+        shell: process.platform === 'win32', // Required for .cmd files on Windows
       });
       
       this.emit('start');
