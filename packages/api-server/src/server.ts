@@ -13,7 +13,7 @@ import { readFileSync, existsSync } from 'fs';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { DiscussRequestSchema, type DiscussResponse, type HealthResponse, type ApiServerConfig } from './types.js';
 import { loadWorkspaceContext, formatWorkspaceContext } from './workspace.js';
-import { jobStore, type Job } from './jobs.js';
+import { jobStore } from './jobs.js';
 
 // Import from orchestrator (we'll use the discussion logic)
 import { createProvider } from '@openbotman/orchestrator';
