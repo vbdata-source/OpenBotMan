@@ -19,18 +19,6 @@
   "contributes": {
     "commands": [
       {
-        "command": "openbotman.chat",
-        "title": "OpenBotMan: Chat with Agents"
-      },
-      {
-        "command": "openbotman.orchestrate",
-        "title": "OpenBotMan: Orchestrate Task"
-      },
-      {
-        "command": "openbotman.review",
-        "title": "OpenBotMan: Code Review"
-      },
-      {
         "command": "openbotman.discuss",
         "title": "OpenBotMan: Experten fragen",
         "icon": "$(comment-discussion)"
@@ -41,12 +29,8 @@
         "icon": "$(search)"
       },
       {
-        "command": "openbotman.knowledge.query",
-        "title": "OpenBotMan: Query Knowledge Base"
-      },
-      {
         "command": "openbotman.agents.status",
-        "title": "OpenBotMan: Agent Status"
+        "title": "OpenBotMan: Status prüfen"
       }
     ],
     "configuration": {
@@ -55,22 +39,12 @@
         "openbotman.apiUrl": {
           "type": "string",
           "default": "http://localhost:8080",
-          "description": "OpenBotMan API URL"
+          "description": "OpenBotMan API Server URL"
         },
         "openbotman.apiKey": {
           "type": "string",
           "default": "",
-          "description": "API key for authentication"
-        },
-        "openbotman.autoReview": {
-          "type": "boolean",
-          "default": false,
-          "description": "Automatically review code on save"
-        },
-        "openbotman.defaultAgent": {
-          "type": "string",
-          "default": "claude_code",
-          "description": "Default agent for quick tasks"
+          "description": "API Key (muss mit Server übereinstimmen)"
         }
       }
     },

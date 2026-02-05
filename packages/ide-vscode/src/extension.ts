@@ -1,66 +1,24 @@
 /**
  * OpenBotMan VS Code Extension
  * 
- * Integrates multi-agent orchestration into VS Code.
+ * Multi-Agent Diskussionen direkt in VS Code.
  */
 
 import * as vscode from 'vscode';
 
-/**
- * API client for OpenBotMan (using native fetch)
- */
-class OpenBotManClient {
-  private baseUrl: string;
-  private headers: Record<string, string>;
-  
-  constructor(baseUrl: string, apiKey?: string) {
-    this.baseUrl = baseUrl.replace(/\/$/, '');
-    this.headers = {
-      'Content-Type': 'application/json',
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-    };
-  }
-  
-  private async request(method: string, path: string, body?: unknown): Promise<unknown> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method,
-      headers: this.headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    return response.json();
-  }
-  
-  async chat(message: string): Promise<string> {
-    const data = await this.request('POST', '/chat', { message }) as { response: string };
-    return data.response;
-  }
-  
-  async orchestrate(task: string, options?: { agents?: string[]; workflow?: string }): Promise<string> {
-    const data = await this.request('POST', '/orchestrate', { task, ...options }) as { result: string };
-    return data.result;
-  }
-  
-  async getAgents(): Promise<Array<{ id: string; role: string; status: string }>> {
-    const data = await this.request('GET', '/agents') as { agents: Array<{ id: string; role: string; status: string }> };
-    return data.agents || [];
-  }
-  
-  async getStatus(): Promise<Record<string, unknown>> {
-    return await this.request('GET', '/health') as Record<string, unknown>;
-  }
-  
-  async queryKnowledge(query: string): Promise<Array<{ title: string; content: string; score: number }>> {
-    const data = await this.request('POST', '/knowledge/query', { query }) as { results: Array<{ title: string; content: string; score: number }> };
-    return data.results || [];
-  }
-}
-
-let client: OpenBotManClient;
 let outputChannel: vscode.OutputChannel;
 let statusBarItem: vscode.StatusBarItem;
+
+/**
+ * Get configured API settings
+ */
+function getApiConfig(): { apiUrl: string; apiKey: string } {
+  const config = vscode.workspace.getConfiguration('openbotman');
+  return {
+    apiUrl: (config.get<string>('apiUrl') || 'http://localhost:8080').replace(/\/$/, ''),
+    apiKey: config.get<string>('apiKey') || '',
+  };
+}
 
 /**
  * Activate extension
@@ -68,12 +26,6 @@ let statusBarItem: vscode.StatusBarItem;
 export function activate(context: vscode.ExtensionContext) {
   outputChannel = vscode.window.createOutputChannel('OpenBotMan');
   outputChannel.appendLine('OpenBotMan extension starting...');
-  
-  // Initialize client
-  const config = vscode.workspace.getConfiguration('openbotman');
-  const apiUrl = config.get<string>('apiUrl') || 'http://localhost:8080';
-  const apiKey = config.get<string>('apiKey');
-  client = new OpenBotManClient(apiUrl, apiKey);
   
   // Status bar
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -84,155 +36,12 @@ export function activate(context: vscode.ExtensionContext) {
   
   // Register commands
   context.subscriptions.push(
-    vscode.commands.registerCommand('openbotman.chat', chatWithAgents),
-    vscode.commands.registerCommand('openbotman.orchestrate', orchestrateTask),
-    vscode.commands.registerCommand('openbotman.review', reviewCode),
     vscode.commands.registerCommand('openbotman.discuss', startDiscussion),
     vscode.commands.registerCommand('openbotman.analyzeProject', analyzeProject),
-    vscode.commands.registerCommand('openbotman.knowledge.query', queryKnowledge),
-    vscode.commands.registerCommand('openbotman.agents.status', showAgentStatus),
+    vscode.commands.registerCommand('openbotman.agents.status', showStatus),
   );
   
-  // Register tree views
-  const agentsProvider = new AgentsTreeProvider();
-  vscode.window.registerTreeDataProvider('openbotman.agents', agentsProvider);
-  
-  outputChannel.appendLine('OpenBotMan extension activated successfully!');
-}
-
-/**
- * Chat with agents
- */
-async function chatWithAgents() {
-  const message = await vscode.window.showInputBox({
-    prompt: 'What would you like to ask the agents?',
-    placeHolder: 'e.g., Explain this code / Implement a feature / ...',
-  });
-  
-  if (!message) return;
-  
-  await vscode.window.withProgress(
-    {
-      location: vscode.ProgressLocation.Notification,
-      title: 'OpenBotMan is thinking...',
-      cancellable: false,
-    },
-    async () => {
-      try {
-        const response = await client.chat(message);
-        
-        outputChannel.appendLine(`\n--- Chat ---`);
-        outputChannel.appendLine(`You: ${message}`);
-        outputChannel.appendLine(`OpenBotMan: ${response}`);
-        outputChannel.show();
-        
-        vscode.window.showInformationMessage(
-          response.length > 200 ? response.slice(0, 200) + '...' : response,
-          'Show Full Response'
-        ).then(action => {
-          if (action) outputChannel.show();
-        });
-      } catch (error) {
-        vscode.window.showErrorMessage(
-          `OpenBotMan error: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    }
-  );
-}
-
-/**
- * Orchestrate a task
- */
-async function orchestrateTask() {
-  const task = await vscode.window.showInputBox({
-    prompt: 'What task should the agents orchestrate?',
-    placeHolder: 'e.g., Implement user authentication with OAuth2',
-  });
-  
-  if (!task) return;
-  
-  const workflowPick = await vscode.window.showQuickPick(
-    ['Dynamic (let orchestrator decide)', 'Code Review', 'Feature Development'],
-    { placeHolder: 'Select workflow' }
-  );
-  
-  await vscode.window.withProgress(
-    {
-      location: vscode.ProgressLocation.Notification,
-      title: 'Orchestrating task...',
-      cancellable: false,
-    },
-    async () => {
-      try {
-        const workflow = workflowPick === 'Code Review' ? 'code_review' :
-                        workflowPick === 'Feature Development' ? 'feature_development' :
-                        undefined;
-        
-        const result = await client.orchestrate(task, { workflow });
-        
-        outputChannel.appendLine(`\n--- Orchestration ---`);
-        outputChannel.appendLine(`Task: ${task}`);
-        outputChannel.appendLine(`Workflow: ${workflow || 'dynamic'}`);
-        outputChannel.appendLine(`Result:\n${result}`);
-        outputChannel.show();
-        
-        vscode.window.showInformationMessage('Task orchestration complete!', 'Show Results')
-          .then(action => { if (action) outputChannel.show(); });
-      } catch (error) {
-        vscode.window.showErrorMessage(
-          `Orchestration error: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    }
-  );
-}
-
-/**
- * Review current code
- */
-async function reviewCode() {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) {
-    vscode.window.showWarningMessage('No active editor');
-    return;
-  }
-  
-  const selection = editor.selection;
-  const code = selection.isEmpty
-    ? editor.document.getText()
-    : editor.document.getText(selection);
-  
-  if (!code) {
-    vscode.window.showWarningMessage('No code to review');
-    return;
-  }
-  
-  await vscode.window.withProgress(
-    {
-      location: vscode.ProgressLocation.Notification,
-      title: 'Reviewing code...',
-      cancellable: false,
-    },
-    async () => {
-      try {
-        const task = `Review this ${editor.document.languageId} code:\n\n\`\`\`${editor.document.languageId}\n${code}\n\`\`\``;
-        const result = await client.orchestrate(task, { workflow: 'code_review' });
-        
-        outputChannel.appendLine(`\n--- Code Review ---`);
-        outputChannel.appendLine(`File: ${editor.document.fileName}`);
-        outputChannel.appendLine(`\n${result}`);
-        outputChannel.show();
-        
-        vscode.window.showInformationMessage('Code review complete!', 'Show Review')
-          .then(action => { if (action) outputChannel.show(); });
-      } catch (error) {
-        vscode.window.showErrorMessage(
-          `Review error: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    }
-  );
+  outputChannel.appendLine('OpenBotMan extension activated!');
 }
 
 /**
@@ -244,7 +53,7 @@ async function pollJobStatus(
   jobId: string,
   progress: vscode.Progress<{ message?: string }>,
   token: vscode.CancellationToken
-): Promise<{ status: string; result?: string; error?: string; durationMs?: number; actionItems?: string[] } | null> {
+): Promise<{ status: string; result?: string; error?: string; durationMs?: number } | null> {
   let attempts = 0;
   const maxAttempts = 120; // 10 minutes max
   
@@ -256,8 +65,8 @@ async function pollJobStatus(
       headers: { Authorization: `Bearer ${apiKey}` },
     });
     
-    const job = await response.json() as { status: string; result?: string; error?: string; durationMs?: number; actionItems?: string[] };
-    progress.report({ message: `Status: ${job.status} (${attempts * 5}s)` });
+    const job = await response.json() as { status: string; result?: string; error?: string; durationMs?: number };
+    progress.report({ message: `${job.status} (${attempts * 5}s)` });
     
     if (job.status === 'complete' || job.status === 'error') {
       return job;
@@ -273,7 +82,7 @@ async function pollJobStatus(
 async function startDiscussion() {
   const topic = await vscode.window.showInputBox({
     prompt: 'Was sollen die Experten diskutieren?',
-    placeHolder: 'z.B. Analysiere dieses Projekt auf Verbesserungsmöglichkeiten',
+    placeHolder: 'z.B. Wie implementiere ich Rate-Limiting in Node.js?',
   });
   
   if (!topic) return;
@@ -285,7 +94,7 @@ async function startDiscussion() {
   if (workspacePath) {
     const choice = await vscode.window.showQuickPick(
       ['Ja, Projektdateien einbeziehen', 'Nein, nur die Frage'],
-      { placeHolder: 'Soll das aktuelle Projekt analysiert werden?' }
+      { placeHolder: 'Soll das aktuelle Projekt als Kontext verwendet werden?' }
     );
     includeWorkspace = choice?.startsWith('Ja') ?? false;
   }
@@ -299,7 +108,7 @@ async function startDiscussion() {
   
   if (includeWorkspace && workspacePath) {
     requestBody.workspace = workspacePath;
-    requestBody.include = ['**/*.ts', '**/*.js', '**/*.json', '**/*.cs', '**/*.py'];
+    requestBody.include = ['**/*.ts', '**/*.js', '**/*.json', '**/*.cs', '**/*.py', '**/*.md'];
     requestBody.maxContext = 200;
   }
   
@@ -311,15 +120,23 @@ async function startDiscussion() {
     },
     async (progress, token) => {
       try {
-        const config = vscode.workspace.getConfiguration('openbotman');
-        const apiUrl = (config.get<string>('apiUrl') || 'http://localhost:8080').replace(/\/$/, '');
-        const apiKey = config.get<string>('apiKey') || 'local-dev-key';
+        const { apiUrl, apiKey } = getApiConfig();
+        
+        if (!apiKey) {
+          vscode.window.showErrorMessage('Bitte API Key in den Settings konfigurieren!');
+          return;
+        }
         
         const startResponse = await fetch(`${apiUrl}/api/v1/discuss`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
           body: JSON.stringify(requestBody),
         });
+        
+        if (!startResponse.ok) {
+          throw new Error(`HTTP ${startResponse.status}: ${startResponse.statusText}`);
+        }
+        
         const startData = await startResponse.json() as { id: string };
         const jobId = startData.id;
         progress.report({ message: `Job gestartet: ${jobId.slice(0, 8)}...` });
@@ -341,15 +158,9 @@ async function startDiscussion() {
         
         outputChannel.appendLine(`\n${'='.repeat(60)}`);
         outputChannel.appendLine(`OpenBotMan Experten-Diskussion`);
-        outputChannel.appendLine(`Topic: ${topic}`);
+        outputChannel.appendLine(`Frage: ${topic}`);
         outputChannel.appendLine(`${'='.repeat(60)}\n`);
-        outputChannel.appendLine(job.result || '(No result)');
-        
-        if (job.actionItems && job.actionItems.length > 0) {
-          outputChannel.appendLine(`\n--- Action Items ---`);
-          job.actionItems.forEach((item: string) => outputChannel.appendLine(`- ${item}`));
-        }
-        
+        outputChannel.appendLine(job.result || '(Keine Antwort)');
         outputChannel.appendLine(`\nDauer: ${Math.round((job.durationMs || 0) / 1000)}s`);
         outputChannel.show();
         
@@ -406,9 +217,12 @@ async function analyzeProject() {
     },
     async (progress, token) => {
       try {
-        const config = vscode.workspace.getConfiguration('openbotman');
-        const apiUrl = (config.get<string>('apiUrl') || 'http://localhost:8080').replace(/\/$/, '');
-        const apiKey = config.get<string>('apiKey') || 'local-dev-key';
+        const { apiUrl, apiKey } = getApiConfig();
+        
+        if (!apiKey) {
+          vscode.window.showErrorMessage('Bitte API Key in den Settings konfigurieren!');
+          return;
+        }
         
         const startResponse = await fetch(`${apiUrl}/api/v1/discuss`, {
           method: 'POST',
@@ -416,13 +230,17 @@ async function analyzeProject() {
           body: JSON.stringify({
             topic,
             workspace: workspacePath,
-            include: ['**/*.ts', '**/*.js', '**/*.cs', '**/*.py', '**/*.java', '**/*.json', '**/*.yaml', '**/*.yml'],
+            include: ['**/*.ts', '**/*.js', '**/*.cs', '**/*.py', '**/*.java', '**/*.json', '**/*.yaml', '**/*.yml', '**/*.md'],
             maxContext: 200,
             async: true,
             timeout: 180,
             agents: 3,
           }),
         });
+        
+        if (!startResponse.ok) {
+          throw new Error(`HTTP ${startResponse.status}: ${startResponse.statusText}`);
+        }
         
         const startData = await startResponse.json() as { id: string };
         const jobId = startData.id;
@@ -442,9 +260,9 @@ async function analyzeProject() {
         }
         
         outputChannel.appendLine(`\n${'='.repeat(60)}`);
-        outputChannel.appendLine(`🔍 ${analysisType.label} - ${workspaceName}`);
+        outputChannel.appendLine(`${analysisType.label} - ${workspaceName}`);
         outputChannel.appendLine(`${'='.repeat(60)}\n`);
-        outputChannel.appendLine(job.result || '(No result)');
+        outputChannel.appendLine(job.result || '(Keine Antwort)');
         outputChannel.appendLine(`\nDauer: ${Math.round((job.durationMs || 0) / 1000)}s`);
         outputChannel.show();
         
@@ -460,111 +278,36 @@ async function analyzeProject() {
 }
 
 /**
- * Query knowledge base
+ * Show OpenBotMan status
  */
-async function queryKnowledge() {
-  const query = await vscode.window.showInputBox({
-    prompt: 'Search the knowledge base',
-    placeHolder: 'e.g., OAuth2 best practices',
-  });
-  
-  if (!query) return;
+async function showStatus() {
+  const { apiUrl, apiKey } = getApiConfig();
   
   try {
-    const results = await client.queryKnowledge(query);
-    
-    if (results.length === 0) {
-      vscode.window.showInformationMessage('No results found');
-      return;
-    }
-    
-    const items = results.map(r => ({
-      label: r.title,
-      description: `Score: ${(r.score * 100).toFixed(0)}%`,
-      detail: r.content.slice(0, 100) + '...',
-    }));
-    
-    const selected = await vscode.window.showQuickPick(items, {
-      placeHolder: 'Select result to view',
-    });
-    
-    if (selected) {
-      const result = results.find(r => r.title === selected.label);
-      if (result) {
-        outputChannel.appendLine(`\n--- Knowledge: ${result.title} ---`);
-        outputChannel.appendLine(result.content);
-        outputChannel.show();
-      }
-    }
-  } catch (error) {
-    vscode.window.showErrorMessage(
-      `Query error: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-}
-
-/**
- * Show agent status
- */
-async function showAgentStatus() {
-  try {
-    const status = await client.getStatus();
+    const response = await fetch(`${apiUrl}/health`);
+    const status = await response.json() as { status: string; version: string; uptime: number; providers: Array<{ name: string; available: boolean }> };
     
     outputChannel.appendLine(`\n--- OpenBotMan Status ---`);
-    outputChannel.appendLine(JSON.stringify(status, null, 2));
+    outputChannel.appendLine(`URL: ${apiUrl}`);
+    outputChannel.appendLine(`Status: ${status.status}`);
+    outputChannel.appendLine(`Version: ${status.version}`);
+    outputChannel.appendLine(`Uptime: ${status.uptime}s`);
+    outputChannel.appendLine(`Providers: ${status.providers?.map(p => `${p.name} (${p.available ? '✓' : '✗'})`).join(', ') || 'none'}`);
+    outputChannel.appendLine(`API Key: ${apiKey ? '✓ konfiguriert' : '✗ fehlt!'}`);
     outputChannel.show();
     
-    statusBarItem.tooltip = 'Connected';
-    vscode.window.showInformationMessage('OpenBotMan: Connected!');
-  } catch (error) {
-    vscode.window.showErrorMessage(
-      `Status error: ${error instanceof Error ? error.message : String(error)}`
-    );
-    statusBarItem.tooltip = 'Not connected';
-  }
-}
-
-/**
- * Tree data provider for agents view
- */
-class AgentsTreeProvider implements vscode.TreeDataProvider<AgentItem> {
-  private _onDidChangeTreeData = new vscode.EventEmitter<AgentItem | undefined>();
-  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-  
-  refresh(): void {
-    this._onDidChangeTreeData.fire(undefined);
-  }
-  
-  getTreeItem(element: AgentItem): vscode.TreeItem {
-    return element;
-  }
-  
-  async getChildren(): Promise<AgentItem[]> {
-    try {
-      const agents = await client.getAgents();
-      return agents.map(a => new AgentItem(
-        a.id,
-        a.role,
-        vscode.TreeItemCollapsibleState.None
-      ));
-    } catch {
-      return [new AgentItem('Not connected', 'Click status to test', vscode.TreeItemCollapsibleState.None)];
+    statusBarItem.tooltip = `${status.status} | ${status.version}`;
+    
+    if (!apiKey) {
+      vscode.window.showWarningMessage('OpenBotMan: API Key nicht konfiguriert!', 'Settings öffnen')
+        .then(action => { if (action) vscode.commands.executeCommand('workbench.action.openSettings', 'openbotman'); });
+    } else {
+      vscode.window.showInformationMessage(`OpenBotMan: ${status.status} (${status.version})`);
     }
-  }
-}
-
-/**
- * Agent tree item
- */
-class AgentItem extends vscode.TreeItem {
-  constructor(
-    public readonly id: string,
-    public readonly role: string,
-    public readonly collapsibleState: vscode.TreeItemCollapsibleState
-  ) {
-    super(id, collapsibleState);
-    this.description = role;
-    this.iconPath = new vscode.ThemeIcon(role === 'error' ? 'error' : 'robot');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    vscode.window.showErrorMessage(`Verbindung fehlgeschlagen: ${message}`);
+    statusBarItem.tooltip = 'Nicht verbunden';
   }
 }
 
