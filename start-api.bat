@@ -4,8 +4,8 @@
 
 cd /d C:\Sources\OpenBotMan\packages\api-server
 
-:: Claude CLI zum PATH hinzufügen
-set PATH=%PATH%;%APPDATA%\npm;%LOCALAPPDATA%\npm
+:: Claude CLI zum PATH hinzufügen (verschiedene Installationsorte)
+set PATH=%PATH%;%APPDATA%\npm;%LOCALAPPDATA%\npm;%USERPROFILE%\.local\bin
 
 :: API Key für Authentifizierung
 set OPENBOTMAN_API_KEYS=local-dev-key
