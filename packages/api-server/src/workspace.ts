@@ -5,7 +5,7 @@
  */
 
 import { readFileSync, statSync, existsSync } from 'fs';
-import { join, relative } from 'path';
+import { join } from 'path';
 import fg from 'fast-glob';
 
 export interface WorkspaceFile {
