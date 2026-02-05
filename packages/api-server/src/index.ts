@@ -28,3 +28,4 @@ export { createServer, startServer } from './server.js';
 export type { ApiServerConfig, DiscussRequest, DiscussResponse, HealthResponse } from './types.js';
 export { DiscussRequestSchema } from './types.js';
 export { createAuthMiddleware } from './middleware/auth.js';
+export { loadWorkspaceContext, formatWorkspaceContext, type WorkspaceContext, type WorkspaceFile } from './workspace.js';

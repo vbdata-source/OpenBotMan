@@ -9,7 +9,7 @@ import { z } from 'zod';
  */
 export const DiscussRequestSchema = z.object({
   /** Discussion topic/question */
-  topic: z.string().min(1).max(10000),
+  topic: z.string().min(1).max(50000),
   
   /** Number of agents (1-5) */
   agents: z.number().int().min(1).max(5).default(3),
@@ -23,14 +23,17 @@ export const DiscussRequestSchema = z.object({
   /** Model to use */
   model: z.string().optional(),
   
-  /** Workspace path (optional) */
+  /** Workspace path - directory to load files from */
   workspace: z.string().optional(),
   
-  /** Include patterns (optional) */
+  /** Include patterns - glob patterns for files (e.g., ["src/**/*.ts", "docs/**/*.md"]) */
   include: z.array(z.string()).optional(),
   
-  /** Max context size in KB */
+  /** Max context size in KB (files loaded from workspace) */
   maxContext: z.number().int().min(1).max(500).default(100),
+  
+  /** Prompt file path - load topic from a markdown file */
+  promptFile: z.string().optional(),
 });
 
 export type DiscussRequest = z.infer<typeof DiscussRequestSchema>;

@@ -40,6 +40,7 @@ Response:
 Start a multi-agent discussion. Requires API key.
 
 ```bash
+# Simple question
 curl -X POST http://localhost:8080/api/v1/discuss \
   -H "Authorization: Bearer my-secret-key" \
   -H "Content-Type: application/json" \
@@ -47,6 +48,28 @@ curl -X POST http://localhost:8080/api/v1/discuss \
     "topic": "Sollen wir React oder Vue für unser Projekt verwenden?",
     "agents": 3,
     "maxRounds": 5
+  }'
+
+# With workspace context (analyze files)
+curl -X POST http://localhost:8080/api/v1/discuss \
+  -H "Authorization: Bearer my-secret-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "topic": "Analysiere die Konfigurationsdateien und finde wo der Importservice aktiviert wird",
+    "workspace": "C:\\Sources\\bcs",
+    "include": ["docs/JET-AT-Param/**/*", "*.config", "*.xml"],
+    "maxContext": 200,
+    "agents": 3
+  }'
+
+# With prompt file
+curl -X POST http://localhost:8080/api/v1/discuss \
+  -H "Authorization: Bearer my-secret-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "promptFile": "C:\\Sources\\OpenBotMan\\prompts\\my-question.md",
+    "workspace": "C:\\Sources\\myproject",
+    "include": ["src/**/*.ts"]
   }'
 ```
 
@@ -58,7 +81,10 @@ Request body:
   "maxRounds": 5,        // 1-20, default: 5
   "timeout": 60,         // seconds per agent, default: 60
   "model": "string",     // optional, override default model
-  "maxContext": 100      // KB, default: 100
+  "workspace": "string", // optional, path to project directory
+  "include": ["**/*.ts"],// optional, glob patterns for files
+  "maxContext": 100,     // KB, max file context size, default: 100
+  "promptFile": "string" // optional, load topic from markdown file
 }
 ```
 

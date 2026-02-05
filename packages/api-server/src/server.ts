@@ -9,8 +9,10 @@ import express, { type Express, type Request, type Response } from 'express';
 import cors from 'cors';
 import { v4 as uuid } from 'uuid';
 
+import { readFileSync, existsSync } from 'fs';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { DiscussRequestSchema, type DiscussResponse, type HealthResponse, type ApiServerConfig } from './types.js';
+import { loadWorkspaceContext, formatWorkspaceContext } from './workspace.js';
 
 // Import from orchestrator (we'll use the discussion logic)
 import { createProvider } from '@openbotman/orchestrator';
@@ -194,9 +196,19 @@ interface DiscussionResult {
  * with the full orchestrator discussion logic from @openbotman/cli.
  */
 async function runDiscussion(
-  request: { topic: string; agents: number; maxRounds: number; timeout: number; model?: string },
+  request: { 
+    topic: string; 
+    agents: number; 
+    maxRounds: number; 
+    timeout: number; 
+    model?: string;
+    workspace?: string;
+    include?: string[];
+    maxContext?: number;
+    promptFile?: string;
+  },
   config: ApiServerConfig,
-  _requestId: string
+  requestId: string
 ): Promise<DiscussionResult> {
   
   // Create provider based on config
@@ -206,28 +218,56 @@ async function runDiscussion(
     apiKey: config.defaultProvider === 'claude-api' ? config.anthropicApiKey : undefined,
   });
   
-  // For now, we do a simple single-agent response
-  // TODO: Integrate full multi-agent discussion from CLI
+  // Load topic from prompt file if specified
+  let topic = request.topic;
+  if (request.promptFile && existsSync(request.promptFile)) {
+    try {
+      topic = readFileSync(request.promptFile, 'utf-8');
+      console.log(`[${requestId}] Loaded prompt from: ${request.promptFile}`);
+    } catch (error) {
+      console.warn(`[${requestId}] Could not read prompt file: ${request.promptFile}`);
+    }
+  }
+  
+  // Load workspace context if specified
+  let workspaceContext = '';
+  if (request.workspace && request.include && request.include.length > 0) {
+    try {
+      const maxBytes = (request.maxContext ?? 100) * 1024;
+      const context = await loadWorkspaceContext(request.workspace, request.include, maxBytes);
+      workspaceContext = formatWorkspaceContext(context);
+      console.log(`[${requestId}] Loaded workspace: ${context.fileCount} files, ${Math.round(context.totalSize / 1024)}KB`);
+    } catch (error) {
+      console.warn(`[${requestId}] Could not load workspace: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+  
+  // Build the full prompt with context
+  const fullPrompt = workspaceContext 
+    ? `${workspaceContext}\n\n---\n\n## Aufgabe\n\n${topic}`
+    : topic;
   
   const systemPrompt = `Du bist ein erfahrener Software-Experte. 
 Analysiere das folgende Thema und gib eine strukturierte Empfehlung.
+Wenn Workspace-Context vorhanden ist, analysiere die Dateien sorgfältig.
 Antworte auf Deutsch.
 
 Format:
 ## Analyse
-(Deine Analyse)
+(Deine Analyse der Dateien und des Problems)
 
 ## Empfehlung
-(Konkrete Empfehlung)
+(Konkrete Empfehlung basierend auf den Dateien)
 
 ## Action Items
 - [ ] Item 1
 - [ ] Item 2`;
 
   try {
-    const response = await provider.send(request.topic, {
+    const response = await provider.send(fullPrompt, {
       systemPrompt,
       timeoutMs: request.timeout * 1000,
+      maxTokens: 4096,
     });
     
     if (response.isError) {
