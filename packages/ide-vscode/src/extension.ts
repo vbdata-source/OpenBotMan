@@ -132,7 +132,17 @@ async function pollJobWithProgress(
       headers: { Authorization: `Bearer ${apiKey}` },
     });
     
-    const job = await response.json();
+    const job = await response.json() as {
+      status: string;
+      progress?: string;
+      currentAgent?: string;
+      agents?: AgentInfo[];
+      result?: string;
+      error?: string;
+      durationMs?: number;
+      currentRound?: number;
+      maxRounds?: number;
+    };
     
     // Update our tracked job
     updateJobFromApi(jobId, job);
@@ -143,7 +153,7 @@ async function pollJobWithProgress(
       msg = `${job.currentAgent} denkt nach...`;
     }
     if (job.agents) {
-      const done = job.agents.filter((a: any) => a.status === 'complete').length;
+      const done = job.agents.filter(a => a.status === 'complete').length;
       const total = job.agents.length;
       msg = `${msg} (${done}/${total} Agents)`;
     }
