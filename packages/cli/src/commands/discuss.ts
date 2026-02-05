@@ -1011,33 +1011,12 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
     providers.set(agent.id, createAgentProvider(agent, { ...options, timeout }));
   }
 
-  // Header
-  console.log('\n');
-  console.log(chalk.bold.white('🤖 Multi-Agent Consensus Discussion'));
-  console.log(chalk.gray('━'.repeat(60)));
-  console.log(chalk.white(`Topic: ${chalk.cyan(options.topic)}`));
-  console.log(chalk.white(`Max Rounds: ${maxRounds}`));
-  console.log('');
-  
-  // Show agents with their models
-  console.log(chalk.bold('Participants:'));
-  for (const agent of agents) {
-    const providerLabel = agent.provider === 'claude-cli' ? 'CLI' : 'API';
-    console.log(`  ${agent.emoji} ${agent.name} - ${chalk.gray(`${agent.model} via ${providerLabel}`)}`);
-  }
-  console.log(chalk.gray('━'.repeat(60)));
-
-  // Load context
-  const contextSpinner = ora('Loading project context...').start();
+  // Load context first (needed for header)
   let context: ProjectContext;
   
   try {
     context = await loadProjectContext(options);
-    contextSpinner.succeed(
-      `Context loaded: ${context.sourceFiles.length} files, ${Math.round(context.totalSize / 1024)}KB`
-    );
   } catch {
-    contextSpinner.warn('Could not load context, proceeding without');
     context = {
       readme: null,
       packageJson: null,
@@ -1045,6 +1024,56 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
       totalSize: 0,
       projectRoot: process.cwd(),
     };
+  }
+
+  // Info Header with Box Design
+  const boxWidth = 64;
+  const line = '═'.repeat(boxWidth - 2);
+  const thinLine = '─'.repeat(boxWidth - 2);
+  
+  console.log('\n');
+  console.log(chalk.cyan(`╔${line}╗`));
+  console.log(chalk.cyan('║') + chalk.bold.white('  🤖 OpenBotMan Multi-Agent Discussion') + ' '.repeat(boxWidth - 41) + chalk.cyan('║'));
+  console.log(chalk.cyan(`╠${thinLine}╣`));
+  
+  // Topic (truncate if too long)
+  const topicDisplay = options.topic.length > boxWidth - 12 
+    ? options.topic.substring(0, boxWidth - 15) + '...'
+    : options.topic;
+  console.log(chalk.cyan('║') + `  ${chalk.bold('Thema:')} ${chalk.white(topicDisplay)}`.padEnd(boxWidth + 8) + chalk.cyan('║'));
+  
+  // Workspace info (if provided)
+  if (options.workspace || context.sourceFiles.length > 0) {
+    const workspacePath = options.workspace || context.projectRoot;
+    const shortPath = workspacePath.length > 35 
+      ? '...' + workspacePath.slice(-32) 
+      : workspacePath;
+    const filesInfo = `${context.sourceFiles.length} files, ${Math.round(context.totalSize / 1024)}KB`;
+    console.log(chalk.cyan('║') + `  ${chalk.bold('Workspace:')} ${chalk.gray(shortPath)} ${chalk.gray(`(${filesInfo})`)}`.padEnd(boxWidth + 17) + chalk.cyan('║'));
+  }
+  
+  console.log(chalk.cyan(`╠${thinLine}╣`));
+  
+  // Agents
+  console.log(chalk.cyan('║') + chalk.bold('  Agenten:') + ' '.repeat(boxWidth - 12) + chalk.cyan('║'));
+  for (const agent of agents) {
+    const providerLabel = agent.provider === 'claude-cli' ? 'CLI' : 'API';
+    const agentLine = `  ${agent.emoji} ${agent.name.padEnd(12)} ${chalk.gray(`${agent.role} · ${providerLabel}`)}`;
+    console.log(chalk.cyan('║') + agentLine.padEnd(boxWidth + 9) + chalk.cyan('║'));
+  }
+  
+  console.log(chalk.cyan(`╠${thinLine}╣`));
+  
+  // Settings
+  const settingsLine = `  Runden: ${maxRounds}  │  Timeout: ${timeout}s  │  Kontext: ${Math.round(context.totalSize / 1024)}KB`;
+  console.log(chalk.cyan('║') + chalk.gray(settingsLine).padEnd(boxWidth + 9) + chalk.cyan('║'));
+  
+  console.log(chalk.cyan(`╚${line}╝`));
+  console.log('');
+
+  // Context status (already loaded above for header)
+  if (context.sourceFiles.length > 0) {
+    console.log(chalk.green(`✓ Kontext geladen: ${context.sourceFiles.length} Dateien, ${Math.round(context.totalSize / 1024)}KB`));
   }
 
   // Check provider availability
