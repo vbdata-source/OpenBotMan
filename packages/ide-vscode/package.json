@@ -36,6 +36,10 @@
       {
         "command": "openbotman.agents.status",
         "title": "OpenBotMan: Status prüfen"
+      },
+      {
+        "command": "openbotman.startServer",
+        "title": "OpenBotMan: Server starten"
       }
     ],
     "configuration": {

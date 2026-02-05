@@ -43,6 +43,112 @@ function getApiConfig(): { apiUrl: string; apiKey: string } {
 }
 
 /**
+ * Check if server is running
+ */
+async function isServerRunning(): Promise<boolean> {
+  try {
+    const { apiUrl } = getApiConfig();
+    const response = await fetch(`${apiUrl}/health`, { 
+      signal: AbortSignal.timeout(3000) 
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Start the OpenBotMan server in a terminal
+ */
+async function startServer(): Promise<boolean> {
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  
+  // Try to find OpenBotMan in workspace or common locations
+  let serverPath = '';
+  
+  if (workspaceFolders) {
+    // Check if current workspace is OpenBotMan
+    for (const folder of workspaceFolders) {
+      const packageJsonPath = vscode.Uri.joinPath(folder.uri, 'package.json');
+      try {
+        const content = await vscode.workspace.fs.readFile(packageJsonPath);
+        const pkg = JSON.parse(content.toString());
+        if (pkg.name === 'openbotman' || pkg.name === '@openbotman/monorepo') {
+          serverPath = folder.uri.fsPath;
+          break;
+        }
+      } catch {
+        // Not found, continue
+      }
+    }
+  }
+  
+  // If not found in workspace, ask user or use default
+  if (!serverPath) {
+    const defaultPath = process.platform === 'win32' 
+      ? 'C:\\Sources\\OpenBotMan'
+      : '~/OpenBotMan';
+    
+    const result = await vscode.window.showInputBox({
+      prompt: 'OpenBotMan Pfad (wo ist das Projekt?)',
+      value: defaultPath,
+      placeHolder: defaultPath,
+    });
+    
+    if (!result) return false;
+    serverPath = result;
+  }
+  
+  // Create terminal and start server
+  const terminal = vscode.window.createTerminal({
+    name: 'OpenBotMan Server',
+    cwd: serverPath,
+  });
+  
+  terminal.show();
+  
+  // Windows vs Unix command
+  if (process.platform === 'win32') {
+    terminal.sendText('start-api.bat');
+  } else {
+    terminal.sendText('pnpm start');
+  }
+  
+  // Wait a bit for server to start
+  await new Promise(resolve => setTimeout(resolve, 5000));
+  
+  // Check if server is now running
+  const running = await isServerRunning();
+  if (running) {
+    vscode.window.showInformationMessage('OpenBotMan Server gestartet! ✅');
+    statusBarItem.tooltip = 'Connected';
+  }
+  
+  return running;
+}
+
+/**
+ * Ensure server is running, offer to start if not
+ */
+async function ensureServerRunning(): Promise<boolean> {
+  if (await isServerRunning()) {
+    return true;
+  }
+  
+  const action = await vscode.window.showWarningMessage(
+    'OpenBotMan Server läuft nicht!',
+    'Server starten',
+    'Abbrechen'
+  );
+  
+  if (action === 'Server starten') {
+    return await startServer();
+  }
+  
+  return false;
+}
+
+/**
  * Activate extension
  */
 export function activate(context: vscode.ExtensionContext) {
@@ -66,6 +172,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('openbotman.reviewCode', reviewCode),
     vscode.commands.registerCommand('openbotman.analyzeProject', analyzeProject),
     vscode.commands.registerCommand('openbotman.agents.status', showStatus),
+    vscode.commands.registerCommand('openbotman.startServer', startServer),
     vscode.commands.registerCommand('openbotman.refreshJobs', () => jobsProvider.refresh()),
   );
   
@@ -307,6 +414,11 @@ async function runAsyncJob(
   requestBody: Record<string, unknown>,
   title: string
 ): Promise<void> {
+  // Check if server is running
+  if (!await ensureServerRunning()) {
+    return;
+  }
+  
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
@@ -384,6 +496,20 @@ async function runAsyncJob(
  */
 async function showStatus() {
   const { apiUrl, apiKey } = getApiConfig();
+  
+  // Quick check without auto-start offer for status command
+  const running = await isServerRunning();
+  if (!running) {
+    const action = await vscode.window.showWarningMessage(
+      'OpenBotMan Server läuft nicht!',
+      'Server starten',
+      'OK'
+    );
+    if (action === 'Server starten') {
+      await startServer();
+    }
+    return;
+  }
   
   try {
     const response = await fetch(`${apiUrl}/health`);
