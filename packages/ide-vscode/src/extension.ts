@@ -8,6 +8,28 @@ import * as vscode from 'vscode';
 
 let outputChannel: vscode.OutputChannel;
 let statusBarItem: vscode.StatusBarItem;
+let jobsProvider: JobsTreeProvider;
+
+// Active jobs being tracked
+const activeJobs: Map<string, JobInfo> = new Map();
+
+interface AgentInfo {
+  name: string;
+  role: string;
+  status: 'waiting' | 'thinking' | 'complete' | 'error';
+  durationMs?: number;
+}
+
+interface JobInfo {
+  id: string;
+  topic: string;
+  status: string;
+  currentRound?: number;
+  maxRounds?: number;
+  currentAgent?: string;
+  agents?: AgentInfo[];
+  startTime: number;
+}
 
 /**
  * Get configured API settings
@@ -34,40 +56,99 @@ export function activate(context: vscode.ExtensionContext) {
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
   
+  // Jobs tree view
+  jobsProvider = new JobsTreeProvider();
+  vscode.window.registerTreeDataProvider('openbotman.jobs', jobsProvider);
+  
   // Register commands
   context.subscriptions.push(
     vscode.commands.registerCommand('openbotman.discuss', startDiscussion),
     vscode.commands.registerCommand('openbotman.reviewCode', reviewCode),
     vscode.commands.registerCommand('openbotman.analyzeProject', analyzeProject),
     vscode.commands.registerCommand('openbotman.agents.status', showStatus),
+    vscode.commands.registerCommand('openbotman.refreshJobs', () => jobsProvider.refresh()),
   );
   
   outputChannel.appendLine('OpenBotMan extension activated!');
 }
 
 /**
- * Helper to poll job status
+ * Track a job and update TreeView
  */
-async function pollJobStatus(
+function trackJob(jobId: string, topic: string): void {
+  activeJobs.set(jobId, {
+    id: jobId,
+    topic: topic.slice(0, 50) + (topic.length > 50 ? '...' : ''),
+    status: 'pending',
+    startTime: Date.now(),
+  });
+  jobsProvider.refresh();
+}
+
+/**
+ * Update job from API response
+ */
+function updateJobFromApi(jobId: string, data: any): void {
+  const job = activeJobs.get(jobId);
+  if (!job) return;
+  
+  job.status = data.status;
+  job.currentRound = data.currentRound;
+  job.maxRounds = data.maxRounds;
+  job.currentAgent = data.currentAgent;
+  job.agents = data.agents;
+  
+  jobsProvider.refresh();
+}
+
+/**
+ * Remove completed job after delay
+ */
+function removeJobDelayed(jobId: string, delayMs: number = 30000): void {
+  setTimeout(() => {
+    activeJobs.delete(jobId);
+    jobsProvider.refresh();
+  }, delayMs);
+}
+
+/**
+ * Poll job status with progress tracking
+ */
+async function pollJobWithProgress(
   apiUrl: string,
   apiKey: string,
   jobId: string,
   progress: vscode.Progress<{ message?: string }>,
   token: vscode.CancellationToken
-): Promise<{ status: string; result?: string; error?: string; durationMs?: number } | null> {
+): Promise<any> {
   let attempts = 0;
-  const maxAttempts = 120; // 10 minutes max
+  const maxAttempts = 120;
   
   while (attempts < maxAttempts && !token.isCancellationRequested) {
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise(resolve => setTimeout(resolve, 3000)); // 3s poll
     attempts++;
     
     const response = await fetch(`${apiUrl}/api/v1/jobs/${jobId}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
     
-    const job = await response.json() as { status: string; result?: string; error?: string; durationMs?: number };
-    progress.report({ message: `${job.status} (${attempts * 5}s)` });
+    const job = await response.json();
+    
+    // Update our tracked job
+    updateJobFromApi(jobId, job);
+    
+    // Build progress message
+    let msg = job.progress || job.status;
+    if (job.currentAgent) {
+      msg = `${job.currentAgent} denkt nach...`;
+    }
+    if (job.agents) {
+      const done = job.agents.filter((a: any) => a.status === 'complete').length;
+      const total = job.agents.length;
+      msg = `${msg} (${done}/${total} Agents)`;
+    }
+    
+    progress.report({ message: msg });
     
     if (job.status === 'complete' || job.status === 'error') {
       return job;
@@ -113,68 +194,7 @@ async function startDiscussion() {
     requestBody.maxContext = 200;
   }
   
-  await vscode.window.withProgress(
-    {
-      location: vscode.ProgressLocation.Notification,
-      title: 'OpenBotMan Experten diskutieren...',
-      cancellable: true,
-    },
-    async (progress, token) => {
-      try {
-        const { apiUrl, apiKey } = getApiConfig();
-        
-        if (!apiKey) {
-          vscode.window.showErrorMessage('Bitte API Key in den Settings konfigurieren!');
-          return;
-        }
-        
-        const startResponse = await fetch(`${apiUrl}/api/v1/discuss`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify(requestBody),
-        });
-        
-        if (!startResponse.ok) {
-          throw new Error(`HTTP ${startResponse.status}: ${startResponse.statusText}`);
-        }
-        
-        const startData = await startResponse.json() as { id: string };
-        const jobId = startData.id;
-        progress.report({ message: `Job gestartet: ${jobId.slice(0, 8)}...` });
-        
-        const job = await pollJobStatus(apiUrl, apiKey, jobId, progress, token);
-        
-        if (!job) {
-          if (token.isCancellationRequested) {
-            vscode.window.showWarningMessage('Diskussion abgebrochen');
-          } else {
-            throw new Error('Timeout nach 10 Minuten');
-          }
-          return;
-        }
-        
-        if (job.status === 'error') {
-          throw new Error(job.error || 'Unbekannter Fehler');
-        }
-        
-        outputChannel.appendLine(`\n${'='.repeat(60)}`);
-        outputChannel.appendLine(`OpenBotMan Experten-Diskussion`);
-        outputChannel.appendLine(`Frage: ${topic}`);
-        outputChannel.appendLine(`${'='.repeat(60)}\n`);
-        outputChannel.appendLine(job.result || '(Keine Antwort)');
-        outputChannel.appendLine(`\nDauer: ${Math.round((job.durationMs || 0) / 1000)}s`);
-        outputChannel.show();
-        
-        vscode.window.showInformationMessage('Experten-Diskussion abgeschlossen!', 'Ergebnis anzeigen')
-          .then(action => { if (action) outputChannel.show(); });
-        
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        vscode.window.showErrorMessage(`OpenBotMan Fehler: ${message}`);
-        outputChannel.appendLine(`ERROR: ${message}`);
-      }
-    }
-  );
+  await runAsyncJob(topic, requestBody, 'Experten-Diskussion');
 }
 
 /**
@@ -199,7 +219,6 @@ async function reviewCode() {
   
   const fileName = editor.document.fileName.split(/[/\\]/).pop() || 'unknown';
   const language = editor.document.languageId;
-  const isSelection = !selection.isEmpty;
   
   const topic = `Code Review für ${fileName} (${language}):
 
@@ -214,74 +233,18 @@ Analysiere diesen Code auf:
 ${code}
 \`\`\``;
 
-  await vscode.window.withProgress(
-    {
-      location: vscode.ProgressLocation.Notification,
-      title: `Code Review: ${fileName}${isSelection ? ' (Auswahl)' : ''}...`,
-      cancellable: true,
-    },
-    async (progress, token) => {
-      try {
-        const { apiUrl, apiKey } = getApiConfig();
-        
-        if (!apiKey) {
-          vscode.window.showErrorMessage('Bitte API Key in den Settings konfigurieren!');
-          return;
-        }
-        
-        const startResponse = await fetch(`${apiUrl}/api/v1/discuss`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({
-            topic,
-            async: true,
-            timeout: 120,
-            agents: 3,
-          }),
-        });
-        
-        if (!startResponse.ok) {
-          throw new Error(`HTTP ${startResponse.status}: ${startResponse.statusText}`);
-        }
-        
-        const startData = await startResponse.json() as { id: string };
-        const jobId = startData.id;
-        progress.report({ message: 'Experten analysieren Code...' });
-        
-        const job = await pollJobStatus(apiUrl, apiKey, jobId, progress, token);
-        
-        if (!job) {
-          if (token.isCancellationRequested) {
-            vscode.window.showWarningMessage('Code Review abgebrochen');
-          }
-          return;
-        }
-        
-        if (job.status === 'error') {
-          throw new Error(job.error || 'Review fehlgeschlagen');
-        }
-        
-        outputChannel.appendLine(`\n${'='.repeat(60)}`);
-        outputChannel.appendLine(`Code Review: ${fileName}${isSelection ? ' (Auswahl)' : ''}`);
-        outputChannel.appendLine(`Sprache: ${language}`);
-        outputChannel.appendLine(`${'='.repeat(60)}\n`);
-        outputChannel.appendLine(job.result || '(Keine Antwort)');
-        outputChannel.appendLine(`\nDauer: ${Math.round((job.durationMs || 0) / 1000)}s`);
-        outputChannel.show();
-        
-        vscode.window.showInformationMessage('Code Review abgeschlossen!', 'Ergebnis anzeigen')
-          .then(action => { if (action) outputChannel.show(); });
-        
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        vscode.window.showErrorMessage(`Code Review Fehler: ${message}`);
-      }
-    }
-  );
+  const requestBody = {
+    topic,
+    async: true,
+    timeout: 120,
+    agents: 3,
+  };
+
+  await runAsyncJob(topic, requestBody, `Code Review: ${fileName}`);
 }
 
 /**
- * Analyze current project with OpenBotMan experts
+ * Analyze current project
  */
 async function analyzeProject() {
   const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -313,10 +276,31 @@ async function analyzeProject() {
   
   const topic = topics[analysisType.value];
   
+  const requestBody = {
+    topic,
+    workspace: workspacePath,
+    include: ['**/*.ts', '**/*.js', '**/*.cs', '**/*.py', '**/*.java', '**/*.json', '**/*.yaml', '**/*.yml', '**/*.md'],
+    maxContext: 200,
+    async: true,
+    timeout: 180,
+    agents: 3,
+  };
+
+  await runAsyncJob(topic, requestBody, `${analysisType.label} - ${workspaceName}`);
+}
+
+/**
+ * Run an async job with progress tracking
+ */
+async function runAsyncJob(
+  topic: string,
+  requestBody: Record<string, unknown>,
+  title: string
+): Promise<void> {
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: `OpenBotMan analysiert ${workspaceName}...`,
+      title: `OpenBotMan: ${title}`,
       cancellable: true,
     },
     async (progress, token) => {
@@ -331,15 +315,7 @@ async function analyzeProject() {
         const startResponse = await fetch(`${apiUrl}/api/v1/discuss`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({
-            topic,
-            workspace: workspacePath,
-            include: ['**/*.ts', '**/*.js', '**/*.cs', '**/*.py', '**/*.java', '**/*.json', '**/*.yaml', '**/*.yml', '**/*.md'],
-            maxContext: 200,
-            async: true,
-            timeout: 180,
-            agents: 3,
-          }),
+          body: JSON.stringify(requestBody),
         });
         
         if (!startResponse.ok) {
@@ -348,34 +324,46 @@ async function analyzeProject() {
         
         const startData = await startResponse.json() as { id: string };
         const jobId = startData.id;
-        progress.report({ message: 'Experten analysieren...' });
         
-        const job = await pollJobStatus(apiUrl, apiKey, jobId, progress, token);
+        // Track job in TreeView
+        trackJob(jobId, topic);
+        
+        progress.report({ message: 'Job gestartet...' });
+        
+        const job = await pollJobWithProgress(apiUrl, apiKey, jobId, progress, token);
         
         if (!job) {
           if (token.isCancellationRequested) {
-            vscode.window.showWarningMessage('Analyse abgebrochen');
+            vscode.window.showWarningMessage('Abgebrochen');
+          } else {
+            throw new Error('Timeout nach 10 Minuten');
           }
+          activeJobs.delete(jobId);
+          jobsProvider.refresh();
           return;
         }
         
         if (job.status === 'error') {
-          throw new Error(job.error || 'Analyse fehlgeschlagen');
+          throw new Error(job.error || 'Unbekannter Fehler');
         }
         
         outputChannel.appendLine(`\n${'='.repeat(60)}`);
-        outputChannel.appendLine(`${analysisType.label} - ${workspaceName}`);
+        outputChannel.appendLine(title);
         outputChannel.appendLine(`${'='.repeat(60)}\n`);
         outputChannel.appendLine(job.result || '(Keine Antwort)');
         outputChannel.appendLine(`\nDauer: ${Math.round((job.durationMs || 0) / 1000)}s`);
         outputChannel.show();
         
-        vscode.window.showInformationMessage(`${analysisType.label} abgeschlossen!`, 'Ergebnis anzeigen')
+        vscode.window.showInformationMessage(`${title} abgeschlossen!`, 'Ergebnis anzeigen')
           .then(action => { if (action) outputChannel.show(); });
+        
+        // Remove job from TreeView after 30s
+        removeJobDelayed(jobId, 30000);
         
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        vscode.window.showErrorMessage(`Analyse-Fehler: ${message}`);
+        vscode.window.showErrorMessage(`OpenBotMan Fehler: ${message}`);
+        outputChannel.appendLine(`ERROR: ${message}`);
       }
     }
   );
@@ -412,6 +400,92 @@ async function showStatus() {
     const message = error instanceof Error ? error.message : String(error);
     vscode.window.showErrorMessage(`Verbindung fehlgeschlagen: ${message}`);
     statusBarItem.tooltip = 'Nicht verbunden';
+  }
+}
+
+/**
+ * Jobs Tree Data Provider
+ */
+class JobsTreeProvider implements vscode.TreeDataProvider<JobTreeItem> {
+  private _onDidChangeTreeData = new vscode.EventEmitter<JobTreeItem | undefined>();
+  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+  
+  refresh(): void {
+    this._onDidChangeTreeData.fire(undefined);
+  }
+  
+  getTreeItem(element: JobTreeItem): vscode.TreeItem {
+    return element;
+  }
+  
+  getChildren(element?: JobTreeItem): JobTreeItem[] {
+    if (!element) {
+      // Root level: show jobs
+      if (activeJobs.size === 0) {
+        return [new JobTreeItem('Keine aktiven Jobs', '', 'none', vscode.TreeItemCollapsibleState.None)];
+      }
+      
+      return Array.from(activeJobs.values()).map(job => {
+        const hasAgents = job.agents && job.agents.length > 0;
+        return new JobTreeItem(
+          job.topic,
+          job.id,
+          job.status,
+          hasAgents ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None,
+          job
+        );
+      });
+    }
+    
+    // Child level: show agents
+    if (element.job?.agents) {
+      return element.job.agents.map(agent => {
+        const icon = agent.status === 'thinking' ? '$(sync~spin)' :
+                     agent.status === 'complete' ? '$(check)' :
+                     agent.status === 'error' ? '$(error)' : '$(clock)';
+        const duration = agent.durationMs ? ` (${Math.round(agent.durationMs / 1000)}s)` : '';
+        return new JobTreeItem(
+          `${icon} ${agent.name}${duration}`,
+          agent.name,
+          agent.status,
+          vscode.TreeItemCollapsibleState.None
+        );
+      });
+    }
+    
+    return [];
+  }
+}
+
+/**
+ * Job Tree Item
+ */
+class JobTreeItem extends vscode.TreeItem {
+  constructor(
+    public readonly label: string,
+    public readonly jobId: string,
+    public readonly status: string,
+    public readonly collapsibleState: vscode.TreeItemCollapsibleState,
+    public readonly job?: JobInfo
+  ) {
+    super(label, collapsibleState);
+    
+    // Set icon based on status
+    if (status === 'running' || status === 'pending') {
+      this.iconPath = new vscode.ThemeIcon('sync~spin');
+    } else if (status === 'complete') {
+      this.iconPath = new vscode.ThemeIcon('check');
+    } else if (status === 'error') {
+      this.iconPath = new vscode.ThemeIcon('error');
+    } else if (status === 'none') {
+      this.iconPath = new vscode.ThemeIcon('info');
+    }
+    
+    // Description shows status
+    if (job) {
+      const elapsed = Math.round((Date.now() - job.startTime) / 1000);
+      this.description = `${status} (${elapsed}s)`;
+    }
   }
 }
 

@@ -69,7 +69,24 @@
         "key": "ctrl+shift+alt+o",
         "mac": "cmd+shift+alt+o"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "openbotman",
+          "title": "OpenBotMan",
+          "icon": "$(robot)"
+        }
+      ]
+    },
+    "views": {
+      "openbotman": [
+        {
+          "id": "openbotman.jobs",
+          "name": "Aktive Jobs"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

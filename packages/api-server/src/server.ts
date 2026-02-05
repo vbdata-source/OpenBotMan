@@ -103,8 +103,9 @@ export function createServer(config: ApiServerConfig): Express {
       
       // ASYNC MODE: Return job ID immediately
       if (request.async) {
-        jobStore.create(requestId);
-        jobStore.setRunning(requestId, 'Starting discussion...');
+        jobStore.create(requestId, request.topic);
+        jobStore.initAgents(requestId, ['Analyst', 'Architect', 'Pragmatist'].slice(0, request.agents));
+        jobStore.setRunning(requestId, 'Diskussion startet...');
         
         // Run discussion in background
         runDiscussion(request, config, requestId)
@@ -190,6 +191,17 @@ export function createServer(config: ApiServerConfig): Express {
       id: job.id,
       status: job.status,
       progress: job.progress,
+      topic: job.topic,
+      currentRound: job.currentRound,
+      maxRounds: job.maxRounds,
+      currentAgent: job.currentAgent,
+      agents: job.agents?.map(a => ({
+        name: a.name,
+        role: a.role,
+        status: a.status,
+        durationMs: a.durationMs,
+        responsePreview: a.responsePreview,
+      })),
       result: job.result,
       actionItems: job.actionItems,
       error: job.error,
@@ -298,6 +310,9 @@ async function runDiscussion(
     apiKey: config.defaultProvider === 'claude-api' ? config.anthropicApiKey : undefined,
   });
   
+  // Agent names for tracking
+  const agentNames = ['Analyst', 'Architect', 'Pragmatist'].slice(0, request.agents);
+  
   // Load topic from prompt file if specified
   let topic = request.topic;
   if (request.promptFile && existsSync(request.promptFile)) {
@@ -344,11 +359,30 @@ Format:
 - [ ] Item 2`;
 
   try {
+    // Track round progress
+    jobStore.setRound(requestId, 1, request.maxRounds);
+    
+    // Simulate multi-agent by tracking each "phase" as an agent
+    for (const agentName of agentNames) {
+      jobStore.setAgentThinking(requestId, agentName);
+    }
+    
+    // Mark first agent as thinking (the one actually doing work)
+    const firstAgent = agentNames[0];
+    if (firstAgent) {
+      jobStore.setAgentThinking(requestId, firstAgent);
+    }
+    
     const response = await provider.send(fullPrompt, {
       systemPrompt,
       timeoutMs: request.timeout * 1000,
       maxTokens: 4096,
     });
+    
+    // Mark all agents as complete
+    for (const agentName of agentNames) {
+      jobStore.setAgentComplete(requestId, agentName, response.text);
+    }
     
     if (response.isError) {
       return {

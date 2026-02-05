@@ -2,9 +2,23 @@
  * Async Job Queue for Long-Running Discussions
  * 
  * Allows clients to start a job, poll for status, and retrieve results.
+ * Includes real-time agent progress tracking.
  */
 
 export type JobStatus = 'pending' | 'running' | 'complete' | 'error' | 'timeout';
+
+export type AgentStatus = 'waiting' | 'thinking' | 'complete' | 'error';
+
+export interface AgentProgress {
+  id: string;
+  name: string;
+  role: string;
+  status: AgentStatus;
+  startedAt?: Date;
+  completedAt?: Date;
+  durationMs?: number;
+  responsePreview?: string; // First 100 chars of response
+}
 
 export interface Job {
   id: string;
@@ -17,6 +31,13 @@ export interface Job {
   updatedAt: Date;
   completedAt?: Date;
   durationMs?: number;
+  
+  // Agent tracking
+  topic?: string;
+  currentRound?: number;
+  maxRounds?: number;
+  agents?: AgentProgress[];
+  currentAgent?: string;
 }
 
 /**
@@ -28,13 +49,14 @@ class JobStore {
   private maxJobs = 100;
   private jobTTL = 30 * 60 * 1000; // 30 minutes
   
-  create(id: string): Job {
+  create(id: string, topic?: string): Job {
     // Clean up old jobs
     this.cleanup();
     
     const job: Job = {
       id,
       status: 'pending',
+      topic,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -55,27 +77,141 @@ class JobStore {
     return job;
   }
   
+  /**
+   * Initialize agents for a job
+   */
+  initAgents(id: string, agentNames: string[]): void {
+    const agents: AgentProgress[] = agentNames.map((name, i) => ({
+      id: `agent-${i}`,
+      name,
+      role: this.getRoleFromName(name),
+      status: 'waiting',
+    }));
+    
+    this.update(id, { agents, currentRound: 0, maxRounds: 5 });
+  }
+  
+  /**
+   * Set agent as currently thinking
+   */
+  setAgentThinking(id: string, agentName: string): void {
+    const job = this.jobs.get(id);
+    if (!job?.agents) return;
+    
+    const agent = job.agents.find(a => a.name === agentName);
+    if (agent) {
+      agent.status = 'thinking';
+      agent.startedAt = new Date();
+    }
+    
+    this.update(id, { 
+      currentAgent: agentName,
+      progress: `${agentName} denkt nach...`
+    });
+  }
+  
+  /**
+   * Set agent as complete
+   */
+  setAgentComplete(id: string, agentName: string, responsePreview?: string): void {
+    const job = this.jobs.get(id);
+    if (!job?.agents) return;
+    
+    const agent = job.agents.find(a => a.name === agentName);
+    if (agent) {
+      agent.status = 'complete';
+      agent.completedAt = new Date();
+      if (agent.startedAt) {
+        agent.durationMs = agent.completedAt.getTime() - agent.startedAt.getTime();
+      }
+      if (responsePreview) {
+        agent.responsePreview = responsePreview.slice(0, 100);
+      }
+    }
+    
+    this.update(id, { currentAgent: undefined });
+  }
+  
+  /**
+   * Set current round
+   */
+  setRound(id: string, round: number, maxRounds?: number): void {
+    const job = this.jobs.get(id);
+    if (!job) return;
+    
+    // Reset agent statuses for new round (except keeping history)
+    if (job.agents && round > (job.currentRound ?? 0)) {
+      for (const agent of job.agents) {
+        agent.status = 'waiting';
+        agent.startedAt = undefined;
+        agent.completedAt = undefined;
+        agent.durationMs = undefined;
+      }
+    }
+    
+    this.update(id, { 
+      currentRound: round, 
+      maxRounds: maxRounds ?? job.maxRounds,
+      progress: `Runde ${round}/${maxRounds ?? job.maxRounds}`
+    });
+  }
+  
   setRunning(id: string, progress?: string): void {
     this.update(id, { status: 'running', progress });
   }
   
   setComplete(id: string, result: string, actionItems: string[], durationMs: number): void {
+    const job = this.jobs.get(id);
+    
+    // Mark all agents as complete
+    if (job?.agents) {
+      for (const agent of job.agents) {
+        if (agent.status !== 'complete') {
+          agent.status = 'complete';
+        }
+      }
+    }
+    
     this.update(id, {
       status: 'complete',
       result,
       actionItems,
       durationMs,
       completedAt: new Date(),
+      currentAgent: undefined,
     });
   }
   
   setError(id: string, error: string, durationMs?: number): void {
+    const job = this.jobs.get(id);
+    
+    // Mark current agent as error
+    if (job?.currentAgent && job.agents) {
+      const agent = job.agents.find(a => a.name === job.currentAgent);
+      if (agent) {
+        agent.status = 'error';
+      }
+    }
+    
     this.update(id, {
       status: 'error',
       error,
       durationMs,
       completedAt: new Date(),
+      currentAgent: undefined,
     });
+  }
+  
+  private getRoleFromName(name: string): string {
+    const roles: Record<string, string> = {
+      'Architect': 'System Design',
+      'Security': 'Security Expert',
+      'Performance': 'Performance',
+      'Pragmatist': 'Practical Solutions',
+      'Critic': 'Devil\'s Advocate',
+      'Innovator': 'Creative Ideas',
+    };
+    return roles[name] || 'Expert';
   }
   
   private cleanup(): void {
