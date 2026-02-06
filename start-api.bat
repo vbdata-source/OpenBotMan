@@ -1,9 +1,8 @@
 @echo off
-setlocal EnableDelayedExpansion
 :: OpenBotMan API Server Starter
 :: ==============================
 
-cd /d C:\Sources\OpenBotMan\packages\api-server
+cd /d C:\Sources\OpenBotMan
 
 :: API Key für Authentifizierung
 set OPENBOTMAN_API_KEYS=local-dev-key
@@ -16,20 +15,11 @@ echo   URL:     http://localhost:8080
 echo   API Key: local-dev-key
 echo ========================================
 echo.
-
-:: Prüfe ob pnpm verfügbar ist
-where pnpm >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo FEHLER: pnpm nicht gefunden!
-    echo Bitte installieren: npm install -g pnpm
-    pause
-    exit /b 1
-)
-
 echo Starte Server...
 echo.
 
-pnpm start
+:: Starte explizit den API-Server (nicht orchestrator!)
+pnpm --filter @openbotman/api-server start
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
