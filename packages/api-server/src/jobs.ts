@@ -81,16 +81,16 @@ class JobStore {
   }
   
   /**
-   * Initialize agents for a job
+   * Initialize agents for a job (with individual model/provider per agent)
    */
-  initAgents(id: string, agentNames: string[], model?: string, provider?: string): void {
-    const agents: AgentProgress[] = agentNames.map((name, i) => ({
+  initAgents(id: string, agentConfigs: Array<{ name: string; model?: string; provider?: string }>): void {
+    const agents: AgentProgress[] = agentConfigs.map((config, i) => ({
       id: `agent-${i}`,
-      name,
-      role: this.getRoleFromName(name),
+      name: config.name,
+      role: this.getRoleFromName(config.name),
       status: 'waiting',
-      model,
-      provider,
+      model: config.model,
+      provider: config.provider,
     }));
     
     this.update(id, { agents, currentRound: 0, maxRounds: 5 });

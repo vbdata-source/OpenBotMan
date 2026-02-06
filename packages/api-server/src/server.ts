@@ -133,11 +133,12 @@ export function createServer(config: ApiServerConfig): Express {
         
         jobStore.create(requestId, request.topic);
         
-        // Initialize job with agent names and their individual models
-        const agentNames = agentConfigs.map(a => a.name);
-        const defaultModel = agentConfigs[0]?.model ?? config.defaultModel;
-        const defaultProvider = agentConfigs[0]?.provider ?? config.defaultProvider;
-        jobStore.initAgents(requestId, agentNames, defaultModel, defaultProvider);
+        // Initialize job with agent names and their individual models/providers
+        jobStore.initAgents(requestId, agentConfigs.map(a => ({
+          name: a.name,
+          model: a.model,
+          provider: a.provider,
+        })));
         jobStore.setRunning(requestId, 'Diskussion startet...');
         
         // Run discussion in background
