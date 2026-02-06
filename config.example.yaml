@@ -1,7 +1,7 @@
 # ============================================
 # OpenBotMan Configuration
 # ============================================
-# Multi-Provider Setup mit Gemini + Claude
+# Nur was tatsächlich genutzt wird!
 #
 # Provider-Optionen:
 #   claude-cli  - Claude via CLI (Pro-Abo, keine Kosten)
@@ -11,7 +11,7 @@
 #   ollama      - Lokale LLMs (Ollama Server)
 
 # ============================================
-# Discussion Settings (für 'pnpm cli discuss')
+# Discussion Settings
 # ============================================
 discussion:
   maxRounds: 10
@@ -20,69 +20,60 @@ discussion:
   showAgentConfig: true
 
   agents:
-    # Gemini als Strategic Planner (schnell, gut für Planung)
+    # Gemini als Strategic Planner
     - id: planner
       role: architect
       name: "Strategic Planner"
       emoji: "🎯"
-      color: blue
       provider: google
       model: gemini-2.0-flash
       apiKey: ${GOOGLE_API_KEY}
       systemPrompt: |
-        Du bist ein strategischer Planner und Solution Architect mit Fokus auf Gesamtbild und langfristige Planung.
+        Du bist ein strategischer Planner und Solution Architect.
 
         DEINE PERSPEKTIVE:
         - Gesamtarchitektur und strategische Ausrichtung
         - Trade-offs zwischen verschiedenen Ansätzen
         - Priorisierung und Roadmap-Planung
         - Risikobewertung und Alternativen
-        - Zeit- und Ressourcenschätzungen
 
         DEIN STIL:
         - Strategisch und ausgewogen
         - Zeige Architektur-Diagramme (ASCII) wenn hilfreich
         - Bewerte Vor- und Nachteile objektiv
-        - Gib klare Empfehlungen mit Begründung
         - Denke an MVP vs. langfristige Vision
 
-        Antworte auf Deutsch. Strukturiere mit Überschriften.
-        Fasse am Ende deine Position klar zusammen.
+        Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
 
     # Claude als Senior Developer (CLI - nutzt dein Pro-Abo)
     - id: coder
       role: coder
       name: "Senior Developer"
       emoji: "💻"
-      color: cyan
       provider: claude-cli
       model: claude-sonnet-4-20250514
       systemPrompt: |
-        Du bist ein erfahrener Senior Software-Entwickler mit 15+ Jahren Erfahrung.
+        Du bist ein erfahrener Senior Software-Entwickler.
 
         DEINE PERSPEKTIVE:
         - Implementierungs-Details und Code-Qualität
-        - Praktische Umsetzbarkeit und Aufwandsschätzung
-        - Performance, Skalierbarkeit und Effizienz
-        - Clean Code Prinzipien und Design Patterns
-        - Konkrete Code-Vorschläge mit Beispielen
+        - Praktische Umsetzbarkeit und Aufwand
+        - Performance und Skalierbarkeit
+        - Konkrete Code-Vorschläge
 
         DEIN STIL:
         - Pragmatisch und lösungsorientiert
         - Zeige Code-Beispiele wenn sinnvoll
         - Denke an Edge-Cases und Error-Handling
-        - Bewerte Aufwand realistisch (Stunden/Tage)
-        - Hinterfrage zu komplexe Lösungen
+        - Bewerte Aufwand realistisch
 
-        Antworte auf Deutsch. Sei konkret und präzise.
-        Fasse am Ende deine Position klar zusammen.
+        Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
 
-    # Claude als Security & Quality Expert (CLI - nutzt dein Pro-Abo)
+    # Claude als Security Expert (CLI - nutzt dein Pro-Abo)
     - id: reviewer
       role: reviewer
       name: "Security & Quality Expert"
       emoji: "🔍"
-      color: yellow
       provider: claude-cli
       model: claude-sonnet-4-20250514
       systemPrompt: |
@@ -90,225 +81,17 @@ discussion:
 
         DEINE PERSPEKTIVE:
         - Sicherheitslücken und Vulnerabilities
-        - Performance-Bottlenecks und Memory-Leaks
+        - Performance-Bottlenecks
         - Edge-Cases und Fehlerszenarien
         - Code-Qualität und Wartbarkeit
-        - Compliance und Best Practices
 
         DEIN STIL:
         - Kritisch aber konstruktiv
         - Zeige konkrete Risiken mit Beispielen
         - Schlage Mitigationen vor
-        - Priorisiere: Kritisch > Hoch > Mittel > Niedrig
-        - Denke an OWASP, GDPR, SOC2
+        - Priorisiere nach Schweregrad
 
-        Antworte auf Deutsch. Sei direkt und präzise.
-        Fasse am Ende deine Position klar zusammen.
-
-# ============================================
-# Orchestrator Settings (für Workflows)
-# ============================================
-orchestrator:
-  provider: claude-cli
-  model: claude-sonnet-4-20250514
-  maxIterations: 10
-  agentTimeout: 120000
-  autonomous: false
-  humanApproval: true
-
-# ============================================
-# Knowledge Base Settings
-# ============================================
-knowledgeBase:
-  enabled: true
-  storagePath: ./data/knowledge
-  autoLearn: true
-  vectorDb: memory
-  embeddingModel: text-embedding-3-small
-
-# ============================================
-# Agent Pool (für Orchestrator/Workflows)
-# ============================================
-agents:
-  # Claude Agent (via CLI - nutzt dein Pro-Abo!)
-  - id: claude_cli
-    name: Claude (CLI)
-    role: coder
-    provider: claude-cli
-    model: claude-sonnet-4-20250514
-    enabled: true
-    systemPrompt: |
-      You are an expert software developer.
-      Write clean, well-documented code.
-      Follow best practices and design patterns.
-    capabilities:
-      code: true
-      review: true
-      filesystem: true
-      shell: true
-      web: false
-      mcp: true
-      discussion: true
-      decisions: true
-    maxTokens: 4096
-    temperature: 0.7
-
-  # Gemini Agent (für Planung und Research)
-  - id: gemini
-    name: Gemini
-    role: planner
-    provider: google
-    model: gemini-2.0-flash
-    apiKey: ${GOOGLE_API_KEY}
-    enabled: true
-    systemPrompt: |
-      You are a strategic planner and researcher.
-      Analyze problems from multiple perspectives.
-      Provide balanced recommendations.
-    capabilities:
-      code: false
-      review: true
-      filesystem: false
-      shell: false
-      web: true
-      mcp: false
-      discussion: true
-      decisions: true
-    maxTokens: 4096
-    temperature: 0.5
-
-  # GPT-4 Agent (optional)
-  - id: gpt4
-    name: GPT-4
-    role: tester
-    provider: openai
-    model: gpt-4-turbo-preview
-    apiKey: ${OPENAI_API_KEY}
-    enabled: false
-    systemPrompt: |
-      You are an expert at testing and documentation.
-      Write comprehensive tests and clear documentation.
-    capabilities:
-      code: true
-      review: false
-      filesystem: true
-      shell: true
-      web: false
-      mcp: false
-      discussion: true
-      decisions: false
-    maxTokens: 4096
-    temperature: 0.3
-
-  # Ollama Local Agent (schnell, gratis, offline)
-  - id: ollama
-    name: Local LLM
-    role: research
-    provider: ollama
-    model: codellama:13b
-    enabled: false
-    api:
-      baseUrl: http://localhost:11434
-    systemPrompt: |
-      You are a helpful assistant for quick queries.
-      Provide concise, accurate answers.
-    capabilities:
-      code: true
-      review: false
-      filesystem: false
-      shell: false
-      web: false
-      mcp: false
-      discussion: false
-      decisions: false
-    maxTokens: 2048
-    temperature: 0.5
-
-# ============================================
-# Workflows
-# ============================================
-workflows:
-  - id: code_review
-    name: Code Review Workflow
-    description: Full code review with multiple agents
-    steps:
-      - id: analyze
-        name: Analyze Code
-        role: coder
-        task: Analyze the code structure and identify areas for review
-        output: analysis
-      - id: review
-        name: Security Review
-        role: reviewer
-        task: Review the code for security issues and best practices
-        inputs: [analysis]
-        output: review
-      - id: test
-        name: Generate Tests
-        role: tester
-        task: Generate comprehensive tests based on the analysis
-        inputs: [analysis, review]
-        output: tests
-    maxIterations: 2
-
-  - id: feature_development
-    name: Feature Development Workflow
-    description: Full feature development from spec to tests
-    steps:
-      - id: plan
-        name: Create Plan
-        role: architect
-        task: Create a detailed implementation plan
-        output: plan
-      - id: implement
-        name: Implement Feature
-        role: coder
-        task: Implement the feature according to the plan
-        inputs: [plan]
-        output: implementation
-        maxIterations: 3
-      - id: review
-        name: Code Review
-        role: reviewer
-        task: Review the implementation
-        inputs: [plan, implementation]
-        output: review
-      - id: test
-        name: Write Tests
-        role: tester
-        task: Write comprehensive tests
-        inputs: [implementation]
-        output: tests
-
-# ============================================
-# Quality Gates
-# ============================================
-qualityGates:
-  - name: Code Coverage
-    type: coverage
-    threshold: 80
-    required: true
-  - name: Complexity
-    type: complexity
-    threshold: 15
-    required: false
-  - name: Security Scan
-    type: security
-    threshold: 0
-    required: true
-
-# ============================================
-# Security Settings
-# ============================================
-security:
-  enabled: true
-  rateLimit:
-    maxRequests: 100
-    windowSeconds: 60
-  audit:
-    enabled: true
-    level: normal
-    retentionDays: 90
+        Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
 
 # ============================================
 # Logging
@@ -316,8 +99,12 @@ security:
 logging:
   level: info
   format: pretty
-  file:
-    enabled: false
-    path: ./data/logs/openbotman.log
-    maxSize: 10m
-    maxFiles: 5
+
+# ============================================
+# Security (API Server)
+# ============================================
+security:
+  enabled: true
+  rateLimit:
+    maxRequests: 100
+    windowSeconds: 60
