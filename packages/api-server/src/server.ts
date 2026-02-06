@@ -187,6 +187,9 @@ export function createServer(config: ApiServerConfig): Express {
       return;
     }
     
+    // Check if verbose mode requested
+    const verbose = req.query.verbose === 'true' || req.query.verbose === '1';
+    
     res.json({
       id: job.id,
       status: job.status,
@@ -201,6 +204,8 @@ export function createServer(config: ApiServerConfig): Express {
         status: a.status,
         durationMs: a.durationMs,
         responsePreview: a.responsePreview,
+        // Include full response in verbose mode
+        ...(verbose && a.fullResponse ? { fullResponse: a.fullResponse } : {}),
       })),
       result: job.result,
       actionItems: job.actionItems,

@@ -18,7 +18,12 @@ interface AgentInfo {
   role: string;
   status: 'waiting' | 'thinking' | 'complete' | 'error';
   durationMs?: number;
+  responsePreview?: string;
+  fullResponse?: string;
 }
+
+// Track which agents we've already output
+const outputtedAgents: Set<string> = new Set();
 
 interface JobInfo {
   id: string;
@@ -39,6 +44,7 @@ function getApiConfig(): {
   apiKey: string; 
   timeoutMinutes: number;
   pollIntervalSeconds: number;
+  verboseLevel: number;
 } {
   const config = vscode.workspace.getConfiguration('openbotman');
   return {
@@ -46,6 +52,7 @@ function getApiConfig(): {
     apiKey: config.get<string>('apiKey') || '',
     timeoutMinutes: config.get<number>('timeoutMinutes') || 60,
     pollIntervalSeconds: config.get<number>('pollIntervalSeconds') || 3,
+    verboseLevel: config.get<number>('verboseLevel') ?? 1,
   };
 }
 
@@ -233,11 +240,23 @@ async function pollJobWithProgress(
   apiKey: string,
   jobId: string,
   progress: vscode.Progress<{ message?: string }>,
-  token: vscode.CancellationToken
+  token: vscode.CancellationToken,
+  jobTitle: string
 ): Promise<any> {
-  const { timeoutMinutes, pollIntervalSeconds } = getApiConfig();
+  const { timeoutMinutes, pollIntervalSeconds, verboseLevel } = getApiConfig();
   const pollIntervalMs = pollIntervalSeconds * 1000;
   const maxAttempts = Math.ceil((timeoutMinutes * 60) / pollIntervalSeconds);
+  
+  // Clear outputted agents tracker for this job
+  outputtedAgents.clear();
+  
+  // Show header in verbose mode
+  if (verboseLevel >= 1) {
+    outputChannel.appendLine(`\n${'='.repeat(60)}`);
+    outputChannel.appendLine(`🚀 ${jobTitle} - Live Output`);
+    outputChannel.appendLine(`${'='.repeat(60)}\n`);
+    outputChannel.show(true); // Show but don't take focus
+  }
   
   let attempts = 0;
   
@@ -245,7 +264,9 @@ async function pollJobWithProgress(
     await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
     attempts++;
     
-    const response = await fetch(`${apiUrl}/api/v1/jobs/${jobId}`, {
+    // Request verbose data if level >= 1
+    const verboseParam = verboseLevel >= 1 ? '?verbose=true' : '';
+    const response = await fetch(`${apiUrl}/api/v1/jobs/${jobId}${verboseParam}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
     
@@ -263,6 +284,40 @@ async function pollJobWithProgress(
     
     // Update our tracked job
     updateJobFromApi(jobId, job);
+    
+    // Verbose output: Show agent results as they complete
+    if (verboseLevel >= 1 && job.agents) {
+      for (const agent of job.agents) {
+        const agentKey = `${jobId}-${agent.name}`;
+        
+        if (agent.status === 'complete' && !outputtedAgents.has(agentKey)) {
+          outputtedAgents.add(agentKey);
+          
+          outputChannel.appendLine(`\n${'─'.repeat(40)}`);
+          outputChannel.appendLine(`✅ ${agent.name} (${agent.durationMs ? Math.round(agent.durationMs / 1000) + 's' : ''})`);
+          outputChannel.appendLine(`${'─'.repeat(40)}`);
+          
+          if (verboseLevel >= 2 && agent.fullResponse) {
+            // Level 2: Show full response
+            outputChannel.appendLine(agent.fullResponse);
+          } else if (agent.responsePreview) {
+            // Level 1: Show preview
+            outputChannel.appendLine(`${agent.responsePreview}...`);
+          }
+          
+          outputChannel.appendLine('');
+        }
+        
+        // Show when agent starts thinking
+        if (verboseLevel >= 2 && agent.status === 'thinking') {
+          const thinkingKey = `${jobId}-${agent.name}-thinking`;
+          if (!outputtedAgents.has(thinkingKey)) {
+            outputtedAgents.add(thinkingKey);
+            outputChannel.appendLine(`\n⏳ ${agent.name} denkt nach...`);
+          }
+        }
+      }
+    }
     
     // Build progress message
     let msg = job.progress || job.status;
@@ -462,7 +517,7 @@ async function runAsyncJob(
         
         progress.report({ message: 'Job gestartet...' });
         
-        const job = await pollJobWithProgress(apiUrl, apiKey, jobId, progress, token);
+        const job = await pollJobWithProgress(apiUrl, apiKey, jobId, progress, token, title);
         
         if (!job) {
           // Update job status in TreeView

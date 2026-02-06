@@ -18,6 +18,7 @@ export interface AgentProgress {
   completedAt?: Date;
   durationMs?: number;
   responsePreview?: string; // First 100 chars of response
+  fullResponse?: string; // Full response for verbose mode
 }
 
 export interface Job {
@@ -113,7 +114,7 @@ class JobStore {
   /**
    * Set agent as complete
    */
-  setAgentComplete(id: string, agentName: string, responsePreview?: string): void {
+  setAgentComplete(id: string, agentName: string, fullResponse?: string): void {
     const job = this.jobs.get(id);
     if (!job?.agents) return;
     
@@ -124,8 +125,9 @@ class JobStore {
       if (agent.startedAt) {
         agent.durationMs = agent.completedAt.getTime() - agent.startedAt.getTime();
       }
-      if (responsePreview) {
-        agent.responsePreview = responsePreview.slice(0, 100);
+      if (fullResponse) {
+        agent.responsePreview = fullResponse.slice(0, 100);
+        agent.fullResponse = fullResponse;
       }
     }
     

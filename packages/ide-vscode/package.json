@@ -68,6 +68,17 @@
           "minimum": 1,
           "maximum": 30,
           "description": "Poll-Intervall in Sekunden (Default: 3)"
+        },
+        "openbotman.verboseLevel": {
+          "type": "number",
+          "default": 1,
+          "enum": [0, 1, 2],
+          "enumDescriptions": [
+            "Nur Endergebnis anzeigen",
+            "Agent-Resultate live anzeigen",
+            "Alle Zwischengedanken anzeigen"
+          ],
+          "description": "Verbose-Level: 0=Nur Ergebnis, 1=Agent-Resultate, 2=Alles"
         }
       }
     },
