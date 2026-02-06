@@ -20,6 +20,8 @@ interface AgentInfo {
   durationMs?: number;
   responsePreview?: string;
   fullResponse?: string;
+  model?: string;
+  provider?: string;
 }
 
 // Track which agents we've already output
@@ -777,14 +779,26 @@ class JobsTreeProvider implements vscode.TreeDataProvider<JobTreeItem> {
       return element.job.agents.map(agent => {
         const duration = agent.durationMs ? `${Math.round(agent.durationMs / 1000)}s` : '';
         
-        // Status text
+        // Get short model name (e.g., "gemini-2.0-flash" → "gemini", "claude-sonnet-4" → "sonnet")
+        let modelShort = '';
+        if (agent.model) {
+          if (agent.model.includes('gemini')) modelShort = 'Gemini';
+          else if (agent.model.includes('sonnet')) modelShort = 'Sonnet';
+          else if (agent.model.includes('opus')) modelShort = 'Opus';
+          else if (agent.model.includes('haiku')) modelShort = 'Haiku';
+          else if (agent.model.includes('gpt-4')) modelShort = 'GPT-4';
+          else if (agent.model.includes('gpt-3')) modelShort = 'GPT-3.5';
+          else modelShort = agent.model.split('/').pop()?.split('-')[0] || '';
+        }
+        
+        // Status text with model
         let statusText = '';
         if (agent.status === 'thinking') {
-          statusText = 'denkt nach...';
+          statusText = modelShort ? `${modelShort} · denkt nach...` : 'denkt nach...';
         } else if (agent.status === 'complete' && duration) {
-          statusText = duration;
+          statusText = modelShort ? `${modelShort} · ${duration}` : duration;
         } else if (agent.status === 'waiting') {
-          statusText = 'wartet';
+          statusText = modelShort ? `${modelShort} · wartet` : 'wartet';
         } else if (agent.status === 'error') {
           statusText = 'Fehler';
         }
