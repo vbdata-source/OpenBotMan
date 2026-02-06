@@ -879,6 +879,38 @@ function generateMarkdown(
 }
 
 /**
+ * Find project root (where config.yaml or package.json with "openbotman" is)
+ */
+function findProjectRoot(): string {
+  const searchPaths = [
+    process.cwd(),
+    join(process.cwd(), '..'),
+    join(process.cwd(), '..', '..'),
+  ];
+  
+  for (const path of searchPaths) {
+    // Check for config.yaml (OpenBotMan project marker)
+    if (existsSync(join(path, 'config.yaml'))) {
+      return path;
+    }
+    // Check for package.json with openbotman
+    const pkgPath = join(path, 'package.json');
+    if (existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+        if (pkg.name === 'openbotman' || pkg.name?.includes('openbotman')) {
+          return path;
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    }
+  }
+  
+  return process.cwd(); // Fallback
+}
+
+/**
  * Save markdown to file
  */
 function saveMarkdown(markdown: string, topic: string, outputDir?: string): string {
@@ -890,7 +922,9 @@ function saveMarkdown(markdown: string, topic: string, outputDir?: string): stri
     .replace(/^-+|-+$/g, '')
     .slice(0, 50);
   
-  const dir = outputDir || join(process.cwd(), 'discussions');
+  // Default: save in project root/discussions, not packages/cli/discussions
+  const projectRoot = findProjectRoot();
+  const dir = outputDir || join(projectRoot, 'discussions');
   const filename = `${dateStr}_${slug}.md`;
   const filepath = join(dir, filename);
   
