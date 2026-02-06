@@ -229,7 +229,7 @@ async function pollJobWithProgress(
   token: vscode.CancellationToken
 ): Promise<any> {
   let attempts = 0;
-  const maxAttempts = 120;
+  const maxAttempts = 400; // 400 × 3s = 20 Minuten max
   
   while (attempts < maxAttempts && !token.isCancellationRequested) {
     await new Promise(resolve => setTimeout(resolve, 3000)); // 3s poll
@@ -465,7 +465,7 @@ async function runAsyncJob(
           if (token.isCancellationRequested) {
             vscode.window.showWarningMessage('Abgebrochen');
           } else {
-            vscode.window.showErrorMessage('Timeout nach 10 Minuten');
+            vscode.window.showErrorMessage('Timeout nach 20 Minuten');
           }
           
           // Remove after showing for a moment
