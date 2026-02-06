@@ -81,7 +81,7 @@ if (!apiKeys || apiKeys.length === 0) {
   process.exit(1);
 }
 
-const provider = getArg('provider', 'claude-cli') as ApiServerConfig['defaultProvider'];
+const provider = getArg('provider', process.env.OPENBOTMAN_DEFAULT_PROVIDER ?? 'claude-cli') as ApiServerConfig['defaultProvider'];
 
 // Validate provider
 if (!['claude-cli', 'claude-api', 'openai', 'google'].includes(provider)) {
@@ -101,7 +101,7 @@ const config: ApiServerConfig = {
   host: getArg('host', process.env.HOST ?? '0.0.0.0')!,
   apiKeys,
   corsOrigins: ['*'], // TODO: Make configurable
-  defaultModel: getArg('model', 'claude-sonnet-4-20250514')!,
+  defaultModel: getArg('model', process.env.OPENBOTMAN_DEFAULT_MODEL ?? 'claude-sonnet-4-20250514')!,
   defaultProvider: provider,
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
 };
