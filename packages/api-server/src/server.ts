@@ -30,7 +30,7 @@ import {
 import { createProvider } from '@openbotman/orchestrator';
 
 // Import config loader
-import { getConfig, getAgentsForDiscussion, type AgentConfig } from './config.js';
+import { getConfig, getAgentsForDiscussion } from './config.js';
 
 /**
  * Create and configure the Express server
@@ -369,14 +369,15 @@ async function runDiscussion(
   agentConfigs.forEach(a => console.log(`  - ${a.name} (${a.provider}/${a.model})`));
   
   // Create providers for each agent (supports different models per agent)
+  type ProviderType = 'claude-cli' | 'claude-api' | 'openai' | 'google' | 'ollama' | 'mock';
   const agentProviders = new Map<string, ReturnType<typeof createProvider>>();
   for (const agent of agentConfigs) {
     const providerConfig: {
-      provider: string;
+      provider: ProviderType;
       model: string;
       apiKey?: string;
     } = {
-      provider: agent.provider,
+      provider: agent.provider as ProviderType,
       model: agent.model,
     };
     
