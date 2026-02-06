@@ -382,6 +382,8 @@ async function runDiscussion(
   type ProviderType = 'claude-cli' | 'claude-api' | 'openai' | 'google' | 'ollama' | 'mock';
   const agentProviders = new Map<string, ReturnType<typeof createProvider>>();
   for (const agent of agentConfigs) {
+    console.log(`[${requestId}] Creating provider for ${agent.name}: provider=${agent.provider}, apiKey=${agent.apiKey ? '✓' : '✗ MISSING'}`);
+    
     const providerConfig: {
       provider: ProviderType;
       model: string;
@@ -396,6 +398,10 @@ async function runDiscussion(
       providerConfig.apiKey = agent.apiKey;
     } else if (agent.provider === 'claude-api' && config.anthropicApiKey) {
       providerConfig.apiKey = config.anthropicApiKey;
+    } else if (agent.provider === 'google' && process.env.GOOGLE_API_KEY) {
+      // Fallback: use env var directly for google
+      providerConfig.apiKey = process.env.GOOGLE_API_KEY;
+      console.log(`[${requestId}] Using GOOGLE_API_KEY from env for ${agent.name}`);
     }
     
     agentProviders.set(agent.id, createProvider(providerConfig));
