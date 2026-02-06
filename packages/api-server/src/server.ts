@@ -14,6 +14,17 @@ import { createAuthMiddleware } from './middleware/auth.js';
 import { DiscussRequestSchema, type DiscussResponse, type HealthResponse, type ApiServerConfig } from './types.js';
 import { loadWorkspaceContext, formatWorkspaceContext } from './workspace.js';
 import { jobStore } from './jobs.js';
+import {
+  extractPosition,
+  evaluateRound,
+  buildProposerPrompt,
+  buildResponderPrompt,
+  extractActionItems,
+  formatConsensusResult,
+  type AgentContribution,
+  type RoundResult,
+  type ConsensusResult,
+} from './consensus.js';
 
 // Import from orchestrator (we'll use the discussion logic)
 import { createProvider } from '@openbotman/orchestrator';
@@ -342,82 +353,127 @@ async function runDiscussion(
     }
   }
   
-  // Build the full prompt with context
-  const fullPrompt = workspaceContext 
-    ? `${workspaceContext}\n\n---\n\n## Aufgabe\n\n${topic}`
-    : topic;
+  // Build the full context
+  const fullContext = workspaceContext || '';
+
+  // Agent definitions with roles
+  const agentDefs: Array<{ name: string; role: string; systemPrompt: string }> = [
+    {
+      name: 'Analyst',
+      role: 'Analytiker',
+      systemPrompt: 'Du bist ein analytischer Experte. Analysiere Probleme tiefgehend, identifiziere Kernpunkte und Risiken. Sei kritisch aber konstruktiv.',
+    },
+    {
+      name: 'Architect',
+      role: 'Software-Architekt',
+      systemPrompt: 'Du bist ein erfahrener Software-Architekt. Bewerte Strukturen, Design Patterns und Skalierbarkeit. Schlage architektonische Verbesserungen vor.',
+    },
+    {
+      name: 'Pragmatist',
+      role: 'Pragmatischer Entwickler',
+      systemPrompt: 'Du bist ein pragmatischer Entwickler. Fokussiere auf umsetzbare Lösungen, priorisiere nach Aufwand/Nutzen. Fasse zusammen und erstelle klare Action Items.',
+    },
+  ].slice(0, request.agents);
+
+  const startTime = Date.now();
+  const rounds: RoundResult[] = [];
+  const allContributions: AgentContribution[] = [];
+  let consensusReached = false;
   
-  const systemPrompt = `Du bist ein erfahrener Software-Experte. 
-Analysiere das folgende Thema und gib eine strukturierte Empfehlung.
-Wenn Workspace-Context vorhanden ist, analysiere die Dateien sorgfältig.
-Antworte auf Deutsch.
-
-Format:
-## Analyse
-(Deine Analyse der Dateien und des Problems)
-
-## Empfehlung
-(Konkrete Empfehlung basierend auf den Dateien)
-
-## Action Items
-- [ ] Item 1
-- [ ] Item 2`;
-
   try {
-    // Track round progress
-    jobStore.setRound(requestId, 1, request.maxRounds);
-    
-    // Simulate multi-agent workflow - each agent "thinks" in sequence
-    const responses: string[] = [];
-    
-    for (let i = 0; i < agentNames.length; i++) {
-      const agentName = agentNames[i];
-      if (!agentName) continue;
+    // Run multiple rounds until consensus or max rounds
+    for (let round = 1; round <= request.maxRounds && !consensusReached; round++) {
+      console.log(`[${requestId}] Starting round ${round}/${request.maxRounds}`);
+      jobStore.setRound(requestId, round, request.maxRounds);
       
-      // Set current agent to thinking
-      jobStore.setAgentThinking(requestId, agentName);
+      // Reset agent statuses for new round
+      for (const agent of agentDefs) {
+        jobStore.update(requestId, {}); // Trigger update
+      }
       
-      // Build agent-specific prompt
-      const agentPrompts: Record<string, string> = {
-        'Analyst': 'Du bist ein analytischer Experte. Analysiere das Problem und identifiziere die Kernpunkte.',
-        'Architect': 'Du bist ein Software-Architekt. Bewerte die Struktur und schlage Verbesserungen vor.',
-        'Pragmatist': 'Du bist ein pragmatischer Entwickler. Fasse zusammen und gib konkrete Action Items.',
-      };
+      const roundContributions: AgentContribution[] = [];
       
-      const agentSystemPrompt = agentPrompts[agentName] || systemPrompt;
+      // Each agent contributes
+      for (const agent of agentDefs) {
+        jobStore.setAgentThinking(requestId, agent.name);
+        const agentStartTime = Date.now();
+        
+        // Build prompt based on round
+        let prompt: string;
+        if (round === 1 && roundContributions.length === 0) {
+          // First agent, first round: Proposer
+          prompt = buildProposerPrompt(topic, fullContext);
+        } else {
+          // All other cases: Responder
+          const previousContribs = round === 1 
+            ? roundContributions 
+            : [...allContributions.slice(-agentDefs.length), ...roundContributions];
+          prompt = buildResponderPrompt(topic, fullContext, previousContribs, round, agent.role);
+        }
+        
+        const response = await provider.send(prompt, {
+          systemPrompt: agent.systemPrompt,
+          timeoutMs: request.timeout * 1000,
+          maxTokens: 4096,
+        });
+        
+        const { position, reason } = extractPosition(response.text);
+        const durationMs = Date.now() - agentStartTime;
+        
+        const contribution: AgentContribution = {
+          agentName: agent.name,
+          role: agent.role,
+          content: response.text,
+          position: round === 1 && roundContributions.length === 0 ? 'PROPOSAL' : position,
+          positionReason: reason,
+          durationMs,
+        };
+        
+        roundContributions.push(contribution);
+        allContributions.push(contribution);
+        
+        jobStore.setAgentComplete(requestId, agent.name, response.text);
+        console.log(`[${requestId}] ${agent.name}: [${contribution.position}] (${Math.round(durationMs/1000)}s)`);
+      }
       
-      // Build context from previous agents
-      const prevContext = responses.length > 0 
-        ? `\n\nVorherige Analysen:\n${responses.map((r, idx) => `${agentNames[idx]}: ${r.slice(0, 500)}...`).join('\n\n')}`
-        : '';
+      // Evaluate round
+      const roundResult = evaluateRound(round, roundContributions);
+      rounds.push(roundResult);
+      consensusReached = roundResult.consensusReached;
       
-      const response = await provider.send(fullPrompt + prevContext, {
-        systemPrompt: agentSystemPrompt,
-        timeoutMs: request.timeout * 1000, // Full timeout per agent, not divided!
-        maxTokens: 4096,
-      });
+      console.log(`[${requestId}] Round ${round} complete. Consensus: ${consensusReached ? 'YES' : 'NO'}`);
       
-      responses.push(response.text);
+      if (roundResult.objections.length > 0) {
+        console.log(`[${requestId}] Objections: ${roundResult.objections.join(', ')}`);
+      }
       
-      // Mark agent complete
-      jobStore.setAgentComplete(requestId, agentName, response.text);
+      // If no consensus and not last round, continue
+      if (!consensusReached && round < request.maxRounds) {
+        console.log(`[${requestId}] Continuing to round ${round + 1}...`);
+      }
     }
     
-    // Combine all responses
-    const combinedResponse = agentNames.map((name, i) => 
-      `## ${name}\n\n${responses[i] || '(keine Antwort)'}`
-    ).join('\n\n---\n\n');
+    // Build final result
+    const allActionItems = allContributions.flatMap(c => extractActionItems(c.content));
+    const uniqueActionItems = [...new Set(allActionItems)];
     
-    const response = { text: combinedResponse, isError: false };
+    const result: ConsensusResult = {
+      topic,
+      rounds,
+      consensusReached,
+      totalRounds: rounds.length,
+      finalSummary: consensusReached ? 'Konsens erreicht' : 'Kein Konsens nach max. Runden',
+      actionItems: uniqueActionItems,
+      durationMs: Date.now() - startTime,
+    };
     
-    // Extract action items from combined response
-    const actionItems = extractActionItems(response.text);
+    const markdown = formatConsensusResult(result);
     
     return {
-      consensus: true,
-      markdown: response.text,
-      actionItems,
-      rounds: 1,
+      consensus: consensusReached,
+      markdown,
+      actionItems: uniqueActionItems,
+      rounds: rounds.length,
     };
     
   } catch (error) {
@@ -425,25 +481,10 @@ Format:
       consensus: false,
       markdown: '',
       actionItems: [],
-      rounds: 0,
+      rounds: rounds.length,
       error: error instanceof Error ? error.message : 'Provider error',
     };
   }
-}
-
-/**
- * Extract action items from markdown
- */
-function extractActionItems(markdown: string): string[] {
-  const items: string[] = [];
-  const regex = /- \[ \] (.+)/g;
-  let match;
-  
-  while ((match = regex.exec(markdown)) !== null) {
-    items.push(match[1]!);
-  }
-  
-  return items;
 }
 
 /**
