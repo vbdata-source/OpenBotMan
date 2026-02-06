@@ -388,8 +388,8 @@ Format:
       
       const response = await provider.send(fullPrompt + prevContext, {
         systemPrompt: agentSystemPrompt,
-        timeoutMs: Math.floor((request.timeout * 1000) / agentNames.length),
-        maxTokens: 2048,
+        timeoutMs: request.timeout * 1000, // Full timeout per agent, not divided!
+        maxTokens: 4096,
       });
       
       responses.push(response.text);
