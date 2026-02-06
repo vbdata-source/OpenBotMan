@@ -15,12 +15,14 @@
 # ============================================
 discussion:
   maxRounds: 10
-  timeout: 180  # Erhöht für lokale Modelle
+  timeout: 180
   maxContext: 50000
   showAgentConfig: true
 
+  # ==========================================
+  # Agent Definitionen
+  # ==========================================
   agents:
-    # Gemini als Strategic Planner (schnell, Cloud)
     - id: planner
       role: architect
       name: "Strategic Planner"
@@ -44,7 +46,6 @@ discussion:
 
         Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
 
-    # Ollama/Qwen als Senior Developer (lokal, keine API-Kosten)
     - id: coder
       role: coder
       name: "Senior Developer"
@@ -68,7 +69,6 @@ discussion:
 
         Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
 
-    # LM Studio als Researcher (lokal, Datenschutz)
     - id: researcher
       role: researcher
       name: "Research Analyst"
@@ -93,7 +93,6 @@ discussion:
 
         Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
 
-    # Claude als Security Expert (CLI - Pro-Abo)
     - id: reviewer
       role: reviewer
       name: "Security & Quality Expert"
@@ -116,6 +115,41 @@ discussion:
         - Priorisiere nach Schweregrad
 
         Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
+
+  # ==========================================
+  # Team-Presets (Agenten-Gruppen)
+  # ==========================================
+  teams:
+    - id: full
+      name: "🌟 Volles Team (4 Experten)"
+      description: "Alle Experten für umfassende Analyse"
+      agents: [planner, coder, researcher, reviewer]
+      default: true
+
+    - id: quick
+      name: "⚡ Schnelle Analyse"
+      description: "Planner + Reviewer für schnelle Einschätzung"
+      agents: [planner, reviewer]
+
+    - id: code-review
+      name: "💻 Code Review"
+      description: "Developer + Security für Code-Qualität"
+      agents: [coder, reviewer]
+
+    - id: security
+      name: "🔒 Security Fokus"
+      description: "Research + Security für Sicherheitsanalyse"
+      agents: [researcher, reviewer]
+
+    - id: local-only
+      name: "🏠 Nur Lokal (kostenlos)"
+      description: "Ollama + LM Studio - keine API-Kosten"
+      agents: [coder, researcher]
+
+    - id: cloud-only
+      name: "☁️ Nur Cloud (schnell)"
+      description: "Gemini + Claude für maximale Geschwindigkeit"
+      agents: [planner, reviewer]
 
 # ============================================
 # Logging

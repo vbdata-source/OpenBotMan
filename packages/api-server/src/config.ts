@@ -28,6 +28,17 @@ export interface AgentConfig {
 }
 
 /**
+ * Team configuration (agent groups)
+ */
+export interface TeamConfig {
+  id: string;
+  name: string;
+  description?: string;
+  agents: string[];  // Agent IDs
+  default?: boolean;
+}
+
+/**
  * Discussion configuration from config.yaml
  */
 export interface DiscussionConfig {
@@ -37,6 +48,7 @@ export interface DiscussionConfig {
   outputDir: string;
   maxContext: number;
   agents: AgentConfig[];
+  teams: TeamConfig[];
 }
 
 /**
@@ -63,6 +75,13 @@ interface ConfigFile {
       rateLimitDelayMs?: number;
       maxTokens?: number;
       temperature?: number;
+    }>;
+    teams?: Array<{
+      id: string;
+      name: string;
+      description?: string;
+      agents: string[];
+      default?: boolean;
     }>;
   };
   orchestrator?: {
@@ -171,6 +190,20 @@ export function loadConfig(): DiscussionConfig {
     console.log(`[Config] Using ${agents.length} default agents`);
   }
 
+  // Load teams (agent groups)
+  const teams: TeamConfig[] = discussion.teams?.map(t => ({
+    id: t.id,
+    name: t.name,
+    description: t.description,
+    agents: t.agents,
+    default: t.default,
+  })) || [
+    // Default team: all agents
+    { id: 'all', name: 'Alle Experten', agents: agents.map(a => a.id) }
+  ];
+  
+  console.log(`[Config] Loaded ${teams.length} teams`);
+
   return {
     model: defaultModel,
     timeout: discussion.timeout || 60,
@@ -178,6 +211,7 @@ export function loadConfig(): DiscussionConfig {
     outputDir: discussion.outputDir || './discussions',
     maxContext: discussion.maxContext || 50000,
     agents,
+    teams,
   };
 }
 
@@ -199,6 +233,38 @@ function resolveEnvVar(value: string): string {
  */
 export function getAgentsForDiscussion(config: DiscussionConfig, count: number): AgentConfig[] {
   return config.agents.slice(0, Math.min(count, config.agents.length));
+}
+
+/**
+ * Get agents for a team by team ID
+ */
+export function getAgentsForTeam(config: DiscussionConfig, teamId: string): AgentConfig[] {
+  const team = config.teams.find(t => t.id === teamId);
+  if (!team) {
+    console.warn(`[Config] Team '${teamId}' not found, using all agents`);
+    return config.agents;
+  }
+  
+  const agents = team.agents
+    .map(agentId => config.agents.find(a => a.id === agentId))
+    .filter((a): a is AgentConfig => a !== undefined);
+  
+  console.log(`[Config] Team '${team.name}': ${agents.map(a => a.name).join(', ')}`);
+  return agents;
+}
+
+/**
+ * Get available teams
+ */
+export function getTeams(config: DiscussionConfig): TeamConfig[] {
+  return config.teams;
+}
+
+/**
+ * Get default team
+ */
+export function getDefaultTeam(config: DiscussionConfig): TeamConfig | undefined {
+  return config.teams.find(t => t.default) || config.teams[0];
 }
 
 // Singleton config instance

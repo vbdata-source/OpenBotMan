@@ -30,7 +30,7 @@ import {
 import { createProvider } from '@openbotman/orchestrator';
 
 // Import config loader
-import { getConfig, getAgentsForDiscussion } from './config.js';
+import { getConfig, getAgentsForDiscussion, getAgentsForTeam, getTeams, getDefaultTeam } from './config.js';
 
 /**
  * Create and configure the Express server
@@ -89,6 +89,30 @@ export function createServer(config: ApiServerConfig): Express {
   });
   
   /**
+   * GET /api/v1/teams - Get available agent teams
+   */
+  app.get('/api/v1/teams', (_req: Request, res: Response) => {
+    const config = getConfig();
+    const teams = getTeams(config);
+    const defaultTeam = getDefaultTeam(config);
+    
+    res.json({
+      teams: teams.map(t => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        agentCount: t.agents.length,
+        agents: t.agents.map(agentId => {
+          const agent = config.agents.find(a => a.id === agentId);
+          return agent ? { id: agent.id, name: agent.name, emoji: agent.emoji, provider: agent.provider } : null;
+        }).filter(Boolean),
+        default: t.default || false,
+      })),
+      defaultTeamId: defaultTeam?.id,
+    });
+  });
+  
+  /**
    * POST /api/v1/discuss - Start a multi-agent discussion
    * 
    * With async=true: Returns job ID immediately, poll /api/v1/jobs/:id for results
@@ -115,21 +139,29 @@ export function createServer(config: ApiServerConfig): Express {
       
       // Apply defaults from config.yaml (not hardcoded!)
       const discussionConfig = getConfig();
+      
+      // Determine team or agent count
+      const defaultTeam = getDefaultTeam(discussionConfig);
+      const teamId = rawRequest.team ?? defaultTeam?.id;
+      
       const request = {
         ...rawRequest,
+        team: teamId,
         agents: rawRequest.agents ?? discussionConfig.agents.length,
         maxRounds: rawRequest.maxRounds ?? discussionConfig.maxRounds ?? 10,
         timeout: rawRequest.timeout ?? discussionConfig.timeout ?? 60,
         maxContext: rawRequest.maxContext ?? Math.round(discussionConfig.maxContext / 1024) ?? 100,
       };
       
-      console.log(`[${requestId}] Starting discussion: "${request.topic.slice(0, 50)}..." (${request.agents} agents, async=${request.async})`);
+      // Load agents: by team (preferred) or by count
+      const agentConfigs = request.team 
+        ? getAgentsForTeam(discussionConfig, request.team)
+        : getAgentsForDiscussion(discussionConfig, request.agents);
+      
+      console.log(`[${requestId}] Starting discussion: "${request.topic.slice(0, 50)}..." (team=${request.team || 'none'}, ${agentConfigs.length} agents, async=${request.async})`);
       
       // ASYNC MODE: Return job ID immediately
       if (request.async) {
-        // Load agents from config (supports per-agent model/provider)
-        const discussionConfig = getConfig();
-        const agentConfigs = getAgentsForDiscussion(discussionConfig, request.agents);
         
         jobStore.create(requestId, request.topic);
         
@@ -331,6 +363,7 @@ interface DiscussionResult {
 async function runDiscussion(
   request: { 
     topic: string; 
+    team?: string;
     agents: number; 
     maxRounds: number; 
     timeout: number; 
@@ -374,7 +407,11 @@ async function runDiscussion(
 
   // Load agent definitions from config.yaml (supports per-agent model/provider)
   const discussionConfig = getConfig();
-  const agentConfigs = getAgentsForDiscussion(discussionConfig, request.agents);
+  
+  // Load agents: by team (preferred) or by count
+  const agentConfigs = request.team 
+    ? getAgentsForTeam(discussionConfig, request.team)
+    : getAgentsForDiscussion(discussionConfig, request.agents);
   
   console.log(`[${requestId}] Using ${agentConfigs.length} agents from config:`);
   agentConfigs.forEach(a => console.log(`  - ${a.name} (${a.provider}/${a.model})`));

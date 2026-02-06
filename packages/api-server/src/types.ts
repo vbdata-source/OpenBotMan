@@ -11,8 +11,11 @@ export const DiscussRequestSchema = z.object({
   /** Discussion topic/question */
   topic: z.string().min(1).max(50000),
   
-  /** Number of agents (1-5) - defaults from config.yaml */
-  agents: z.number().int().min(1).max(5).optional(),
+  /** Team ID - use predefined agent group from config.yaml */
+  team: z.string().optional(),
+  
+  /** Number of agents (1-10) - ignored if team is specified */
+  agents: z.number().int().min(1).max(10).optional(),
   
   /** Maximum consensus rounds - defaults from config.yaml */
   maxRounds: z.number().int().min(1).max(20).optional(),

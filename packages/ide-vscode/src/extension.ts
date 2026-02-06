@@ -436,6 +436,23 @@ async function pollJobWithProgress(
 }
 
 /**
+ * Fetch available teams from server
+ */
+async function fetchTeams(): Promise<Array<{ id: string; name: string; description?: string; agentCount: number; default: boolean }>> {
+  try {
+    const { apiUrl, apiKey } = getApiConfig();
+    const response = await fetch(`${apiUrl}/api/v1/teams`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!response.ok) return [];
+    const data = await response.json() as { teams: Array<{ id: string; name: string; description?: string; agentCount: number; default: boolean }> };
+    return data.teams;
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Start a discussion with OpenBotMan experts
  */
 async function startDiscussion() {
@@ -445,6 +462,26 @@ async function startDiscussion() {
   });
   
   if (!topic) return;
+  
+  // Fetch available teams
+  const teams = await fetchTeams();
+  
+  let selectedTeamId: string | undefined;
+  if (teams.length > 0) {
+    const teamItems = teams.map(t => ({
+      label: t.name,
+      description: `${t.agentCount} Agents`,
+      detail: t.description,
+      id: t.id,
+    }));
+    
+    const selectedTeam = await vscode.window.showQuickPick(teamItems, {
+      placeHolder: 'Welches Experten-Team soll diskutieren?',
+    });
+    
+    if (!selectedTeam) return; // User cancelled
+    selectedTeamId = selectedTeam.id;
+  }
   
   const workspaceFolders = vscode.workspace.workspaceFolders;
   const workspacePath = workspaceFolders?.[0]?.uri.fsPath;
@@ -458,17 +495,16 @@ async function startDiscussion() {
     includeWorkspace = choice?.startsWith('Ja') ?? false;
   }
   
-  // No hardcoded defaults! Server reads from config.yaml
+  // Build request with selected team
   const requestBody: Record<string, unknown> = {
     topic,
     async: true,
-    // agents, timeout, maxRounds → from config.yaml via server
+    team: selectedTeamId,
   };
   
   if (includeWorkspace && workspacePath) {
     requestBody.workspace = workspacePath;
     requestBody.include = ['**/*.ts', '**/*.js', '**/*.json', '**/*.cs', '**/*.py', '**/*.md'];
-    // maxContext → from config.yaml via server
   }
   
   await runAsyncJob(topic, requestBody, 'Experten-Diskussion');
