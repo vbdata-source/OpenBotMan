@@ -13,6 +13,7 @@ import inquirer from 'inquirer';
 import { readFileSync, existsSync } from 'fs';
 import { parse as parseYaml } from 'yaml';
 import { config as loadEnv } from 'dotenv';
+import { join } from 'path';
 import { Orchestrator, type OrchestratorConfig } from '@openbotman/orchestrator';
 import { normalizeConfig } from './utils/config.js';
 import {
@@ -25,8 +26,20 @@ import {
 import { demoDiscussionCommand } from './commands/demo-discussion.js';
 import { discussCommand } from './commands/discuss.js';
 
-// Load environment variables
-loadEnv();
+// Load environment variables from .env (search in multiple locations)
+// CLI runs from packages/cli, but .env is typically in project root
+const envPaths = [
+  '.env',
+  join(process.cwd(), '.env'),
+  join(process.cwd(), '..', '..', '.env'),  // From packages/cli to root
+  join(process.cwd(), '..', '.env'),
+];
+for (const envPath of envPaths) {
+  if (existsSync(envPath)) {
+    loadEnv({ path: envPath });
+    break;
+  }
+}
 
 const VERSION = '2.0.0-alpha.1';
 
