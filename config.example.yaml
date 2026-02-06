@@ -1,44 +1,119 @@
 # ============================================
 # OpenBotMan Configuration
 # ============================================
-# Copy to config.yaml and customize
+# Multi-Provider Setup mit Gemini + Claude
+#
+# Provider-Optionen:
+#   claude-cli  - Claude via CLI (Pro-Abo, keine Kosten)
+#   claude-api  - Claude via API (ANTHROPIC_API_KEY)
+#   google      - Gemini (GOOGLE_API_KEY)
+#   openai      - GPT-4 (OPENAI_API_KEY)
+#   ollama      - Lokale LLMs (Ollama Server)
 
 # ============================================
-# Orchestrator Settings
+# Discussion Settings (für 'pnpm cli discuss')
+# ============================================
+discussion:
+  maxRounds: 10
+  timeout: 120
+  maxContext: 50000
+  showAgentConfig: true
+
+  agents:
+    # Gemini als Strategic Planner (schnell, gut für Planung)
+    - id: planner
+      role: architect
+      name: "Strategic Planner"
+      emoji: "🎯"
+      color: blue
+      provider: google
+      model: gemini-2.0-flash
+      apiKey: ${GOOGLE_API_KEY}
+      systemPrompt: |
+        Du bist ein strategischer Planner und Solution Architect mit Fokus auf Gesamtbild und langfristige Planung.
+
+        DEINE PERSPEKTIVE:
+        - Gesamtarchitektur und strategische Ausrichtung
+        - Trade-offs zwischen verschiedenen Ansätzen
+        - Priorisierung und Roadmap-Planung
+        - Risikobewertung und Alternativen
+        - Zeit- und Ressourcenschätzungen
+
+        DEIN STIL:
+        - Strategisch und ausgewogen
+        - Zeige Architektur-Diagramme (ASCII) wenn hilfreich
+        - Bewerte Vor- und Nachteile objektiv
+        - Gib klare Empfehlungen mit Begründung
+        - Denke an MVP vs. langfristige Vision
+
+        Antworte auf Deutsch. Strukturiere mit Überschriften.
+        Fasse am Ende deine Position klar zusammen.
+
+    # Claude als Senior Developer (CLI - nutzt dein Pro-Abo)
+    - id: coder
+      role: coder
+      name: "Senior Developer"
+      emoji: "💻"
+      color: cyan
+      provider: claude-cli
+      model: claude-sonnet-4-20250514
+      systemPrompt: |
+        Du bist ein erfahrener Senior Software-Entwickler mit 15+ Jahren Erfahrung.
+
+        DEINE PERSPEKTIVE:
+        - Implementierungs-Details und Code-Qualität
+        - Praktische Umsetzbarkeit und Aufwandsschätzung
+        - Performance, Skalierbarkeit und Effizienz
+        - Clean Code Prinzipien und Design Patterns
+        - Konkrete Code-Vorschläge mit Beispielen
+
+        DEIN STIL:
+        - Pragmatisch und lösungsorientiert
+        - Zeige Code-Beispiele wenn sinnvoll
+        - Denke an Edge-Cases und Error-Handling
+        - Bewerte Aufwand realistisch (Stunden/Tage)
+        - Hinterfrage zu komplexe Lösungen
+
+        Antworte auf Deutsch. Sei konkret und präzise.
+        Fasse am Ende deine Position klar zusammen.
+
+    # Claude als Security & Quality Expert (CLI - nutzt dein Pro-Abo)
+    - id: reviewer
+      role: reviewer
+      name: "Security & Quality Expert"
+      emoji: "🔍"
+      color: yellow
+      provider: claude-cli
+      model: claude-sonnet-4-20250514
+      systemPrompt: |
+        Du bist ein kritischer Code-Reviewer und Security-Experte.
+
+        DEINE PERSPEKTIVE:
+        - Sicherheitslücken und Vulnerabilities
+        - Performance-Bottlenecks und Memory-Leaks
+        - Edge-Cases und Fehlerszenarien
+        - Code-Qualität und Wartbarkeit
+        - Compliance und Best Practices
+
+        DEIN STIL:
+        - Kritisch aber konstruktiv
+        - Zeige konkrete Risiken mit Beispielen
+        - Schlage Mitigationen vor
+        - Priorisiere: Kritisch > Hoch > Mittel > Niedrig
+        - Denke an OWASP, GDPR, SOC2
+
+        Antworte auf Deutsch. Sei direkt und präzise.
+        Fasse am Ende deine Position klar zusammen.
+
+# ============================================
+# Orchestrator Settings (für Workflows)
 # ============================================
 orchestrator:
-  # Provider options:
-  # - 'claude-cli': Uses Claude Code CLI (works with Claude Pro subscription, no API key)
-  #                 Best for: Local development on your machine
-  # - 'claude-api': Direct Anthropic SDK (requires ANTHROPIC_API_KEY)
-  #                 Best for: Server deployments without browser/CLI access
-  # - 'anthropic':  Alias for 'claude-api' (legacy)
   provider: claude-cli
-  
-  # Model for the main orchestrator
   model: claude-sonnet-4-20250514
-  
-  # Claude CLI configuration (when provider is 'claude-cli')
-  cli:
-    # Path to claude CLI command (default: 'claude')
-    command: claude
-    # Additional CLI arguments
-    args: []
-    # Maximum turns for agentic loop (default: 10)
-    maxTurns: 10
-    # Tools to enable (empty = all tools)
-    tools: []
-  
-  # Maximum iterations per task
   maxIterations: 10
-  
-  # Timeout per agent call (ms)
   agentTimeout: 120000
-  
-  # Enable autonomous operation
   autonomous: false
-  
-  # Require human approval for external actions
   humanApproval: true
 
 # ============================================
@@ -46,29 +121,21 @@ orchestrator:
 # ============================================
 knowledgeBase:
   enabled: true
-  storagePath: /data/knowledge
-  
-  # Automatically extract learnings from tasks
+  storagePath: ./data/knowledge
   autoLearn: true
-  
-  # Vector database type: memory | chromadb | qdrant
   vectorDb: memory
-  
-  # Embedding model (for external embedding service)
   embeddingModel: text-embedding-3-small
 
 # ============================================
-# Agent Definitions
+# Agent Pool (für Orchestrator/Workflows)
 # ============================================
 agents:
-  # Claude Code Agent (via CLI)
-  - id: claude_code
-    name: Claude Code
+  # Claude Agent (via CLI - nutzt dein Pro-Abo!)
+  - id: claude_cli
+    name: Claude (CLI)
     role: coder
-    provider: anthropic
+    provider: claude-cli
     model: claude-sonnet-4-20250514
-    cli: claude
-    cliArgs: ["--json"]
     enabled: true
     systemPrompt: |
       You are an expert software developer.
@@ -85,18 +152,19 @@ agents:
       decisions: true
     maxTokens: 4096
     temperature: 0.7
-  
-  # Gemini Agent (for review and research)
+
+  # Gemini Agent (für Planung und Research)
   - id: gemini
     name: Gemini
-    role: reviewer
+    role: planner
     provider: google
     model: gemini-2.0-flash
-    enabled: false  # Enable when configured
+    apiKey: ${GOOGLE_API_KEY}
+    enabled: true
     systemPrompt: |
-      You are a critical code reviewer and researcher.
-      Look for bugs, security issues, and improvements.
-      Provide constructive feedback.
+      You are a strategic planner and researcher.
+      Analyze problems from multiple perspectives.
+      Provide balanced recommendations.
     capabilities:
       code: false
       review: true
@@ -108,14 +176,15 @@ agents:
       decisions: true
     maxTokens: 4096
     temperature: 0.5
-  
-  # GPT-4 Agent (for documentation and testing)
+
+  # GPT-4 Agent (optional)
   - id: gpt4
     name: GPT-4
     role: tester
     provider: openai
     model: gpt-4-turbo-preview
-    enabled: false  # Enable when configured
+    apiKey: ${OPENAI_API_KEY}
+    enabled: false
     systemPrompt: |
       You are an expert at testing and documentation.
       Write comprehensive tests and clear documentation.
@@ -130,14 +199,14 @@ agents:
       decisions: false
     maxTokens: 4096
     temperature: 0.3
-  
-  # Ollama Local Agent (fast, free)
+
+  # Ollama Local Agent (schnell, gratis, offline)
   - id: ollama
     name: Local LLM
     role: research
     provider: ollama
     model: codellama:13b
-    enabled: false  # Enable when Ollama is running
+    enabled: false
     api:
       baseUrl: http://localhost:11434
     systemPrompt: |
@@ -168,22 +237,20 @@ workflows:
         role: coder
         task: Analyze the code structure and identify areas for review
         output: analysis
-      
       - id: review
         name: Security Review
         role: reviewer
         task: Review the code for security issues and best practices
         inputs: [analysis]
         output: review
-      
       - id: test
         name: Generate Tests
         role: tester
         task: Generate comprehensive tests based on the analysis
         inputs: [analysis, review]
         output: tests
-        maxIterations: 2
-  
+    maxIterations: 2
+
   - id: feature_development
     name: Feature Development Workflow
     description: Full feature development from spec to tests
@@ -193,7 +260,6 @@ workflows:
         role: architect
         task: Create a detailed implementation plan
         output: plan
-      
       - id: implement
         name: Implement Feature
         role: coder
@@ -201,14 +267,12 @@ workflows:
         inputs: [plan]
         output: implementation
         maxIterations: 3
-      
       - id: review
         name: Code Review
         role: reviewer
         task: Review the implementation
         inputs: [plan, implementation]
         output: review
-      
       - id: test
         name: Write Tests
         role: tester
@@ -224,15 +288,13 @@ qualityGates:
     type: coverage
     threshold: 80
     required: true
-  
   - name: Complexity
     type: complexity
     threshold: 15
     required: false
-  
   - name: Security Scan
     type: security
-    threshold: 0  # No critical vulnerabilities
+    threshold: 0
     required: true
 
 # ============================================
@@ -240,219 +302,22 @@ qualityGates:
 # ============================================
 security:
   enabled: true
-  
-  # JWT settings
-  jwt:
-    expiresIn: 3600      # 1 hour
-    refreshExpiresIn: 604800  # 7 days
-    issuer: openbotman
-  
-  # Rate limiting
   rateLimit:
     maxRequests: 100
     windowSeconds: 60
-  
-  # Audit logging
   audit:
     enabled: true
-    level: normal  # minimal | normal | verbose
+    level: normal
     retentionDays: 90
-  
-  # Allowed origins (CORS)
-  allowedOrigins:
-    - "*"  # Restrict in production!
-  
-  # IP allowlist (empty = all allowed)
-  ipAllowlist: []
-
-# ============================================
-# Channel Configuration
-# ============================================
-channels:
-  # Microsoft Teams
-  teams:
-    enabled: false
-    appId: ${TEAMS_APP_ID}
-    appPassword: ${TEAMS_APP_PASSWORD}
-    tenantId: ${TEAMS_TENANT_ID}
-    endpoint: /api/messages
-    port: 3978
-    allowedUsers: []  # Empty = all users
-    allowedTenants: []
-  
-  # Telegram
-  telegram:
-    enabled: false
-    botToken: ${TELEGRAM_BOT_TOKEN}
-    webhookUrl: ${TELEGRAM_WEBHOOK_URL}
-    allowedUsers: []  # Empty = all users
-  
-  # Discord
-  discord:
-    enabled: false
-    botToken: ${DISCORD_BOT_TOKEN}
-    applicationId: ${DISCORD_APP_ID}
-    allowedServers: []
-  
-  # Slack
-  slack:
-    enabled: false
-    botToken: ${SLACK_BOT_TOKEN}
-    appToken: ${SLACK_APP_TOKEN}
-    signingSecret: ${SLACK_SIGNING_SECRET}
-
-# ============================================
-# API Server Settings
-# ============================================
-api:
-  enabled: true
-  port: 8080
-  host: "0.0.0.0"
-  cors:
-    enabled: true
-    origins: ["*"]
 
 # ============================================
 # Logging
 # ============================================
 logging:
-  level: info  # debug | info | warn | error
-  format: json  # json | pretty
+  level: info
+  format: pretty
   file:
-    enabled: true
-    path: /data/logs/openbotman.log
+    enabled: false
+    path: ./data/logs/openbotman.log
     maxSize: 10m
     maxFiles: 5
-
-# ============================================
-# Discussion Settings (openbotman discuss)
-# ============================================
-discussion:
-  # Default model for discussion agents
-  model: claude-sonnet-4-20250514
-  
-  # Timeout per agent in seconds
-  timeout: 60
-  
-  # Maximum consensus rounds (default: 10)
-  maxRounds: 10
-  
-  # Output directory for markdown exports
-  outputDir: ./discussions
-  
-  # Max context size in bytes
-  maxContext: 50000
-
-  # Rate Limiting Configuration
-  # Prevents API rate limit errors when multiple agents make requests
-  rateLimiting:
-    # Provider-specific delays (milliseconds between requests)
-    # Can be overridden per-agent with rateLimitDelayMs
-    providers:
-      claude-cli: 1500    # Conservative for CLI subprocess
-      anthropic: 500      # Direct API is faster
-      openai: 200         # OpenAI allows higher rate
-      google: 200         # Gemini also fast
-      ollama: 100         # Local, minimal delay
-      mock: 0             # Testing only
-    
-    # Default delay for unknown providers
-    defaultDelayMs: 1000
-    
-    # Maximum retry attempts on retryable errors
-    maxRetries: 3
-    
-    # Backoff configuration for retries
-    initialBackoffMs: 2000
-    maxBackoffMs: 30000
-
-  # Agent configurations with multi-provider support
-  # Each agent can use a different provider:
-  # - claude-cli: Claude CLI (Pro subscription, no API key needed) - LOCAL DEV
-  # - claude-api: Direct Anthropic SDK (requires ANTHROPIC_API_KEY) - SERVER
-  # - openai: OpenAI API (requires OPENAI_API_KEY)
-  # - google: Google Gemini API (requires GOOGLE_API_KEY)
-  # - mock: Mock provider for testing
-  agents:
-    - id: planner
-      role: architect
-      name: Planner
-      emoji: "🎯"
-      color: magenta
-      provider: claude-cli          # Uses Claude CLI
-      model: claude-sonnet-4-20250514
-      # apiKey: ${GOOGLE_API_KEY}   # Only needed for API providers
-      # rateLimitDelayMs: 2000      # Optional: Override provider default (ms)
-      systemPrompt: |
-        Du bist ein erfahrener Software-Architekt und Planer.
-        ROLLE: Du erstellst und überarbeitest Vorschläge basierend auf Feedback.
-        Fokus: Patterns, Skalierbarkeit, Trade-offs, langfristige Konsequenzen.
-        Stil: Strategisch, ganzheitlich, strukturierte Vorschläge.
-        
-    - id: coder
-      role: coder
-      name: Senior Developer
-      emoji: "💻"
-      color: cyan
-      provider: claude-cli
-      model: claude-sonnet-4-20250514
-      systemPrompt: |
-        Du bist ein erfahrener Software-Entwickler.
-        ROLLE: Du bewertest Vorschläge aus Implementierungs-Sicht.
-        Fokus: Implementierungs-Details, Code-Qualität, Performance.
-        Stil: Pragmatisch, lösungsorientiert, konkrete Code-Beispiele.
-        
-    - id: reviewer
-      role: reviewer
-      name: Reviewer
-      emoji: "🔍"
-      color: yellow
-      provider: claude-cli
-      model: claude-sonnet-4-20250514
-      systemPrompt: |
-        Du bist ein kritischer Code-Reviewer und QA-Experte.
-        ROLLE: Du identifizierst Risiken und Probleme in Vorschlägen.
-        Fokus: Risiken, Edge-Cases, Security, Test-Abdeckung.
-        Stil: Konstruktiv-kritisch, hinterfrage Annahmen.
-
-  # Example multi-provider configuration:
-  # agents:
-  #   - id: planner
-  #     role: architect
-  #     provider: google
-  #     model: gemini-2.0-flash
-  #     apiKey: ${GOOGLE_API_KEY}
-  #     ...
-  #   - id: coder
-  #     role: coder
-  #     provider: claude-cli
-  #     model: claude-sonnet-4-20250514
-  #     ...
-  #   - id: reviewer
-  #     role: reviewer
-  #     provider: openai
-  #     model: gpt-4-turbo
-  #     apiKey: ${OPENAI_API_KEY}
-  #     ...
-
-  # ============================================
-  # SERVER DEPLOYMENT (claude-api instead of CLI)
-  # ============================================
-  # When deploying on a headless server without Claude CLI:
-  # 
-  # 1. Set environment variable:
-  #    export ANTHROPIC_API_KEY=sk-ant-xxxxx
-  #
-  # 2. Change provider in agents:
-  #    provider: claude-api    # instead of claude-cli
-  #
-  # Example server config:
-  # agents:
-  #   - id: planner
-  #     role: architect
-  #     provider: claude-api      # Direct API - no CLI needed
-  #     model: claude-sonnet-4-20250514
-  #     apiKey: ${ANTHROPIC_API_KEY}
-  #     ...
-  #
-  # Note: API calls are billed per token, while CLI uses your Pro subscription
