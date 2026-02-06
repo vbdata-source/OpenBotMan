@@ -335,6 +335,7 @@ async function pollJobWithProgress(
   }
   
   let attempts = 0;
+  let agentListShown = false;
   
   while (attempts < maxAttempts && !token.isCancellationRequested) {
     await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
@@ -360,6 +361,24 @@ async function pollJobWithProgress(
     
     // Update our tracked job
     updateJobFromApi(jobId, job);
+    
+    // Show agent list once (first poll with agents)
+    if (verboseLevel >= 1 && job.agents && !agentListShown) {
+      agentListShown = true;
+      outputChannel.appendLine('📋 Agenten:');
+      for (const agent of job.agents) {
+        const modelShort = agent.model 
+          ? (agent.model.includes('gemini') ? 'Gemini' 
+            : agent.model.includes('sonnet') ? 'Sonnet'
+            : agent.model.includes('opus') ? 'Opus'
+            : agent.model.includes('haiku') ? 'Haiku'
+            : agent.model.includes('gpt-4') ? 'GPT-4'
+            : agent.model.split('-')[0])
+          : 'unknown';
+        outputChannel.appendLine(`   • ${agent.name} → ${modelShort}`);
+      }
+      outputChannel.appendLine('');
+    }
     
     // Verbose output: Show agent results as they complete
     if (verboseLevel >= 1 && job.agents) {
