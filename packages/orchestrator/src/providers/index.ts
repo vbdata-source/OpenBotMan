@@ -56,6 +56,12 @@ export {
   type GoogleProviderConfig,
 } from './google.js';
 
+// Ollama Provider (Local LLMs)
+export {
+  OllamaProvider,
+  type OllamaProviderConfig,
+} from './ollama.js';
+
 // Provider factory
 export {
   createProvider,

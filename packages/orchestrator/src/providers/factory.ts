@@ -11,6 +11,7 @@ import { ClaudeCliAdapter, type ClaudeCliAdapterConfig } from './claude-cli-adap
 import { ClaudeApiProvider, type ClaudeApiProviderConfig } from './claude-api.js';
 import { OpenAIProvider, type OpenAIProviderConfig } from './openai.js';
 import { GoogleProvider, type GoogleProviderConfig } from './google.js';
+import { OllamaProvider, type OllamaProviderConfig } from './ollama.js';
 
 /**
  * Options for creating a provider
@@ -108,8 +109,13 @@ export function createProvider(options: CreateProviderOptions): LLMProvider {
     }
     
     case 'ollama': {
-      // TODO: Implement Ollama provider
-      throw new Error('Ollama provider not yet implemented');
+      const config: OllamaProviderConfig = {
+        provider: 'ollama',
+        model: options.model,
+        baseUrl: options.baseUrl || 'http://localhost:11434',
+        defaults: options.defaults,
+      };
+      return new OllamaProvider(config);
     }
     
     case 'mock': {
