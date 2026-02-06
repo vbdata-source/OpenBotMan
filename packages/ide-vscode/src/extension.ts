@@ -34,11 +34,18 @@ interface JobInfo {
 /**
  * Get configured API settings
  */
-function getApiConfig(): { apiUrl: string; apiKey: string } {
+function getApiConfig(): { 
+  apiUrl: string; 
+  apiKey: string; 
+  timeoutMinutes: number;
+  pollIntervalSeconds: number;
+} {
   const config = vscode.workspace.getConfiguration('openbotman');
   return {
     apiUrl: (config.get<string>('apiUrl') || 'http://localhost:8080').replace(/\/$/, ''),
     apiKey: config.get<string>('apiKey') || '',
+    timeoutMinutes: config.get<number>('timeoutMinutes') || 60,
+    pollIntervalSeconds: config.get<number>('pollIntervalSeconds') || 3,
   };
 }
 
@@ -228,11 +235,14 @@ async function pollJobWithProgress(
   progress: vscode.Progress<{ message?: string }>,
   token: vscode.CancellationToken
 ): Promise<any> {
+  const { timeoutMinutes, pollIntervalSeconds } = getApiConfig();
+  const pollIntervalMs = pollIntervalSeconds * 1000;
+  const maxAttempts = Math.ceil((timeoutMinutes * 60) / pollIntervalSeconds);
+  
   let attempts = 0;
-  const maxAttempts = 400; // 400 × 3s = 20 Minuten max
   
   while (attempts < maxAttempts && !token.isCancellationRequested) {
-    await new Promise(resolve => setTimeout(resolve, 3000)); // 3s poll
+    await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
     attempts++;
     
     const response = await fetch(`${apiUrl}/api/v1/jobs/${jobId}`, {
@@ -465,7 +475,8 @@ async function runAsyncJob(
           if (token.isCancellationRequested) {
             vscode.window.showWarningMessage('Abgebrochen');
           } else {
-            vscode.window.showErrorMessage('Timeout nach 20 Minuten');
+            const { timeoutMinutes } = getApiConfig();
+            vscode.window.showErrorMessage(`Timeout nach ${timeoutMinutes} Minuten`);
           }
           
           // Remove after showing for a moment

@@ -54,6 +54,20 @@
           "type": "string",
           "default": "",
           "description": "API Key (muss mit Server übereinstimmen)"
+        },
+        "openbotman.timeoutMinutes": {
+          "type": "number",
+          "default": 60,
+          "minimum": 1,
+          "maximum": 180,
+          "description": "Timeout für Jobs in Minuten (Default: 60)"
+        },
+        "openbotman.pollIntervalSeconds": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 30,
+          "description": "Poll-Intervall in Sekunden (Default: 3)"
         }
       }
     },
