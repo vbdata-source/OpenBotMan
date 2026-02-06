@@ -45,6 +45,8 @@ function getApiConfig(): {
   timeoutMinutes: number;
   pollIntervalSeconds: number;
   verboseLevel: number;
+  autoSaveResults: boolean;
+  discussionsPath: string;
 } {
   const config = vscode.workspace.getConfiguration('openbotman');
   return {
@@ -53,7 +55,79 @@ function getApiConfig(): {
     timeoutMinutes: config.get<number>('timeoutMinutes') || 60,
     pollIntervalSeconds: config.get<number>('pollIntervalSeconds') || 3,
     verboseLevel: config.get<number>('verboseLevel') ?? 1,
+    autoSaveResults: config.get<boolean>('autoSaveResults') ?? true,
+    discussionsPath: config.get<string>('discussionsPath') || 'discussions',
   };
+}
+
+/**
+ * Sanitize topic for filename
+ */
+function sanitizeForFilename(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[äöüß]/g, c => ({ 'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'ß': 'ss' }[c] || c))
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 50);
+}
+
+/**
+ * Save discussion result as markdown file
+ */
+async function saveDiscussionResult(topic: string, result: string, durationMs?: number): Promise<string | null> {
+  const { autoSaveResults, discussionsPath } = getApiConfig();
+  
+  if (!autoSaveResults) {
+    return null;
+  }
+  
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (!workspaceFolders || workspaceFolders.length === 0) {
+    outputChannel.appendLine('⚠️ Kein Workspace geöffnet - Ergebnis nicht gespeichert');
+    return null;
+  }
+  
+  const workspaceRoot = workspaceFolders[0].uri;
+  const discussionsUri = vscode.Uri.joinPath(workspaceRoot, discussionsPath);
+  
+  // Create discussions folder if it doesn't exist
+  try {
+    await vscode.workspace.fs.stat(discussionsUri);
+  } catch {
+    await vscode.workspace.fs.createDirectory(discussionsUri);
+  }
+  
+  // Generate filename: YYYY-MM-DD_HH-MM_topic.md
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10);
+  const timeStr = now.toTimeString().slice(0, 5).replace(':', '-');
+  const topicSlug = sanitizeForFilename(topic);
+  const filename = `${dateStr}_${timeStr}_${topicSlug}.md`;
+  
+  const fileUri = vscode.Uri.joinPath(discussionsUri, filename);
+  
+  // Build content with header
+  const durationStr = durationMs ? `${Math.round(durationMs / 1000)}s` : 'unbekannt';
+  const header = `---
+topic: "${topic.replace(/"/g, '\\"')}"
+date: ${now.toISOString()}
+duration: ${durationStr}
+---
+
+`;
+  
+  const content = header + result;
+  
+  try {
+    await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf8'));
+    outputChannel.appendLine(`\n💾 Gespeichert: ${discussionsPath}/${filename}`);
+    return fileUri.fsPath;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    outputChannel.appendLine(`⚠️ Speichern fehlgeschlagen: ${message}`);
+    return null;
+  }
 }
 
 /**
@@ -559,8 +633,23 @@ async function runAsyncJob(
         outputChannel.appendLine(`\nDauer: ${Math.round((job.durationMs || 0) / 1000)}s`);
         outputChannel.show();
         
-        vscode.window.showInformationMessage(`${title} abgeschlossen!`, 'Ergebnis anzeigen')
-          .then(action => { if (action) outputChannel.show(); });
+        // Save result as markdown file
+        const savedPath = await saveDiscussionResult(topic, job.result || '', job.durationMs);
+        
+        const actions = ['Ergebnis anzeigen'];
+        if (savedPath) {
+          actions.push('Datei öffnen');
+        }
+        
+        vscode.window.showInformationMessage(`${title} abgeschlossen!`, ...actions)
+          .then(async action => { 
+            if (action === 'Ergebnis anzeigen') {
+              outputChannel.show(); 
+            } else if (action === 'Datei öffnen' && savedPath) {
+              const doc = await vscode.workspace.openTextDocument(savedPath);
+              await vscode.window.showTextDocument(doc);
+            }
+          });
         
         // Remove job from TreeView after 30s
         removeJobDelayed(jobId, 30000);

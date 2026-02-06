@@ -79,6 +79,16 @@
             "Zusätzlich Zwischengedanken/Thinking anzeigen"
           ],
           "description": "Verbose-Level: 0=Nur Ergebnis, 1=Agent-Zusammenfassungen live, 2=+Zwischengedanken"
+        },
+        "openbotman.autoSaveResults": {
+          "type": "boolean",
+          "default": true,
+          "description": "Diskussionsergebnisse automatisch als Markdown speichern"
+        },
+        "openbotman.discussionsPath": {
+          "type": "string",
+          "default": "discussions",
+          "description": "Ordner für gespeicherte Diskussionen (relativ zum Workspace)"
         }
       }
     },
