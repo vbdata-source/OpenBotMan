@@ -326,9 +326,6 @@ async function runDiscussion(
     apiKey: config.defaultProvider === 'claude-api' ? config.anthropicApiKey : undefined,
   });
   
-  // Agent names for tracking
-  const agentNames = ['Analyst', 'Architect', 'Pragmatist'].slice(0, request.agents);
-  
   // Load topic from prompt file if specified
   let topic = request.topic;
   if (request.promptFile && existsSync(request.promptFile)) {
