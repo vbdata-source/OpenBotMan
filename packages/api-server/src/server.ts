@@ -389,10 +389,17 @@ async function runDiscussion(
       provider: ProviderType;
       model: string;
       apiKey?: string;
+      baseUrl?: string;
     } = {
       provider: agent.provider as ProviderType,
       model: agent.model,
     };
+    
+    // Add baseUrl for OpenAI-compatible APIs (LM Studio, vLLM, etc.)
+    if (agent.baseUrl) {
+      providerConfig.baseUrl = agent.baseUrl;
+      console.log(`[${requestId}] Using custom baseUrl for ${agent.name}: ${agent.baseUrl}`);
+    }
     
     // Add API key: from agent config, or fallback to env vars
     if (agent.apiKey) {
@@ -408,6 +415,10 @@ async function runDiscussion(
       if (fallbackKey) {
         providerConfig.apiKey = fallbackKey;
         console.log(`[${requestId}] Using ${agent.provider.toUpperCase()} key from env for ${agent.name}`);
+      } else if (agent.provider === 'openai' && agent.baseUrl) {
+        // Local OpenAI-compatible APIs often don't need a real key
+        providerConfig.apiKey = 'local';
+        console.log(`[${requestId}] Using dummy key for local OpenAI-compatible API: ${agent.name}`);
       }
     }
     

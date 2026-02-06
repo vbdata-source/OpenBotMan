@@ -1,13 +1,13 @@
 # ============================================
 # OpenBotMan Configuration
 # ============================================
-# Multi-Provider Setup: Gemini + Ollama + Claude
+# Multi-Provider Setup: Cloud + Lokal
 #
 # Provider-Optionen:
-#   claude-cli  - Claude via CLI (Pro-Abo, keine Kosten)
+#   claude-cli  - Claude via CLI (Pro-Abo)
 #   claude-api  - Claude via API (ANTHROPIC_API_KEY)
 #   google      - Gemini (GOOGLE_API_KEY)
-#   openai      - GPT-4 (OPENAI_API_KEY)
+#   openai      - GPT-4 oder OpenAI-kompatible APIs (LM Studio, vLLM, etc.)
 #   ollama      - Lokale LLMs (http://localhost:11434)
 
 # ============================================
@@ -15,12 +15,12 @@
 # ============================================
 discussion:
   maxRounds: 10
-  timeout: 120
+  timeout: 180  # Erhöht für lokale Modelle
   maxContext: 50000
   showAgentConfig: true
 
   agents:
-    # Gemini als Strategic Planner (schnell, gut für Planung)
+    # Gemini als Strategic Planner (schnell, Cloud)
     - id: planner
       role: architect
       name: "Strategic Planner"
@@ -68,7 +68,32 @@ discussion:
 
         Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
 
-    # Claude als Security Expert (CLI - nutzt dein Pro-Abo)
+    # LM Studio als Researcher (lokal, Datenschutz)
+    - id: researcher
+      role: researcher
+      name: "Research Analyst"
+      emoji: "🔬"
+      provider: openai
+      model: local-model
+      baseUrl: http://localhost:1234/v1
+      systemPrompt: |
+        Du bist ein gründlicher Research-Analyst und Fact-Checker.
+
+        DEINE PERSPEKTIVE:
+        - Tiefgehende Analyse und Hintergrundrecherche
+        - Fakten prüfen und Quellen hinterfragen
+        - Alternativen und Vergleiche aufzeigen
+        - Langfristige Trends und Auswirkungen
+
+        DEIN STIL:
+        - Analytisch und faktenbasiert
+        - Stelle kritische Fragen
+        - Zeige verschiedene Perspektiven
+        - Belege Aussagen mit Argumenten
+
+        Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
+
+    # Claude als Security Expert (CLI - Pro-Abo)
     - id: reviewer
       role: reviewer
       name: "Security & Quality Expert"

@@ -21,6 +21,7 @@ export interface AgentConfig {
   emoji?: string;
   color?: string;
   apiKey?: string;
+  baseUrl?: string;  // For OpenAI-compatible APIs (LM Studio, vLLM, etc.)
   rateLimitDelayMs?: number;
   maxTokens?: number;
   temperature?: number;
@@ -158,6 +159,7 @@ export function loadConfig(): DiscussionConfig {
       emoji: a.emoji,
       color: a.color,
       apiKey: a.apiKey ? resolveEnvVar(a.apiKey) : undefined,
+      baseUrl: a.baseUrl,  // For OpenAI-compatible APIs
       rateLimitDelayMs: a.rateLimitDelayMs,
       maxTokens: a.maxTokens || 4096,
       temperature: a.temperature,
