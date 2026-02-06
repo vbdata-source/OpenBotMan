@@ -258,6 +258,22 @@ function getProviderLabel(provider: string): string {
 }
 
 /**
+ * Resolve environment variable references like ${VAR_NAME}
+ */
+function resolveEnvVar(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  if (value.startsWith('${') && value.endsWith('}')) {
+    const varName = value.slice(2, -1);
+    const envValue = process.env[varName];
+    if (!envValue) {
+      console.log(chalk.yellow(`  [Config] Warning: ${varName} not set in environment`));
+    }
+    return envValue;
+  }
+  return value;
+}
+
+/**
  * Load discussion config from config.yaml
  */
 function loadDiscussionConfig(configPath?: string): DiscussionConfig | null {
@@ -313,7 +329,7 @@ function getAgentsFromConfig(
       systemPrompt: a.systemPrompt + '\n\n' + CONSENSUS_PROTOCOL_PROMPT,
       provider: (a.provider || 'claude-cli') as 'claude-cli' | 'openai' | 'google' | 'mock',
       model: a.model || config.model || 'claude-sonnet-4-20250514',
-      apiKey: a.apiKey,
+      apiKey: resolveEnvVar(a.apiKey),
     }));
   } else {
     agents = [...DEFAULT_AGENTS];
