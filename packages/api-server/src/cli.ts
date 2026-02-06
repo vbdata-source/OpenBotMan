@@ -19,6 +19,7 @@
 import 'dotenv/config';
 import { startServer } from './server.js';
 import type { ApiServerConfig } from './types.js';
+import { getConfig } from './config.js';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -81,8 +82,13 @@ if (!apiKeys || apiKeys.length === 0) {
   process.exit(1);
 }
 
-// Provider/Model from CLI args only - settings belong in config.yaml, not .env
-const provider = getArg('provider', 'claude-cli') as ApiServerConfig['defaultProvider'];
+// Load config.yaml for defaults
+const yamlConfig = getConfig();
+
+// Provider/Model from CLI args, with config.yaml as fallback
+const configProvider = yamlConfig.agents[0]?.provider || 'claude-cli';
+const configModel = yamlConfig.model || 'claude-sonnet-4-20250514';
+const provider = getArg('provider', configProvider) as ApiServerConfig['defaultProvider'];
 
 // Validate provider
 if (!['claude-cli', 'claude-api', 'openai', 'google'].includes(provider)) {
@@ -102,7 +108,7 @@ const config: ApiServerConfig = {
   host: getArg('host', process.env.HOST ?? '0.0.0.0')!,
   apiKeys,
   corsOrigins: ['*'], // TODO: Make configurable
-  defaultModel: getArg('model', 'claude-sonnet-4-20250514')!,
+  defaultModel: getArg('model', configModel)!,
   defaultProvider: provider,
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
 };
