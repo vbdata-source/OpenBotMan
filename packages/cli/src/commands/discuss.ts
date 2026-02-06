@@ -435,14 +435,27 @@ function createAgentProvider(agent: DiscussAgentConfig, options: DiscussOptions)
 // ============================================================================
 
 /**
- * Find project root by looking for package.json
+ * Find project root by looking for config.yaml or root package.json
+ * (not just any package.json, as packages/cli also has one)
  */
 function findProjectRoot(startDir: string): string {
   let dir = startDir;
   for (let i = 0; i < 10; i++) {
+    // config.yaml is only in root
+    if (existsSync(join(dir, 'config.yaml'))) {
+      return dir;
+    }
+    // Check for root package.json (has "openbotman" or "workspaces")
     const pkgPath = join(dir, 'package.json');
     if (existsSync(pkgPath)) {
-      return dir;
+      try {
+        const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+        if (pkg.name === 'openbotman' || pkg.workspaces) {
+          return dir;
+        }
+      } catch {
+        // Ignore parse errors
+      }
     }
     const parent = dirname(dir);
     if (parent === dir) break;
