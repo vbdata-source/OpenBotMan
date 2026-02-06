@@ -16,7 +16,28 @@
  *   HOST                    Server host (default: 0.0.0.0)
  */
 
-import 'dotenv/config';
+import { config as dotenvConfig } from 'dotenv';
+import { existsSync } from 'fs';
+import { join, dirname } from 'path';
+
+// Load .env from project root (search upward)
+function loadEnvFromRoot() {
+  let dir = process.cwd();
+  for (let i = 0; i < 5; i++) {
+    const envPath = join(dir, '.env');
+    if (existsSync(envPath)) {
+      dotenvConfig({ path: envPath });
+      console.log(`[Env] Loaded from: ${envPath}`);
+      return;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  console.log('[Env] No .env found');
+}
+
+loadEnvFromRoot();
 import { startServer } from './server.js';
 import type { ApiServerConfig } from './types.js';
 import { getConfig } from './config.js';
