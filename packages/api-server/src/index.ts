@@ -30,3 +30,4 @@ export { DiscussRequestSchema } from './types.js';
 export { createAuthMiddleware } from './middleware/auth.js';
 export { loadWorkspaceContext, formatWorkspaceContext, type WorkspaceContext, type WorkspaceFile } from './workspace.js';
 export { jobStore, type Job, type JobStatus } from './jobs.js';
+export { getConfig, loadConfig, reloadConfig, getAgentsForDiscussion, type AgentConfig, type DiscussionConfig } from './config.js';

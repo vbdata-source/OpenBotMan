@@ -29,6 +29,9 @@ import {
 // Import from orchestrator (we'll use the discussion logic)
 import { createProvider } from '@openbotman/orchestrator';
 
+// Import config loader
+import { getConfig, getAgentsForDiscussion, type AgentConfig } from './config.js';
+
 /**
  * Create and configure the Express server
  */
@@ -114,14 +117,17 @@ export function createServer(config: ApiServerConfig): Express {
       
       // ASYNC MODE: Return job ID immediately
       if (request.async) {
-        const modelName = request.model ?? config.defaultModel;
+        // Load agents from config (supports per-agent model/provider)
+        const discussionConfig = getConfig();
+        const agentConfigs = getAgentsForDiscussion(discussionConfig, request.agents);
+        
         jobStore.create(requestId, request.topic);
-        jobStore.initAgents(
-          requestId, 
-          ['Analyst', 'Architect', 'Pragmatist'].slice(0, request.agents),
-          modelName,
-          config.defaultProvider
-        );
+        
+        // Initialize job with agent names and their individual models
+        const agentNames = agentConfigs.map(a => a.name);
+        const defaultModel = agentConfigs[0]?.model ?? config.defaultModel;
+        const defaultProvider = agentConfigs[0]?.provider ?? config.defaultProvider;
+        jobStore.initAgents(requestId, agentNames, defaultModel, defaultProvider);
         jobStore.setRunning(requestId, 'Diskussion startet...');
         
         // Run discussion in background
@@ -326,13 +332,7 @@ async function runDiscussion(
   config: ApiServerConfig,
   requestId: string
 ): Promise<DiscussionResult> {
-  
-  // Create provider based on config
-  const provider = createProvider({
-    provider: config.defaultProvider,
-    model: request.model ?? config.defaultModel,
-    apiKey: config.defaultProvider === 'claude-api' ? config.anthropicApiKey : undefined,
-  });
+  // Note: Individual providers are created per-agent below (supports different models)
   
   // Load topic from prompt file if specified
   let topic = request.topic;
@@ -361,24 +361,34 @@ async function runDiscussion(
   // Build the full context
   const fullContext = workspaceContext || '';
 
-  // Agent definitions with roles
-  const agentDefs: Array<{ name: string; role: string; systemPrompt: string }> = [
-    {
-      name: 'Analyst',
-      role: 'Analytiker',
-      systemPrompt: 'Du bist ein analytischer Experte. Analysiere Probleme tiefgehend, identifiziere Kernpunkte und Risiken. Sei kritisch aber konstruktiv.',
-    },
-    {
-      name: 'Architect',
-      role: 'Software-Architekt',
-      systemPrompt: 'Du bist ein erfahrener Software-Architekt. Bewerte Strukturen, Design Patterns und Skalierbarkeit. Schlage architektonische Verbesserungen vor.',
-    },
-    {
-      name: 'Pragmatist',
-      role: 'Pragmatischer Entwickler',
-      systemPrompt: 'Du bist ein pragmatischer Entwickler. Fokussiere auf umsetzbare Lösungen, priorisiere nach Aufwand/Nutzen. Fasse zusammen und erstelle klare Action Items.',
-    },
-  ].slice(0, request.agents);
+  // Load agent definitions from config.yaml (supports per-agent model/provider)
+  const discussionConfig = getConfig();
+  const agentConfigs = getAgentsForDiscussion(discussionConfig, request.agents);
+  
+  console.log(`[${requestId}] Using ${agentConfigs.length} agents from config:`);
+  agentConfigs.forEach(a => console.log(`  - ${a.name} (${a.provider}/${a.model})`));
+  
+  // Create providers for each agent (supports different models per agent)
+  const agentProviders = new Map<string, ReturnType<typeof createProvider>>();
+  for (const agent of agentConfigs) {
+    const providerConfig: {
+      provider: string;
+      model: string;
+      apiKey?: string;
+    } = {
+      provider: agent.provider,
+      model: agent.model,
+    };
+    
+    // Add API key if specified for this agent or from config
+    if (agent.apiKey) {
+      providerConfig.apiKey = agent.apiKey;
+    } else if (agent.provider === 'claude-api' && config.anthropicApiKey) {
+      providerConfig.apiKey = config.anthropicApiKey;
+    }
+    
+    agentProviders.set(agent.id, createProvider(providerConfig));
+  }
 
   const startTime = Date.now();
   const rounds: RoundResult[] = [];
@@ -398,10 +408,13 @@ async function runDiscussion(
       
       const roundContributions: AgentContribution[] = [];
       
-      // Each agent contributes
-      for (const agent of agentDefs) {
+      // Each agent contributes (with their own model/provider from config)
+      for (const agent of agentConfigs) {
         jobStore.setAgentThinking(requestId, agent.name);
         const agentStartTime = Date.now();
+        
+        // Get agent's specific provider (each agent can have different model)
+        const agentProvider = agentProviders.get(agent.id)!;
         
         // Build prompt based on round
         let prompt: string;
@@ -412,14 +425,14 @@ async function runDiscussion(
           // All other cases: Responder
           const previousContribs = round === 1 
             ? roundContributions 
-            : [...allContributions.slice(-agentDefs.length), ...roundContributions];
+            : [...allContributions.slice(-agentConfigs.length), ...roundContributions];
           prompt = buildResponderPrompt(topic, fullContext, previousContribs, round, agent.role);
         }
         
-        const response = await provider.send(prompt, {
+        const response = await agentProvider.send(prompt, {
           systemPrompt: agent.systemPrompt,
           timeoutMs: request.timeout * 1000,
-          maxTokens: 4096,
+          maxTokens: agent.maxTokens || 4096,
         });
         
         const { position, reason } = extractPosition(response.text);
@@ -432,15 +445,15 @@ async function runDiscussion(
           position: round === 1 && roundContributions.length === 0 ? 'PROPOSAL' : position,
           positionReason: reason,
           durationMs,
-          model: request.model ?? config.defaultModel,
-          provider: config.defaultProvider,
+          model: agent.model,      // Per-agent model!
+          provider: agent.provider, // Per-agent provider!
         };
         
         roundContributions.push(contribution);
         allContributions.push(contribution);
         
         jobStore.setAgentComplete(requestId, agent.name, response.text);
-        console.log(`[${requestId}] ${agent.name}: [${contribution.position}] (${Math.round(durationMs/1000)}s)`);
+        console.log(`[${requestId}] ${agent.name} (${agent.model}): [${contribution.position}] (${Math.round(durationMs/1000)}s)`);
       }
       
       // Evaluate round
