@@ -393,15 +393,21 @@ async function runDiscussion(
       model: agent.model,
     };
     
-    // Add API key if specified for this agent or from config
+    // Add API key: from agent config, or fallback to env vars
     if (agent.apiKey) {
       providerConfig.apiKey = agent.apiKey;
-    } else if (agent.provider === 'claude-api' && config.anthropicApiKey) {
-      providerConfig.apiKey = config.anthropicApiKey;
-    } else if (agent.provider === 'google' && process.env.GOOGLE_API_KEY) {
-      // Fallback: use env var directly for google
-      providerConfig.apiKey = process.env.GOOGLE_API_KEY;
-      console.log(`[${requestId}] Using GOOGLE_API_KEY from env for ${agent.name}`);
+    } else {
+      // Fallback to environment variables by provider
+      const envKeyMap: Record<string, string | undefined> = {
+        'claude-api': config.anthropicApiKey || process.env.ANTHROPIC_API_KEY,
+        'google': process.env.GOOGLE_API_KEY,
+        'openai': process.env.OPENAI_API_KEY,
+      };
+      const fallbackKey = envKeyMap[agent.provider];
+      if (fallbackKey) {
+        providerConfig.apiKey = fallbackKey;
+        console.log(`[${requestId}] Using ${agent.provider.toUpperCase()} key from env for ${agent.name}`);
+      }
     }
     
     agentProviders.set(agent.id, createProvider(providerConfig));
