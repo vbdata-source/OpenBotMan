@@ -75,10 +75,10 @@
           "enum": [0, 1, 2],
           "enumDescriptions": [
             "Nur Endergebnis anzeigen",
-            "Agent-Resultate live anzeigen",
-            "Alle Zwischengedanken anzeigen"
+            "Agent-Zusammenfassungen live anzeigen (vollständig)",
+            "Zusätzlich Zwischengedanken/Thinking anzeigen"
           ],
-          "description": "Verbose-Level: 0=Nur Ergebnis, 1=Agent-Resultate, 2=Alles"
+          "description": "Verbose-Level: 0=Nur Ergebnis, 1=Agent-Zusammenfassungen live, 2=+Zwischengedanken"
         }
       }
     },

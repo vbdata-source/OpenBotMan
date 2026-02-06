@@ -297,12 +297,12 @@ async function pollJobWithProgress(
           outputChannel.appendLine(`✅ ${agent.name} (${agent.durationMs ? Math.round(agent.durationMs / 1000) + 's' : ''})`);
           outputChannel.appendLine(`${'─'.repeat(40)}`);
           
-          if (verboseLevel >= 2 && agent.fullResponse) {
-            // Level 2: Show full response
+          if (agent.fullResponse) {
+            // Level 1+: Show full agent result (the summary passed to next agent)
             outputChannel.appendLine(agent.fullResponse);
           } else if (agent.responsePreview) {
-            // Level 1: Show preview
-            outputChannel.appendLine(`${agent.responsePreview}...`);
+            // Fallback if no full response available
+            outputChannel.appendLine(agent.responsePreview);
           }
           
           outputChannel.appendLine('');
