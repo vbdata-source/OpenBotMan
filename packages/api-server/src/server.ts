@@ -525,14 +525,27 @@ export function startServer(config: ApiServerConfig): Promise<void> {
   return new Promise((resolve) => {
     const app = createServer(config);
     
+    // Load agent configs for display
+    const discussionConfig = getConfig();
+    const agentConfigs = getAgentsForDiscussion(discussionConfig, 10); // Get all configured agents
+    
+    // Build agent display lines
+    const agentLines = agentConfigs.map(a => {
+      const emoji = a.emoji || '🤖';
+      const name = a.name.slice(0, 20).padEnd(20);
+      const provider = a.provider.slice(0, 12);
+      return `║    ${emoji} ${name} (${provider})`;
+    });
+    
     app.listen(config.port, config.host, () => {
       console.log(`
 ╔══════════════════════════════════════════════════════════════╗
 ║           🤖 OpenBotMan API Server                           ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  URL:      http://${config.host}:${config.port}                              ║
-║  Provider: ${config.defaultProvider.padEnd(20)}                       ║
-║  Model:    ${config.defaultModel.slice(0, 20).padEnd(20)}                       ║
+╠──────────────────────────────────────────────────────────────╣
+║  Discussion Agents (${agentConfigs.length}):                                    ║
+${agentLines.map(l => l.padEnd(64) + '║').join('\n')}
 ╠──────────────────────────────────────────────────────────────╣
 ║  Endpoints:                                                  ║
 ║    GET  /health          Health check                        ║
