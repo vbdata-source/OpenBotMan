@@ -16,15 +16,26 @@ export interface OllamaProviderConfig extends ProviderConfig {
 }
 
 export class OllamaProvider implements LLMProvider {
-  readonly name = 'ollama';
-  readonly model: string;
+  private readonly _model: string;
   private readonly baseUrl: string;
   private readonly defaults: ProviderOptions;
 
   constructor(config: OllamaProviderConfig) {
-    this.model = config.model;
+    this._model = config.model;
     this.baseUrl = config.baseUrl || 'http://localhost:11434';
     this.defaults = config.defaults || {};
+  }
+
+  getName(): string {
+    return 'ollama';
+  }
+
+  getModel(): string {
+    return this._model;
+  }
+
+  getDisplayName(): string {
+    return `${this._model} via Ollama`;
   }
 
   async isAvailable(): Promise<boolean> {
@@ -59,7 +70,7 @@ export class OllamaProvider implements LLMProvider {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: this.model,
+        model: this._model,
         messages,
         stream: false,
         options: {
@@ -89,15 +100,14 @@ export class OllamaProvider implements LLMProvider {
 
     return {
       text,
+      model: this._model,
+      provider: 'ollama',
+      isError: false,
+      durationMs: Date.now() - startTime,
       usage: {
         inputTokens,
         outputTokens,
         totalTokens: inputTokens + outputTokens,
-      },
-      metadata: {
-        model: this.model,
-        provider: this.name,
-        durationMs: Date.now() - startTime,
       },
     };
   }
