@@ -111,7 +111,17 @@ export function createServer(config: ApiServerConfig): Express {
         return;
       }
       
-      const request = parseResult.data;
+      const rawRequest = parseResult.data;
+      
+      // Apply defaults from config.yaml (not hardcoded!)
+      const discussionConfig = getConfig();
+      const request = {
+        ...rawRequest,
+        agents: rawRequest.agents ?? discussionConfig.agents.length,
+        maxRounds: rawRequest.maxRounds ?? discussionConfig.maxRounds ?? 10,
+        timeout: rawRequest.timeout ?? discussionConfig.timeout ?? 60,
+        maxContext: rawRequest.maxContext ?? Math.round(discussionConfig.maxContext / 1024) ?? 100,
+      };
       
       console.log(`[${requestId}] Starting discussion: "${request.topic.slice(0, 50)}..." (${request.agents} agents, async=${request.async})`);
       

@@ -11,16 +11,16 @@ export const DiscussRequestSchema = z.object({
   /** Discussion topic/question */
   topic: z.string().min(1).max(50000),
   
-  /** Number of agents (1-5) */
-  agents: z.number().int().min(1).max(5).default(3),
+  /** Number of agents (1-5) - defaults from config.yaml */
+  agents: z.number().int().min(1).max(5).optional(),
   
-  /** Maximum consensus rounds */
-  maxRounds: z.number().int().min(1).max(20).default(5),
+  /** Maximum consensus rounds - defaults from config.yaml */
+  maxRounds: z.number().int().min(1).max(20).optional(),
   
-  /** Timeout per agent in seconds */
-  timeout: z.number().int().min(10).max(300).default(60),
+  /** Timeout per agent in seconds - defaults from config.yaml */
+  timeout: z.number().int().min(10).max(600).optional(),
   
-  /** Model to use */
+  /** Model to use - defaults from config.yaml */
   model: z.string().optional(),
   
   /** Workspace path - directory to load files from */
@@ -29,8 +29,8 @@ export const DiscussRequestSchema = z.object({
   /** Include patterns - glob patterns for files to load from workspace */
   include: z.array(z.string()).optional(),
   
-  /** Max context size in KB (files loaded from workspace) */
-  maxContext: z.number().int().min(1).max(500).default(100),
+  /** Max context size in KB - defaults from config.yaml */
+  maxContext: z.number().int().min(1).max(500).optional(),
   
   /** Prompt file path - load topic from a markdown file */
   promptFile: z.string().optional(),

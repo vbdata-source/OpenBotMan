@@ -458,17 +458,17 @@ async function startDiscussion() {
     includeWorkspace = choice?.startsWith('Ja') ?? false;
   }
   
+  // No hardcoded defaults! Server reads from config.yaml
   const requestBody: Record<string, unknown> = {
     topic,
     async: true,
-    timeout: 120,
-    agents: 3,
+    // agents, timeout, maxRounds → from config.yaml via server
   };
   
   if (includeWorkspace && workspacePath) {
     requestBody.workspace = workspacePath;
     requestBody.include = ['**/*.ts', '**/*.js', '**/*.json', '**/*.cs', '**/*.py', '**/*.md'];
-    requestBody.maxContext = 200;
+    // maxContext → from config.yaml via server
   }
   
   await runAsyncJob(topic, requestBody, 'Experten-Diskussion');
@@ -510,11 +510,11 @@ Analysiere diesen Code auf:
 ${code}
 \`\`\``;
 
+  // No hardcoded defaults! Server reads from config.yaml
   const requestBody = {
     topic,
     async: true,
-    timeout: 120,
-    agents: 3,
+    // agents, timeout, maxRounds → from config.yaml via server
   };
 
   await runAsyncJob(topic, requestBody, `Code Review: ${fileName}`);
@@ -553,14 +553,13 @@ async function analyzeProject() {
   
   const topic = topics[analysisType.value];
   
+  // No hardcoded defaults! Server reads from config.yaml
   const requestBody = {
     topic,
     workspace: workspacePath,
     include: ['**/*.ts', '**/*.js', '**/*.cs', '**/*.py', '**/*.java', '**/*.json', '**/*.yaml', '**/*.yml', '**/*.md'],
-    maxContext: 200,
     async: true,
-    timeout: 180,
-    agents: 3,
+    // agents, timeout, maxRounds, maxContext → from config.yaml via server
   };
 
   await runAsyncJob(topic, requestBody, `${analysisType.label} - ${workspaceName}`);
