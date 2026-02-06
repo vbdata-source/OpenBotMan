@@ -34,8 +34,7 @@ ENV/
 *.swo
 *~
 
-# Configuration
-config.yaml
+# Configuration (secrets go in .env, not config.yaml)
 .env
 
 # Logs
