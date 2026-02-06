@@ -386,9 +386,9 @@ async function runDiscussion(
       console.log(`[${requestId}] Starting round ${round}/${request.maxRounds}`);
       jobStore.setRound(requestId, round, request.maxRounds);
       
-      // Reset agent statuses for new round
-      for (const agent of agentDefs) {
-        jobStore.update(requestId, {}); // Trigger update
+      // Reset agent statuses for new round (just trigger update once)
+      if (round > 1) {
+        jobStore.setRound(requestId, round, request.maxRounds);
       }
       
       const roundContributions: AgentContribution[] = [];
