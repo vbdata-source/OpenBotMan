@@ -6,6 +6,12 @@ Alle wichtigen Änderungen an OpenBotMan werden hier dokumentiert.
 
 ### ✨ Neue Features
 
+#### Model-Transparenz & Agent-Gruppen (NEU)
+- **Model-Anzeige** - Jeder Agent zeigt verwendetes Model in der Ausgabe
+- **Provider-Info** - Provider (claude-cli/claude-api) wird angezeigt
+- **Agent-Gruppen Konzept** - Dokumentation für zukünftige Agent-Verwaltung
+- Vorbereitung für Token-Tracking und Kosten-Anzeige
+
 #### VSCode Extension
 - **Agent Progress Tracking** - Live-Anzeige der arbeitenden Agents in der Sidebar
   - Zeigt Status: waiting → thinking → complete

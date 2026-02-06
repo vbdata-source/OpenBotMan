@@ -19,6 +19,8 @@ export interface AgentProgress {
   durationMs?: number;
   responsePreview?: string; // First 100 chars of response
   fullResponse?: string; // Full response for verbose mode
+  model?: string;
+  provider?: string;
 }
 
 export interface Job {
@@ -81,12 +83,14 @@ class JobStore {
   /**
    * Initialize agents for a job
    */
-  initAgents(id: string, agentNames: string[]): void {
+  initAgents(id: string, agentNames: string[], model?: string, provider?: string): void {
     const agents: AgentProgress[] = agentNames.map((name, i) => ({
       id: `agent-${i}`,
       name,
       role: this.getRoleFromName(name),
       status: 'waiting',
+      model,
+      provider,
     }));
     
     this.update(id, { agents, currentRound: 0, maxRounds: 5 });

@@ -19,6 +19,8 @@ export interface AgentContribution {
   position: ConsensusPosition;
   positionReason?: string;
   durationMs: number;
+  model?: string;
+  provider?: string;
 }
 
 export interface RoundResult {
@@ -280,7 +282,8 @@ export function formatConsensusResult(result: ConsensusResult): string {
     // Agent contributions
     for (const contrib of round.contributions) {
       lines.push(`### ${contrib.agentName}`);
-      lines.push(`*${contrib.role} | [${contrib.position}] | ${Math.round(contrib.durationMs / 1000)}s*`);
+      const modelInfo = contrib.model ? ` | ${contrib.model}` : '';
+      lines.push(`*${contrib.role} | [${contrib.position}] | ${Math.round(contrib.durationMs / 1000)}s${modelInfo}*`);
       lines.push('');
       lines.push(contrib.content);
       lines.push('');

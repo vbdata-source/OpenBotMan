@@ -114,8 +114,14 @@ export function createServer(config: ApiServerConfig): Express {
       
       // ASYNC MODE: Return job ID immediately
       if (request.async) {
+        const modelName = request.model ?? config.defaultModel;
         jobStore.create(requestId, request.topic);
-        jobStore.initAgents(requestId, ['Analyst', 'Architect', 'Pragmatist'].slice(0, request.agents));
+        jobStore.initAgents(
+          requestId, 
+          ['Analyst', 'Architect', 'Pragmatist'].slice(0, request.agents),
+          modelName,
+          config.defaultProvider
+        );
         jobStore.setRunning(requestId, 'Diskussion startet...');
         
         // Run discussion in background
@@ -214,6 +220,8 @@ export function createServer(config: ApiServerConfig): Express {
         role: a.role,
         status: a.status,
         durationMs: a.durationMs,
+        model: a.model,
+        provider: a.provider,
         responsePreview: a.responsePreview,
         // Include full response in verbose mode
         ...(verbose && a.fullResponse ? { fullResponse: a.fullResponse } : {}),
@@ -424,6 +432,8 @@ async function runDiscussion(
           position: round === 1 && roundContributions.length === 0 ? 'PROPOSAL' : position,
           positionReason: reason,
           durationMs,
+          model: request.model ?? config.defaultModel,
+          provider: config.defaultProvider,
         };
         
         roundContributions.push(contribution);
