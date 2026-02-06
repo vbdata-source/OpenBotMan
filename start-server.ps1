@@ -61,6 +61,6 @@ Write-Host ""
 Write-Host "🚀 Starte OpenBotMan API Server..." -ForegroundColor Green
 Write-Host ""
 
-# Starte Server
+# Starte Server direkt (damit env vars erhalten bleiben)
 Set-Location $PSScriptRoot
-pnpm --filter @openbotman/api-server start
+node packages/api-server/dist/cli.js
