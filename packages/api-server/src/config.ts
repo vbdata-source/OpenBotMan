@@ -59,6 +59,7 @@ interface ConfigFile {
       emoji?: string;
       color?: string;
       apiKey?: string;
+      baseUrl?: string;
       rateLimitDelayMs?: number;
       maxTokens?: number;
       temperature?: number;
