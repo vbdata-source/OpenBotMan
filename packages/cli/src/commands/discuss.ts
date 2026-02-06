@@ -243,14 +243,32 @@ const ROLE_EMOJI_MAP: Record<string, string> = {
 };
 
 /**
+ * Get display label for provider
+ */
+function getProviderLabel(provider: string): string {
+  switch (provider) {
+    case 'claude-cli': return 'CLI';
+    case 'claude-api': return 'Claude API';
+    case 'google': return 'Gemini';
+    case 'openai': return 'GPT';
+    case 'ollama': return 'Ollama';
+    case 'mock': return 'Mock';
+    default: return provider;
+  }
+}
+
+/**
  * Load discussion config from config.yaml
  */
 function loadDiscussionConfig(configPath?: string): DiscussionConfig | null {
+  // Search in multiple locations (CLI runs from packages/cli, config is in root)
   const paths = [
     configPath,
     'config.yaml',
     'config.yml',
     join(process.cwd(), 'config.yaml'),
+    join(process.cwd(), '..', '..', 'config.yaml'),  // From packages/cli to root
+    join(process.cwd(), '..', 'config.yaml'),        // One level up
   ].filter(Boolean) as string[];
 
   for (const path of paths) {
@@ -258,12 +276,20 @@ function loadDiscussionConfig(configPath?: string): DiscussionConfig | null {
       try {
         const content = readFileSync(path, 'utf-8');
         const config = parseYaml(content) as Record<string, unknown>;
-        return config['discussion'] as DiscussionConfig | undefined ?? null;
-      } catch {
-        // Ignore parse errors, fall back to defaults
+        const discussion = config['discussion'] as DiscussionConfig | undefined;
+        if (discussion) {
+          console.log(chalk.gray(`  [Config] Loaded from: ${path}`));
+          if (discussion.agents) {
+            console.log(chalk.gray(`  [Config] Found ${discussion.agents.length} agents`));
+          }
+          return discussion;
+        }
+      } catch (error) {
+        console.log(chalk.yellow(`  [Config] Parse error in ${path}: ${error}`));
       }
     }
   }
+  console.log(chalk.yellow('  [Config] No config.yaml found, using defaults'));
   return null;
 }
 
@@ -922,7 +948,7 @@ async function runAgentTurn(
  * Print agent header with model info
  */
 function printAgentHeader(agent: DiscussAgentConfig): void {
-  const providerLabel = agent.provider === 'claude-cli' ? 'CLI' : 'API';
+  const providerLabel = getProviderLabel(agent.provider);
   const header = `[${agent.name}] ${agent.emoji} ${agent.role.toUpperCase()} (${agent.model} via ${providerLabel})`;
   console.log(agent.color(header));
   console.log(chalk.gray('─'.repeat(60)));
@@ -1057,7 +1083,7 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
   // Agents
   console.log(chalk.cyan('║') + chalk.bold('  Agenten:') + ' '.repeat(boxWidth - 12) + chalk.cyan('║'));
   for (const agent of agents) {
-    const providerLabel = agent.provider === 'claude-cli' ? 'CLI' : 'API';
+    const providerLabel = getProviderLabel(agent.provider);
     const agentLine = `  ${agent.emoji} ${agent.name.padEnd(12)} ${chalk.gray(`${agent.role} · ${providerLabel}`)}`;
     console.log(chalk.cyan('║') + agentLine.padEnd(boxWidth + 9) + chalk.cyan('║'));
   }
@@ -1131,7 +1157,7 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
       proposerSpinner.stop();
       
       const extracted = extractPosition(proposerResponse.text);
-      const providerLabel = proposer.provider === 'claude-cli' ? 'CLI' : 'API';
+      const providerLabel = getProviderLabel(proposer.provider);
       
       const proposerContrib: ConsensusContribution = {
         agentId: proposer.id,
@@ -1182,7 +1208,7 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
         agentName: proposer.name,
         role: proposer.role,
         model: proposer.model,
-        provider: proposer.provider === 'claude-cli' ? 'CLI' : 'API',
+        provider: getProviderLabel(proposer.provider),
         emoji: proposer.emoji,
         content: errorContent,
         position: 'PROPOSAL',
@@ -1219,7 +1245,7 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
         responderSpinner.stop();
         
         const { position, reason } = extractPosition(responderResponse.text);
-        const providerLabel = responder.provider === 'claude-cli' ? 'CLI' : 'API';
+        const providerLabel = getProviderLabel(responder.provider);
         
         const responderContrib: ConsensusContribution = {
           agentId: responder.id,
@@ -1270,7 +1296,7 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
           agentName: responder.name,
           role: responder.role,
           model: responder.model,
-          provider: responder.provider === 'claude-cli' ? 'CLI' : 'API',
+          provider: getProviderLabel(responder.provider),
           emoji: responder.emoji,
           content: errorContent,
           position: 'CONCERN',
@@ -1358,7 +1384,7 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
       name: a.name,
       role: a.role,
       model: a.model,
-      provider: a.provider === 'claude-cli' ? 'CLI' : 'API',
+      provider: getProviderLabel(a.provider),
     })),
   };
   
