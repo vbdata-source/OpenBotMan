@@ -184,7 +184,9 @@ export function loadConfig(): DiscussionConfig {
 function resolveEnvVar(value: string): string {
   if (value.startsWith('${') && value.endsWith('}')) {
     const varName = value.slice(2, -1);
-    return process.env[varName] || '';
+    const resolved = process.env[varName];
+    console.log(`[Config] Resolving ${varName}: ${resolved ? '✓ found' : '✗ NOT FOUND'}`);
+    return resolved || '';
   }
   return value;
 }
