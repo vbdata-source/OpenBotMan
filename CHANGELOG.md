@@ -2,11 +2,60 @@
 
 Alle wichtigen Änderungen an OpenBotMan werden hier dokumentiert.
 
+## [2.0.0-alpha.3] - 2026-02-06
+
+### ✨ Neue Features
+
+#### Multi-Model Support (NEU)
+- **Per-Agent Provider** - Jeder Agent kann eigenes Model/Provider haben
+  ```yaml
+  discussion:
+    agents:
+      - id: coder
+        provider: claude-cli
+        model: claude-sonnet-4-20250514
+      - id: planner
+        provider: google
+        model: gemini-2.0-flash
+        apiKey: ${GOOGLE_API_KEY}
+  ```
+- **Unterstützte Provider**: claude-cli, claude-api, google, openai, ollama
+- **Provider Labels** - Anzeige zeigt "Gemini", "GPT", "CLI" statt nur "CLI/API"
+
+#### Environment & Config
+- **`.env` Support** - Alle API-Keys an einem Ort
+  - `.env.example` als Template
+  - `start-server.ps1` / `start-server.cmd` für einfachen Start
+- **`${VAR}` Auflösung** - Environment-Variablen in config.yaml
+- **Config aus Root** - CLI findet config.yaml auch aus packages/cli
+
+#### VSCode Extension
+- **Auto-Save Results** - Diskussionen werden automatisch als Markdown gespeichert
+  - Setting: `openbotman.autoSaveResults` (default: true)
+  - Setting: `openbotman.discussionsPath` (default: "discussions")
+- **"Datei öffnen" Button** - Nach Abschluss direkt zur MD-Datei
+
+### 🐛 Bug Fixes
+
+- **Config nicht gefunden** - CLI suchte nur in packages/cli, jetzt auch in Parent-Dirs
+- **`.env` nicht geladen** - dotenv suchte im falschen Verzeichnis
+- **`${VAR}` nicht aufgelöst** - API-Keys wurden als Literal-String gelesen
+- **TypeScript Fehler** - Provider-Type Casting korrigiert
+
+### ⚙️ Neue Dateien
+
+- `packages/api-server/src/config.ts` - Config Loader mit Agent-Definitionen
+- `.env.example` - Template für Environment-Variablen
+- `start-server.ps1` - PowerShell Start-Script
+- `start-server.cmd` - CMD Start-Script
+
+---
+
 ## [2.0.0-alpha.2] - 2026-02-06
 
 ### ✨ Neue Features
 
-#### Model-Transparenz & Agent-Gruppen (NEU)
+#### Model-Transparenz & Agent-Gruppen
 - **Model-Anzeige** - Jeder Agent zeigt verwendetes Model in der Ausgabe
 - **Provider-Info** - Provider (claude-cli/claude-api) wird angezeigt
 - **Agent-Gruppen Konzept** - Dokumentation für zukünftige Agent-Verwaltung
