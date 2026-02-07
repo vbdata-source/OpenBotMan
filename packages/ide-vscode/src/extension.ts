@@ -367,15 +367,9 @@ async function pollJobWithProgress(
       agentListShown = true;
       outputChannel.appendLine('📋 Agenten:');
       for (const agent of job.agents) {
-        const modelShort = agent.model 
-          ? (agent.model.includes('gemini') ? 'Gemini' 
-            : agent.model.includes('sonnet') ? 'Sonnet'
-            : agent.model.includes('opus') ? 'Opus'
-            : agent.model.includes('haiku') ? 'Haiku'
-            : agent.model.includes('gpt-4') ? 'GPT-4'
-            : agent.model.split('-')[0])
-          : 'unknown';
-        outputChannel.appendLine(`   • ${agent.name} → ${modelShort}`);
+        // Show provider (clearer than model name)
+        const providerDisplay = agent.provider || 'unknown';
+        outputChannel.appendLine(`   • ${agent.name} → ${providerDisplay}`);
       }
       outputChannel.appendLine('');
     }
@@ -833,26 +827,17 @@ class JobsTreeProvider implements vscode.TreeDataProvider<JobTreeItem> {
       return element.job.agents.map(agent => {
         const duration = agent.durationMs ? `${Math.round(agent.durationMs / 1000)}s` : '';
         
-        // Get short model name (e.g., "gemini-2.0-flash" → "gemini", "claude-sonnet-4" → "sonnet")
-        let modelShort = '';
-        if (agent.model) {
-          if (agent.model.includes('gemini')) modelShort = 'Gemini';
-          else if (agent.model.includes('sonnet')) modelShort = 'Sonnet';
-          else if (agent.model.includes('opus')) modelShort = 'Opus';
-          else if (agent.model.includes('haiku')) modelShort = 'Haiku';
-          else if (agent.model.includes('gpt-4')) modelShort = 'GPT-4';
-          else if (agent.model.includes('gpt-3')) modelShort = 'GPT-3.5';
-          else modelShort = agent.model.split('/').pop()?.split('-')[0] || '';
-        }
+        // Show provider instead of model (clearer)
+        const providerDisplay = agent.provider || '';
         
-        // Status text with model
+        // Status text with provider
         let statusText = '';
         if (agent.status === 'thinking') {
-          statusText = modelShort ? `${modelShort} · denkt nach...` : 'denkt nach...';
+          statusText = providerDisplay ? `${providerDisplay} · denkt nach...` : 'denkt nach...';
         } else if (agent.status === 'complete' && duration) {
-          statusText = modelShort ? `${modelShort} · ${duration}` : duration;
+          statusText = providerDisplay ? `${providerDisplay} · ${duration}` : duration;
         } else if (agent.status === 'waiting') {
-          statusText = modelShort ? `${modelShort} · wartet` : 'wartet';
+          statusText = providerDisplay ? `${providerDisplay} · wartet` : 'wartet';
         } else if (agent.status === 'error') {
           statusText = 'Fehler';
         }
