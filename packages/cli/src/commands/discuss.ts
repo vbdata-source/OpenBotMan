@@ -1358,15 +1358,15 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
     };
   }
 
-  // Info Header - Clean left-border style (no alignment issues)
+  // Info Header - Clean style without left border
   const divider = chalk.cyan('─'.repeat(55));
-  const section = (title: string) => console.log(chalk.cyan('│ ') + chalk.bold(title));
-  const line = (text: string) => console.log(chalk.cyan('│ ') + text);
+  const section = (title: string) => console.log(chalk.bold(title));
+  const line = (text: string) => console.log(text);
   
   console.log('\n');
-  console.log(chalk.cyan('┌') + divider);
-  console.log(chalk.cyan('│ ') + chalk.bold.white('🤖 OpenBotMan Multi-Agent Discussion'));
-  console.log(chalk.cyan('├') + divider);
+  console.log(divider);
+  console.log(chalk.bold.white('🤖 OpenBotMan Multi-Agent Discussion'));
+  console.log(divider);
   
   // Topic
   const topicDisplay = options.topic.length > 45 
@@ -1392,7 +1392,7 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
     line(`Workspace: ${chalk.gray(shortPath)} ${chalk.gray(filesInfo)}`);
   }
   
-  console.log(chalk.cyan('├') + divider);
+  console.log(divider);
   
   // Agents
   section('Agenten:');
@@ -1401,12 +1401,12 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
     line(`${agent.emoji} ${agent.name.padEnd(22)} ${chalk.gray(`${agent.role} · ${providerLabel}`)}`);
   }
   
-  console.log(chalk.cyan('├') + divider);
+  console.log(divider);
   
   // Settings
-  line(chalk.gray(`Runden: ${maxRounds}  │  Timeout: ${timeout}s  │  Kontext: ${Math.round(context.totalSize / 1024)}KB`));
+  line(chalk.gray(`Runden: ${maxRounds}  ·  Timeout: ${timeout}s  ·  Kontext: ${Math.round(context.totalSize / 1024)}KB`));
   
-  console.log(chalk.cyan('└') + divider);
+  console.log(divider);
   console.log('');
 
   // Context status (already loaded above for header)
