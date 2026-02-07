@@ -100,8 +100,10 @@ function normalizeAgent(raw: Record<string, unknown>): OrchestratorConfig['agent
     enabled: raw['enabled'] as boolean ?? true,
     maxTokens: raw['maxTokens'] as number | undefined,
     temperature: raw['temperature'] as number | undefined,
-    apiKey,
-    baseUrl: raw['baseUrl'] as string | undefined,
+    api: (apiKey || raw['baseUrl']) ? {
+      apiKey,
+      baseUrl: raw['baseUrl'] as string | undefined,
+    } : undefined,
     capabilities: {
       code: caps['code'] as boolean ?? false,
       review: caps['review'] as boolean ?? false,
