@@ -1358,7 +1358,7 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
     };
   }
 
-  // Info Header with Box Design - Simple fixed-width approach
+  // Info Header with Box Design
   const W = 60;  // Total inner width
   const topBorder = chalk.cyan('╔' + '═'.repeat(W) + '╗');
   const midBorder = chalk.cyan('╠' + '─'.repeat(W) + '╣');
@@ -1366,18 +1366,37 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
   const L = chalk.cyan('║');
   const R = chalk.cyan('║');
   
-  // Count emojis in string (they take 2 cols in terminal but count as 1-2 in JS)
-  const countEmojis = (s: string): number => {
-    const emojiRegex = /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu;
-    return (s.match(emojiRegex) || []).length;
+  // Calculate visual width of string (emojis = 2, others = 1)
+  const stringWidth = (s: string): number => {
+    let width = 0;
+    for (const char of s) {
+      const code = char.codePointAt(0) || 0;
+      // Emoji ranges: wide characters in terminal
+      if (code >= 0x1F300 && code <= 0x1F9FF) width += 2;      // Misc Symbols & Pictographs
+      else if (code >= 0x2600 && code <= 0x26FF) width += 2;   // Misc Symbols  
+      else if (code >= 0x2700 && code <= 0x27BF) width += 2;   // Dingbats
+      else if (code >= 0x1F600 && code <= 0x1F64F) width += 2; // Emoticons
+      else if (code >= 0x1F680 && code <= 0x1F6FF) width += 2; // Transport
+      else if (code >= 0x1F1E0 && code <= 0x1F1FF) width += 2; // Flags
+      else if (code >= 0x231A && code <= 0x23FF) width += 2;   // Misc Technical
+      else if (code >= 0xFE00 && code <= 0xFE0F) width += 0;   // Variation selectors (invisible)
+      else if (code >= 0x200D) width += 0;                      // ZWJ (invisible)
+      else width += 1;
+    }
+    return width;
   };
   
-  // Row builder with emoji compensation
+  // Pad string to visual width
+  const padToWidth = (s: string, targetWidth: number): string => {
+    const currentWidth = stringWidth(s);
+    const padding = Math.max(0, targetWidth - currentWidth);
+    return s + ' '.repeat(padding);
+  };
+  
+  // Row builder
   const row = (text: string) => {
-    const emojiCount = countEmojis(text);
-    const targetLen = W - emojiCount;  // Each emoji takes extra space
-    const truncated = text.length > targetLen ? text.substring(0, targetLen - 3) + '...' : text;
-    return L + truncated.padEnd(targetLen) + R;
+    const padded = padToWidth(text, W);
+    return L + padded + R;
   };
   
   console.log('\n');
