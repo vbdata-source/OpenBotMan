@@ -221,6 +221,45 @@ program
   });
 
 /**
+ * List teams
+ */
+program
+  .command('teams')
+  .description('List available team presets')
+  .option('-c, --config <path>', 'Config file path', 'config.yaml')
+  .action((options) => {
+    try {
+      const configContent = readFileSync(options.config, 'utf-8');
+      const fullConfig = parseYaml(configContent) as { discussion?: { teams?: Array<{ id: string; name: string; description?: string; agents: string[]; default?: boolean }> } };
+      const teams = fullConfig?.discussion?.teams;
+      
+      if (!teams || teams.length === 0) {
+        console.log(chalk.yellow('\nNo teams defined in config.yaml'));
+        console.log(chalk.gray('Add a "teams" section under "discussion" in your config.\n'));
+        return;
+      }
+      
+      console.log(chalk.bold('\n📋 Available Teams:\n'));
+      
+      for (const team of teams) {
+        const defaultBadge = team.default ? chalk.green(' (default)') : '';
+        console.log(chalk.cyan(`  ${team.id}`) + defaultBadge);
+        console.log(chalk.white(`    ${team.name}`));
+        if (team.description) {
+          console.log(chalk.gray(`    ${team.description}`));
+        }
+        console.log(chalk.gray(`    Agents: ${team.agents.join(', ')}`));
+        console.log();
+      }
+      
+      console.log(chalk.gray('Usage: pnpm cli discuss "topic" --team <team-id>\n'));
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  });
+
+/**
  * List workflows
  */
 program
@@ -350,6 +389,7 @@ program
   .option('--max-context <kb>', 'Maximum context size in KB (default: 30)', '30')
   .option('-g, --github', 'Include GitHub context (issues, PRs)')
   .option('-a, --agents <count>', 'Number of agents (default: all from config)')
+  .option('--team <team-id>', 'Use predefined team (e.g., quick, local-only, code-review)')
   .option('-t, --timeout <seconds>', 'Timeout per agent in seconds', '60')
   .option('-m, --model <model>', 'Model to use for all agents')
   .option('-r, --max-rounds <rounds>', 'Maximum consensus rounds', '10')
@@ -406,6 +446,7 @@ program
       planner: options.planner,
       coder: options.coder,
       reviewer: options.reviewer,
+      team: options.team,
     });
   });
 

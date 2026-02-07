@@ -76,6 +76,7 @@ export interface DiscussOptions {
   files?: string[];
   github?: boolean;
   agents?: number;
+  team?: string;     // Team ID to use (e.g., "quick", "local-only")
   timeout?: number;
   verbose?: boolean;
   model?: string;
@@ -123,6 +124,15 @@ export interface DiscussionConfig {
     model?: string;
     apiKey?: string;
     baseUrl?: string;
+  }>;
+  teams?: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    agents: string[];       // Agent IDs
+    default?: boolean;
+    maxRounds?: number;
+    timeout?: number;
   }>;
 }
 
@@ -374,6 +384,59 @@ function getAgentSystemPrompt(
 }
 
 /**
+ * Team definition from config
+ */
+interface TeamDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  agents: string[];
+  default?: boolean;
+  maxRounds?: number;
+  timeout?: number;
+}
+
+/**
+ * Lookup a team by ID
+ * Returns undefined if not found
+ */
+function lookupTeam(teams: TeamDefinition[] | undefined, teamId: string): TeamDefinition | undefined {
+  if (!teams || !teamId) return undefined;
+  return teams.find(t => t.id === teamId);
+}
+
+/**
+ * Get list of available team IDs for error messages
+ */
+function getAvailableTeams(teams: TeamDefinition[] | undefined): string {
+  if (!teams || teams.length === 0) return 'none defined';
+  return teams.map(t => `"${t.id}"`).join(', ');
+}
+
+/**
+ * Display available teams (for CLI help)
+ */
+export function displayTeams(config: DiscussionConfig | null): void {
+  const teams = config?.teams;
+  if (!teams || teams.length === 0) {
+    console.log(chalk.yellow('No teams defined in config.yaml'));
+    return;
+  }
+  
+  console.log(chalk.bold('\n📋 Available Teams:\n'));
+  for (const team of teams) {
+    const defaultBadge = team.default ? chalk.green(' (default)') : '';
+    console.log(chalk.cyan(`  ${team.id}`) + defaultBadge);
+    console.log(chalk.white(`    ${team.name}`));
+    if (team.description) {
+      console.log(chalk.gray(`    ${team.description}`));
+    }
+    console.log(chalk.gray(`    Agents: ${team.agents.join(', ')}`));
+    console.log();
+  }
+}
+
+/**
  * Merge config agents with defaults and apply overrides
  */
 function getAgentsFromConfig(
@@ -445,7 +508,45 @@ function getAgentsFromConfig(
     }
   }
   
-  // Limit agent count if specified
+  // Check for conflicting options: --team and --agents
+  if (options.team && options.agents) {
+    console.log();
+    console.log(chalk.red.bold('⚠️  Konflikt: --team und --agents können nicht gleichzeitig verwendet werden.'));
+    console.log(chalk.gray('    Verwende entweder --team <team-id> ODER --agents <anzahl>.'));
+    console.log();
+    process.exit(1);
+  }
+  
+  // Apply team selection if specified
+  if (options.team && config?.teams) {
+    const team = lookupTeam(config.teams as TeamDefinition[], options.team);
+    if (!team) {
+      console.log();
+      console.log(chalk.red.bold(`⚠️  Team "${options.team}" nicht gefunden.`));
+      console.log(chalk.gray(`    Verfügbare Teams: ${getAvailableTeams(config.teams as TeamDefinition[])}`));
+      console.log(chalk.gray('    Tipp: pnpm cli teams zeigt alle Teams an.'));
+      console.log();
+      process.exit(1);
+    }
+    
+    // Filter agents to only those in the team
+    const teamAgentIds = team.agents;
+    const filteredAgents = agents.filter(a => teamAgentIds.includes(a.id));
+    
+    if (filteredAgents.length === 0) {
+      console.log();
+      console.log(chalk.red.bold(`⚠️  Team "${options.team}" hat keine gültigen Agents.`));
+      console.log(chalk.gray(`    Definierte Agents: ${teamAgentIds.join(', ')}`));
+      console.log(chalk.gray(`    Verfügbare Agents: ${agents.map(a => a.id).join(', ')}`));
+      console.log();
+      process.exit(1);
+    }
+    
+    console.log(chalk.gray(`  [Team] Using team "${team.name}" with ${filteredAgents.length} agents`));
+    return filteredAgents;
+  }
+  
+  // Limit agent count if specified (only when no team selected)
   const count = Math.min(options.agents || agents.length, agents.length);
   return agents.slice(0, count);
 }
