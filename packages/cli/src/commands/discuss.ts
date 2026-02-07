@@ -1358,60 +1358,27 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
     };
   }
 
-  // Info Header with Box Design
-  const W = 60;  // Total inner width
-  const topBorder = chalk.cyan('╔' + '═'.repeat(W) + '╗');
-  const midBorder = chalk.cyan('╠' + '─'.repeat(W) + '╣');
-  const botBorder = chalk.cyan('╚' + '═'.repeat(W) + '╝');
-  const L = chalk.cyan('║');
-  const R = chalk.cyan('║');
-  
-  // Calculate visual width of string (emojis = 2, others = 1)
-  const stringWidth = (s: string): number => {
-    let width = 0;
-    for (const char of s) {
-      const code = char.codePointAt(0) || 0;
-      // Emoji ranges: wide characters in terminal
-      if (code >= 0x1F300 && code <= 0x1F9FF) width += 2;      // Misc Symbols & Pictographs
-      else if (code >= 0x2600 && code <= 0x26FF) width += 2;   // Misc Symbols  
-      else if (code >= 0x2700 && code <= 0x27BF) width += 2;   // Dingbats
-      else if (code >= 0x1F600 && code <= 0x1F64F) width += 2; // Emoticons
-      else if (code >= 0x1F680 && code <= 0x1F6FF) width += 2; // Transport
-      else if (code >= 0x1F1E0 && code <= 0x1F1FF) width += 2; // Flags
-      else if (code >= 0x231A && code <= 0x23FF) width += 2;   // Misc Technical
-      else if (code >= 0xFE00 && code <= 0xFE0F) width += 0;   // Variation selectors (invisible)
-      else if (code >= 0x200D) width += 0;                      // ZWJ (invisible)
-      else width += 1;
-    }
-    return width;
-  };
-  
-  // Pad string to visual width
-  const padToWidth = (s: string, targetWidth: number): string => {
-    const currentWidth = stringWidth(s);
-    const padding = Math.max(0, targetWidth - currentWidth);
-    return s + ' '.repeat(padding);
-  };
-  
-  // Row builder
-  const row = (text: string) => {
-    const padded = padToWidth(text, W);
-    return L + padded + R;
-  };
+  // Info Header - Clean left-border style (no alignment issues)
+  const divider = chalk.cyan('─'.repeat(55));
+  const section = (title: string) => console.log(chalk.cyan('│ ') + chalk.bold(title));
+  const line = (text: string) => console.log(chalk.cyan('│ ') + text);
   
   console.log('\n');
-  console.log(topBorder);
-  console.log(row('  🤖 OpenBotMan Multi-Agent Discussion'));
-  console.log(midBorder);
+  console.log(chalk.cyan('┌') + divider);
+  console.log(chalk.cyan('│ ') + chalk.bold.white('🤖 OpenBotMan Multi-Agent Discussion'));
+  console.log(chalk.cyan('├') + divider);
   
   // Topic
-  console.log(row(`  Thema: ${options.topic}`));
+  const topicDisplay = options.topic.length > 45 
+    ? options.topic.substring(0, 42) + '...'
+    : options.topic;
+  line(`Thema: ${topicDisplay}`);
   
   // Team
   if (options.team && discussionConfig?.teams) {
     const selectedTeam = lookupTeam(discussionConfig.teams as TeamDefinition[], options.team);
     if (selectedTeam) {
-      console.log(row(`  Team: ${selectedTeam.name}`));
+      line(`Team: ${chalk.yellow(selectedTeam.name)}`);
     }
   }
   
@@ -1419,30 +1386,27 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
   if (context.sourceFiles.length > 0) {
     const workspacePath = options.workspace || context.projectRoot;
     const filesInfo = `(${context.sourceFiles.length} files, ${Math.round(context.totalSize / 1024)}KB)`;
-    const maxPath = W - 16 - filesInfo.length;
-    const shortPath = workspacePath.length > maxPath 
-      ? '...' + workspacePath.slice(-maxPath + 3) 
+    const shortPath = workspacePath.length > 30 
+      ? '...' + workspacePath.slice(-27) 
       : workspacePath;
-    console.log(row(`  Workspace: ${shortPath} ${filesInfo}`));
+    line(`Workspace: ${chalk.gray(shortPath)} ${chalk.gray(filesInfo)}`);
   }
   
-  console.log(midBorder);
+  console.log(chalk.cyan('├') + divider);
   
   // Agents
-  console.log(row('  Agenten:'));
+  section('Agenten:');
   for (const agent of agents) {
     const providerLabel = getProviderLabel(agent.provider, agent.api?.baseUrl);
-    // Fixed columns: emoji(2) + space + name(24) + info(rest)
-    const agentLine = `  ${agent.emoji} ${agent.name.padEnd(24)}${agent.role} · ${providerLabel}`;
-    console.log(row(agentLine));
+    line(`${agent.emoji} ${agent.name.padEnd(22)} ${chalk.gray(`${agent.role} · ${providerLabel}`)}`);
   }
   
-  console.log(midBorder);
+  console.log(chalk.cyan('├') + divider);
   
   // Settings
-  console.log(row(`  Runden: ${maxRounds}  │  Timeout: ${timeout}s  │  Kontext: ${Math.round(context.totalSize / 1024)}KB`));
+  line(chalk.gray(`Runden: ${maxRounds}  │  Timeout: ${timeout}s  │  Kontext: ${Math.round(context.totalSize / 1024)}KB`));
   
-  console.log(botBorder);
+  console.log(chalk.cyan('└') + divider);
   console.log('');
 
   // Context status (already loaded above for header)
