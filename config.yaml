@@ -15,7 +15,7 @@
 # ============================================
 discussion:
   maxRounds: 10
-  timeout: 180
+  timeout: 300
   maxContext: 50000
   showAgentConfig: true
 
@@ -196,7 +196,7 @@ discussion:
       name: "Security & Quality Expert"
       emoji: "🔍"
       provider: claude-cli
-      model: claude-sonnet-4-20250514
+      model: sonnet
       promptId: software-reviewer  # Referenz auf Prompt
 
   # ==========================================
