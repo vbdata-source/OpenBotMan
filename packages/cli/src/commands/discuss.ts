@@ -1359,86 +1359,74 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
   }
 
   // Info Header with Box Design
-  const boxWidth = 62;  // Inner width (without borders)
+  const boxWidth = 60;  // Inner content width
   const line = '═'.repeat(boxWidth);
   const thinLine = '─'.repeat(boxWidth);
   
-  // Helper to strip ANSI codes for length calculation
-  const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, '');
-  
-  // Helper to calculate visual width (emojis count as 2)
-  const visualWidth = (str: string) => {
-    const stripped = stripAnsi(str);
-    let width = 0;
-    for (const char of stripped) {
-      // Most emojis are 2 chars wide in terminal
-      width += char.charCodeAt(0) > 0x1F00 ? 2 : 1;
+  // Helper: pad raw string THEN apply color
+  const makeRow = (rawContent: string, colorFn?: (s: string) => string): string => {
+    // Calculate padding based on raw content length (without colors)
+    // Account for emojis (count as 2 in terminal but 1-2 in JS)
+    let extraWidth = 0;
+    for (const char of rawContent) {
+      if (char.codePointAt(0)! > 0x1F00) extraWidth += 1;  // Emoji adjustment
     }
-    return width;
-  };
-  
-  // Helper to pad a line to exact box width
-  const padLine = (content: string, targetWidth: number = boxWidth): string => {
-    const visWidth = visualWidth(content);
-    const padding = Math.max(0, targetWidth - visWidth);
-    return content + ' '.repeat(padding);
-  };
-  
-  // Helper to create a box line
-  const boxLine = (content: string): string => {
-    return chalk.cyan('║') + padLine(content) + chalk.cyan('║');
+    const contentLen = rawContent.length + extraWidth;
+    const padding = Math.max(0, boxWidth - contentLen);
+    const paddedRaw = rawContent + ' '.repeat(padding);
+    const colored = colorFn ? colorFn(paddedRaw) : paddedRaw;
+    return chalk.cyan('║') + colored + chalk.cyan('║');
   };
   
   console.log('\n');
   console.log(chalk.cyan(`╔${line}╗`));
-  console.log(boxLine(chalk.bold.white('  🤖 OpenBotMan Multi-Agent Discussion')));
+  console.log(makeRow('  🤖 OpenBotMan Multi-Agent Discussion', chalk.bold.white));
   console.log(chalk.cyan(`╠${thinLine}╣`));
   
-  // Topic (truncate if too long)
-  const maxTopicLen = boxWidth - 10;
-  const topicDisplay = options.topic.length > maxTopicLen 
-    ? options.topic.substring(0, maxTopicLen - 3) + '...'
-    : options.topic;
-  console.log(boxLine(`  ${chalk.bold('Thema:')} ${topicDisplay}`));
+  // Topic
+  const maxLen = boxWidth - 4;
+  const topicRaw = options.topic.length > maxLen - 8 
+    ? `  Thema: ${options.topic.substring(0, maxLen - 11)}...`
+    : `  Thema: ${options.topic}`;
+  console.log(makeRow(topicRaw));
   
   // Team info (if selected)
   if (options.team && discussionConfig?.teams) {
     const selectedTeam = lookupTeam(discussionConfig.teams as TeamDefinition[], options.team);
     if (selectedTeam) {
-      const maxTeamLen = boxWidth - 10;
-      const teamDisplay = selectedTeam.name.length > maxTeamLen
-        ? selectedTeam.name.substring(0, maxTeamLen - 3) + '...'
-        : selectedTeam.name;
-      console.log(boxLine(`  ${chalk.bold('Team:')} ${chalk.yellow(teamDisplay)}`));
+      const teamRaw = selectedTeam.name.length > maxLen - 8
+        ? `  Team: ${selectedTeam.name.substring(0, maxLen - 11)}...`
+        : `  Team: ${selectedTeam.name}`;
+      console.log(makeRow(teamRaw));
     }
   }
   
-  // Workspace info (if provided)
+  // Workspace
   if (options.workspace || context.sourceFiles.length > 0) {
     const workspacePath = options.workspace || context.projectRoot;
     const filesInfo = `(${context.sourceFiles.length} files, ${Math.round(context.totalSize / 1024)}KB)`;
-    const maxPathLen = boxWidth - 14 - filesInfo.length;
+    const maxPathLen = maxLen - 14 - filesInfo.length;
     const shortPath = workspacePath.length > maxPathLen 
       ? '...' + workspacePath.slice(-(maxPathLen - 3)) 
       : workspacePath;
-    console.log(boxLine(`  ${chalk.bold('Workspace:')} ${chalk.gray(shortPath)} ${chalk.gray(filesInfo)}`));
+    console.log(makeRow(`  Workspace: ${shortPath} ${filesInfo}`));
   }
   
   console.log(chalk.cyan(`╠${thinLine}╣`));
   
   // Agents
-  console.log(boxLine(chalk.bold('  Agenten:')));
+  console.log(makeRow('  Agenten:'));
   for (const agent of agents) {
     const providerLabel = getProviderLabel(agent.provider, agent.api?.baseUrl);
-    const agentInfo = `${agent.role} · ${providerLabel}`;
-    console.log(boxLine(`  ${agent.emoji} ${agent.name.padEnd(20)} ${chalk.gray(agentInfo)}`));
+    const nameCol = agent.name.substring(0, 22).padEnd(22);
+    const infoCol = `${agent.role} · ${providerLabel}`;
+    console.log(makeRow(`  ${agent.emoji} ${nameCol} ${infoCol}`));
   }
   
   console.log(chalk.cyan(`╠${thinLine}╣`));
   
   // Settings
-  const settingsLine = `  Runden: ${maxRounds}  │  Timeout: ${timeout}s  │  Kontext: ${Math.round(context.totalSize / 1024)}KB`;
-  console.log(boxLine(chalk.gray(settingsLine)));
+  console.log(makeRow(`  Runden: ${maxRounds}  │  Timeout: ${timeout}s  │  Kontext: ${Math.round(context.totalSize / 1024)}KB`));
   
   console.log(chalk.cyan(`╚${line}╝`));
   console.log('');
