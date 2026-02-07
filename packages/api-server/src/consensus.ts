@@ -10,7 +10,8 @@ export type ConsensusPosition =
   | 'SUPPORT'
   | 'SUPPORT_WITH_CONDITIONS'
   | 'CONCERN'
-  | 'OBJECTION';
+  | 'OBJECTION'
+  | 'ERROR';
 
 export interface AgentContribution {
   agentName: string;
