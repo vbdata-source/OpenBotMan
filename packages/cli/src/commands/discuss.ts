@@ -51,13 +51,16 @@ import {
 export interface DiscussAgentConfig {
   id: string;
   name: string;
-  role: 'coder' | 'reviewer' | 'architect' | 'planner';
+  role: 'coder' | 'reviewer' | 'architect' | 'planner' | 'researcher';
   emoji: string;
   color: (text: string) => string;
   systemPrompt: string;
-  provider: 'claude-cli' | 'openai' | 'google' | 'mock';
+  provider: 'claude-cli' | 'openai' | 'google' | 'ollama' | 'mock';
   model: string;
-  apiKey?: string;
+  api?: {
+    apiKey?: string;
+    baseUrl?: string;
+  };
 }
 
 export interface ProjectContext {
@@ -323,13 +326,16 @@ function getAgentsFromConfig(
     agents = config.agents.map((a) => ({
       id: a.id,
       name: a.name,
-      role: a.role as 'coder' | 'reviewer' | 'architect' | 'planner',
+      role: a.role as 'coder' | 'reviewer' | 'architect' | 'planner' | 'researcher',
       emoji: a.emoji || ROLE_EMOJI_MAP[a.role] || '🤖',
       color: COLOR_MAP[a.color || 'white'] || chalk.white,
       systemPrompt: a.systemPrompt + '\n\n' + CONSENSUS_PROTOCOL_PROMPT,
-      provider: (a.provider || 'claude-cli') as 'claude-cli' | 'openai' | 'google' | 'mock',
+      provider: (a.provider || 'claude-cli') as 'claude-cli' | 'openai' | 'google' | 'ollama' | 'mock',
       model: a.model || config.model || 'claude-sonnet-4-20250514',
-      apiKey: resolveEnvVar(a.apiKey),
+      api: a.api ? {
+        apiKey: resolveEnvVar(a.api.apiKey),
+        baseUrl: a.api.baseUrl,
+      } : undefined,
     }));
   } else {
     agents = [...DEFAULT_AGENTS];
@@ -404,12 +410,15 @@ function parseProviderOverride(override: string): ['claude-cli' | 'openai' | 'go
  * Create an LLM provider for an agent
  */
 function createAgentProvider(agent: DiscussAgentConfig, options: DiscussOptions): LLMProvider {
-  // Get API key from environment if not in config
-  let apiKey = agent.apiKey;
+  // Get API key from agent.api or environment
+  let apiKey = agent.api?.apiKey;
+  const baseUrl = agent.api?.baseUrl;
+  
   if (!apiKey) {
     switch (agent.provider) {
       case 'openai':
-        apiKey = process.env['OPENAI_API_KEY'];
+        // For local APIs (LM Studio, etc.), use dummy key if baseUrl is set
+        apiKey = baseUrl ? 'local' : process.env['OPENAI_API_KEY'];
         break;
       case 'google':
         apiKey = process.env['GOOGLE_API_KEY'] || process.env['GEMINI_API_KEY'];
@@ -421,6 +430,7 @@ function createAgentProvider(agent: DiscussAgentConfig, options: DiscussOptions)
     provider: agent.provider,
     model: agent.model,
     apiKey,
+    baseUrl,  // Pass baseUrl for LM Studio, vLLM, etc.
     cwd: options.cwd || process.cwd(),
     verbose: options.verbose,
     defaults: {
