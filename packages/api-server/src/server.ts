@@ -169,7 +169,7 @@ export function createServer(config: ApiServerConfig): Express {
         jobStore.initAgents(requestId, agentConfigs.map(a => ({
           name: a.name,
           model: a.model,
-          provider: a.provider,
+          provider: getProviderDisplayName(a.provider, a.baseUrl),
         })));
         jobStore.setRunning(requestId, 'Diskussion startet...');
         
@@ -580,6 +580,18 @@ async function runDiscussion(
 }
 
 /**
+ * Get display name for provider (handles local APIs)
+ */
+function getProviderDisplayName(provider: string, baseUrl?: string): string {
+  if (provider === 'openai' && baseUrl) {
+    if (baseUrl.includes('1234')) return 'lmstudio';
+    if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) return 'local-api';
+    return 'openai-compat';
+  }
+  return provider;
+}
+
+/**
  * Start the server
  */
 export function startServer(config: ApiServerConfig): Promise<void> {
@@ -590,12 +602,12 @@ export function startServer(config: ApiServerConfig): Promise<void> {
     const discussionConfig = getConfig();
     const agentConfigs = getAgentsForDiscussion(discussionConfig, 10); // Get all configured agents
     
-    // Build agent display lines
+    // Build agent display lines with smart provider names
     const agentLines = agentConfigs.map(a => {
       const emoji = a.emoji || '🤖';
       const name = a.name.slice(0, 20).padEnd(20);
-      const provider = a.provider.slice(0, 12);
-      return `║    ${emoji} ${name} (${provider})`;
+      const providerDisplay = getProviderDisplayName(a.provider, a.baseUrl);
+      return `║    ${emoji} ${name} (${providerDisplay})`;
     });
     
     app.listen(config.port, config.host, () => {
