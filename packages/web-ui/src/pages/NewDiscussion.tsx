@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2, Play, Users } from 'lucide-react'
+import { fetchTeams as apiFetchTeams, startDiscussion } from '@/lib/api'
 
 interface Team {
   id: string
@@ -19,20 +20,17 @@ export default function NewDiscussion() {
   const [teamsLoading, setTeamsLoading] = useState(true)
 
   useEffect(() => {
-    fetchTeams()
+    loadTeams()
   }, [])
 
-  async function fetchTeams() {
+  async function loadTeams() {
     try {
-      const res = await fetch('/api/v1/teams')
-      if (res.ok) {
-        const data = await res.json()
-        setTeams(data.teams || [])
-        // Select default team
-        const defaultTeam = data.teams.find((t: Team) => t.default)
-        if (defaultTeam) {
-          setSelectedTeam(defaultTeam.id)
-        }
+      const data = await apiFetchTeams()
+      setTeams(data.teams || [])
+      // Select default team
+      const defaultTeam = data.teams.find((t: Team) => t.default)
+      if (defaultTeam) {
+        setSelectedTeam(defaultTeam.id)
       }
     } catch (error) {
       console.error('Failed to fetch teams:', error)
@@ -47,26 +45,11 @@ export default function NewDiscussion() {
 
     setLoading(true)
     try {
-      const res = await fetch('/api/v1/discuss', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          topic: topic.trim(),
-          team: selectedTeam || undefined,
-          async: true,
-        }),
-      })
-
-      if (res.ok) {
-        const data = await res.json()
-        navigate(`/jobs/${data.id}`)
-      } else {
-        const error = await res.json()
-        alert(`Fehler: ${error.message || 'Unbekannter Fehler'}`)
-      }
+      const data = await startDiscussion(topic.trim(), selectedTeam || undefined)
+      navigate(`/jobs/${data.id}`)
     } catch (error) {
       console.error('Failed to start discussion:', error)
-      alert('Fehler beim Starten der Diskussion')
+      alert(error instanceof Error ? error.message : 'Fehler beim Starten der Diskussion')
     } finally {
       setLoading(false)
     }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Clock, CheckCircle, XCircle, Loader2, Plus } from 'lucide-react'
+import { fetchJobs as apiFetchJobs } from '@/lib/api'
 
 interface Job {
   id: string
@@ -16,18 +17,15 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchJobs()
-    const interval = setInterval(fetchJobs, 5000) // Poll every 5s
+    loadJobs()
+    const interval = setInterval(loadJobs, 5000) // Poll every 5s
     return () => clearInterval(interval)
   }, [])
 
-  async function fetchJobs() {
+  async function loadJobs() {
     try {
-      const res = await fetch('/api/v1/jobs')
-      if (res.ok) {
-        const data = await res.json()
-        setJobs(data.jobs || [])
-      }
+      const data = await apiFetchJobs()
+      setJobs(data.jobs || [])
     } catch (error) {
       console.error('Failed to fetch jobs:', error)
     } finally {

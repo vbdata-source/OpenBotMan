@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, CheckCircle, Clock, Download, Loader2, XCircle } from 'lucide-react'
+import { fetchJob as apiFetchJob } from '@/lib/api'
 
 interface AgentInfo {
   name: string
@@ -32,18 +33,15 @@ export default function JobView() {
   useEffect(() => {
     if (!jobId) return
 
-    fetchJob()
-    const interval = setInterval(fetchJob, 2000) // Poll every 2s while running
+    loadJob()
+    const interval = setInterval(loadJob, 2000) // Poll every 2s while running
     return () => clearInterval(interval)
   }, [jobId])
 
-  async function fetchJob() {
+  async function loadJob() {
     try {
-      const res = await fetch(`/api/v1/jobs/${jobId}`)
-      if (res.ok) {
-        const data = await res.json()
-        setJob(data)
-      }
+      const data = await apiFetchJob(jobId!)
+      setJob(data)
     } catch (error) {
       console.error('Failed to fetch job:', error)
     } finally {
