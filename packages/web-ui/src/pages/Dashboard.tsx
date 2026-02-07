@@ -8,8 +8,11 @@ interface Job {
   topic: string
   status: 'pending' | 'running' | 'completed' | 'failed'
   createdAt: string
-  duration?: number
+  durationMs?: number
   agentCount?: number
+  currentRound?: number
+  maxRounds?: number
+  progress?: string
 }
 
 export default function Dashboard() {
@@ -99,7 +102,7 @@ export default function Dashboard() {
               <tr>
                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Status</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Thema</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Agents</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Fortschritt</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Dauer</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Erstellt</th>
               </tr>
@@ -118,14 +121,16 @@ export default function Dashboard() {
                       to={`/jobs/${job.id}`}
                       className="text-sm font-medium hover:text-primary transition-colors"
                     >
-                      {job.topic.length > 60 ? job.topic.slice(0, 60) + '...' : job.topic}
+                      {job.topic && job.topic.length > 50 ? job.topic.slice(0, 50) + '...' : job.topic || '-'}
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-sm text-muted-foreground">
-                    {job.agentCount || '-'}
+                    {job.status === 'running' && job.currentRound 
+                      ? `Runde ${job.currentRound}/${job.maxRounds || '?'} · ${job.agentCount || 0} Agents`
+                      : job.agentCount ? `${job.agentCount} Agents` : '-'}
                   </td>
                   <td className="px-4 py-3 text-sm text-muted-foreground">
-                    {job.duration ? `${Math.round(job.duration / 1000)}s` : '-'}
+                    {job.durationMs ? `${Math.round(job.durationMs / 1000)}s` : '-'}
                   </td>
                   <td className="px-4 py-3 text-sm text-muted-foreground">
                     {new Date(job.createdAt).toLocaleString('de-DE')}

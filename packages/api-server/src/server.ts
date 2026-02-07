@@ -291,9 +291,15 @@ export function createServer(config: ApiServerConfig): Express {
   app.get('/api/v1/jobs', (_req: Request, res: Response) => {
     const jobs = jobStore.list().map(job => ({
       id: job.id,
+      topic: job.topic,
       status: job.status,
+      progress: job.progress,
+      agentCount: job.agents?.length,
+      currentRound: job.currentRound,
+      maxRounds: job.maxRounds,
       createdAt: job.createdAt.toISOString(),
       completedAt: job.completedAt?.toISOString(),
+      durationMs: job.durationMs,
     }));
     
     res.json({ jobs, count: jobs.length });

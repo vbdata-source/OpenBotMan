@@ -3,6 +3,7 @@ import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import NewDiscussion from './pages/NewDiscussion'
 import JobView from './pages/JobView'
+import Settings from './pages/Settings'
 
 function App() {
   return (
@@ -11,6 +12,7 @@ function App() {
         <Route index element={<Dashboard />} />
         <Route path="new" element={<NewDiscussion />} />
         <Route path="jobs/:jobId" element={<JobView />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>
   )
