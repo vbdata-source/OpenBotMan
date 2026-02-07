@@ -4,6 +4,10 @@
   "description": "Multi-Agent AI Orchestration for VS Code",
   "version": "2.0.0",
   "publisher": "vbdata",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vbdata-source/OpenBotMan.git"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
