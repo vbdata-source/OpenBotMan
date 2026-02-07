@@ -55,7 +55,7 @@ export interface DiscussAgentConfig {
   emoji: string;
   color: (text: string) => string;
   systemPrompt: string;
-  provider: 'claude-cli' | 'openai' | 'google' | 'ollama' | 'mock';
+  provider: 'claude-cli' | 'claude-api' | 'openai' | 'google' | 'ollama' | 'mock';
   model: string;
   api?: {
     apiKey?: string;
@@ -461,7 +461,7 @@ function getAgentsFromConfig(
         emoji: a.emoji || ROLE_EMOJI_MAP[a.role] || '🤖',
         color: COLOR_MAP[a.color || 'white'] || chalk.white,
         systemPrompt: resolvedPrompt + '\n\n' + CONSENSUS_PROTOCOL_PROMPT,
-        provider: (a.provider || 'claude-cli') as 'claude-cli' | 'openai' | 'google' | 'ollama' | 'mock',
+        provider: (a.provider || 'claude-cli') as 'claude-cli' | 'claude-api' | 'openai' | 'google' | 'ollama' | 'mock',
         model: a.model || config.model || 'claude-sonnet-4-20250514',
         api: (a.apiKey || a.baseUrl) ? {
           apiKey: resolveEnvVar(a.apiKey),
@@ -674,19 +674,14 @@ function createAgentProvider(agent: DiscussAgentConfig, options: DiscussOptions)
   const baseUrl = urlResult.url;
   
   if (!apiKey) {
-    switch (agent.provider) {
-      case 'openai':
-        // For local APIs (LM Studio, etc.), use dummy key if baseUrl is set
-        apiKey = baseUrl ? 'local' : process.env['OPENAI_API_KEY'];
-        break;
-      case 'google':
-        apiKey = process.env['GOOGLE_API_KEY'] || process.env['GEMINI_API_KEY'];
-        break;
-      case 'claude-api':
-      case 'claude':
-      case 'anthropic':
-        apiKey = process.env['ANTHROPIC_API_KEY'];
-        break;
+    const providerStr = agent.provider as string;
+    if (providerStr === 'openai') {
+      // For local APIs (LM Studio, etc.), use dummy key if baseUrl is set
+      apiKey = baseUrl ? 'local' : process.env['OPENAI_API_KEY'];
+    } else if (providerStr === 'google') {
+      apiKey = process.env['GOOGLE_API_KEY'] || process.env['GEMINI_API_KEY'];
+    } else if (providerStr === 'claude-api' || providerStr === 'claude' || providerStr === 'anthropic') {
+      apiKey = process.env['ANTHROPIC_API_KEY'];
     }
   }
   
