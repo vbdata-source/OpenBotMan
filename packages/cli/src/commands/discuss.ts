@@ -408,34 +408,88 @@ function parseProviderOverride(override: string): ['claude-cli' | 'openai' | 'go
 // ============================================================================
 
 /**
- * Validate baseUrl format and return normalized URL
+ * Result of URL validation
  */
-function validateBaseUrl(url: string | undefined): string | undefined {
-  if (!url) return undefined;
+interface UrlValidationResult {
+  valid: boolean;
+  url?: string;
+  error?: string;
+}
+
+/**
+ * Validate baseUrl format and return result (no exceptions)
+ */
+function validateBaseUrl(url: string | undefined): UrlValidationResult {
+  if (!url) return { valid: true, url: undefined };
   
   const trimmed = url.trim();
-  if (!trimmed) return undefined;
+  if (!trimmed) return { valid: true, url: undefined };
   
   // Must start with http:// or https://
   if (!trimmed.match(/^https?:\/\//i)) {
-    throw new Error(
-      `Invalid baseUrl: "${trimmed}"\n` +
-      `  Must start with http:// or https://\n` +
-      `  Example: http://localhost:1234/v1`
-    );
+    return {
+      valid: false,
+      error: `URL muss mit http:// oder https:// beginnen.\n` +
+             `    Aktuell: ${trimmed}\n` +
+             `    Beispiel: http://localhost:1234/v1`
+    };
   }
   
   // Validate URL format
   try {
     const parsed = new URL(trimmed);
-    return parsed.href;
+    return { valid: true, url: parsed.href };
   } catch {
-    throw new Error(
-      `Invalid baseUrl format: "${trimmed}"\n` +
-      `  Please check the URL syntax.\n` +
-      `  Example: http://localhost:1234/v1`
-    );
+    return {
+      valid: false,
+      error: `Ungültiges URL-Format.\n` +
+             `    Aktuell: ${trimmed}\n` +
+             `    Beispiel: http://localhost:1234/v1`
+    };
   }
+}
+
+/**
+ * Validate all agent configurations before starting discussion
+ * Returns array of error messages (empty if all valid)
+ */
+function validateAgentConfigs(agents: DiscussAgentConfig[]): string[] {
+  const errors: string[] = [];
+  
+  for (const agent of agents) {
+    const baseUrl = agent.api?.baseUrl;
+    if (baseUrl) {
+      const result = validateBaseUrl(baseUrl);
+      if (!result.valid) {
+        errors.push(
+          `Agent "${agent.name}" (${agent.emoji}):\n` +
+          `    ${result.error}`
+        );
+      }
+    }
+  }
+  
+  return errors;
+}
+
+/**
+ * Display configuration errors and exit gracefully
+ */
+function exitWithConfigErrors(errors: string[]): never {
+  console.log();
+  console.log(chalk.red.bold('⚠️  Konfigurationsfehler'));
+  console.log(chalk.red('─'.repeat(50)));
+  console.log();
+  
+  for (const error of errors) {
+    console.log(chalk.yellow(error));
+    console.log();
+  }
+  
+  console.log(chalk.gray('Bitte config.yaml korrigieren und erneut starten.'));
+  console.log();
+  
+  process.exit(1);
 }
 
 /**
@@ -446,8 +500,9 @@ function createAgentProvider(agent: DiscussAgentConfig, options: DiscussOptions)
   let apiKey = agent.api?.apiKey;
   const rawBaseUrl = agent.api?.baseUrl;
   
-  // Validate baseUrl if provided (Security: prevent invalid URLs)
-  const baseUrl = validateBaseUrl(rawBaseUrl);
+  // Get validated baseUrl (validation already done in runDiscussion)
+  const urlResult = validateBaseUrl(rawBaseUrl);
+  const baseUrl = urlResult.url;
   
   if (!apiKey) {
     switch (agent.provider) {
@@ -1097,6 +1152,12 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
   // Load config
   const discussionConfig = loadDiscussionConfig(options.config);
   const agents = getAgentsFromConfig(discussionConfig, options);
+  
+  // Validate agent configurations before starting
+  const configErrors = validateAgentConfigs(agents);
+  if (configErrors.length > 0) {
+    exitWithConfigErrors(configErrors);
+  }
   
   // Apply config defaults
   const maxRounds = options.maxRounds ?? discussionConfig?.maxRounds ?? 10;
