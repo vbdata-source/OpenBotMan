@@ -682,6 +682,11 @@ function createAgentProvider(agent: DiscussAgentConfig, options: DiscussOptions)
       case 'google':
         apiKey = process.env['GOOGLE_API_KEY'] || process.env['GEMINI_API_KEY'];
         break;
+      case 'claude-api':
+      case 'claude':
+      case 'anthropic':
+        apiKey = process.env['ANTHROPIC_API_KEY'];
+        break;
     }
   }
   
