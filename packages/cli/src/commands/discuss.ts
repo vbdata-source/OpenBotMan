@@ -1359,57 +1359,86 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
   }
 
   // Info Header with Box Design
-  const boxWidth = 64;
-  const line = '═'.repeat(boxWidth - 2);
-  const thinLine = '─'.repeat(boxWidth - 2);
+  const boxWidth = 62;  // Inner width (without borders)
+  const line = '═'.repeat(boxWidth);
+  const thinLine = '─'.repeat(boxWidth);
+  
+  // Helper to strip ANSI codes for length calculation
+  const stripAnsi = (str: string) => str.replace(/\x1b\[[0-9;]*m/g, '');
+  
+  // Helper to calculate visual width (emojis count as 2)
+  const visualWidth = (str: string) => {
+    const stripped = stripAnsi(str);
+    let width = 0;
+    for (const char of stripped) {
+      // Most emojis are 2 chars wide in terminal
+      width += char.charCodeAt(0) > 0x1F00 ? 2 : 1;
+    }
+    return width;
+  };
+  
+  // Helper to pad a line to exact box width
+  const padLine = (content: string, targetWidth: number = boxWidth): string => {
+    const visWidth = visualWidth(content);
+    const padding = Math.max(0, targetWidth - visWidth);
+    return content + ' '.repeat(padding);
+  };
+  
+  // Helper to create a box line
+  const boxLine = (content: string): string => {
+    return chalk.cyan('║') + padLine(content) + chalk.cyan('║');
+  };
   
   console.log('\n');
   console.log(chalk.cyan(`╔${line}╗`));
-  console.log(chalk.cyan('║') + chalk.bold.white('  🤖 OpenBotMan Multi-Agent Discussion') + ' '.repeat(boxWidth - 41) + chalk.cyan('║'));
+  console.log(boxLine(chalk.bold.white('  🤖 OpenBotMan Multi-Agent Discussion')));
   console.log(chalk.cyan(`╠${thinLine}╣`));
   
   // Topic (truncate if too long)
-  const topicDisplay = options.topic.length > boxWidth - 12 
-    ? options.topic.substring(0, boxWidth - 15) + '...'
+  const maxTopicLen = boxWidth - 10;
+  const topicDisplay = options.topic.length > maxTopicLen 
+    ? options.topic.substring(0, maxTopicLen - 3) + '...'
     : options.topic;
-  console.log(chalk.cyan('║') + `  ${chalk.bold('Thema:')} ${chalk.white(topicDisplay)}`.padEnd(boxWidth + 8) + chalk.cyan('║'));
+  console.log(boxLine(`  ${chalk.bold('Thema:')} ${topicDisplay}`));
   
   // Team info (if selected)
   if (options.team && discussionConfig?.teams) {
     const selectedTeam = lookupTeam(discussionConfig.teams as TeamDefinition[], options.team);
     if (selectedTeam) {
-      const teamDisplay = selectedTeam.name.length > boxWidth - 12
-        ? selectedTeam.name.substring(0, boxWidth - 15) + '...'
+      const maxTeamLen = boxWidth - 10;
+      const teamDisplay = selectedTeam.name.length > maxTeamLen
+        ? selectedTeam.name.substring(0, maxTeamLen - 3) + '...'
         : selectedTeam.name;
-      console.log(chalk.cyan('║') + `  ${chalk.bold('Team:')} ${chalk.yellow(teamDisplay)}`.padEnd(boxWidth + 17) + chalk.cyan('║'));
+      console.log(boxLine(`  ${chalk.bold('Team:')} ${chalk.yellow(teamDisplay)}`));
     }
   }
   
   // Workspace info (if provided)
   if (options.workspace || context.sourceFiles.length > 0) {
     const workspacePath = options.workspace || context.projectRoot;
-    const shortPath = workspacePath.length > 35 
-      ? '...' + workspacePath.slice(-32) 
+    const filesInfo = `(${context.sourceFiles.length} files, ${Math.round(context.totalSize / 1024)}KB)`;
+    const maxPathLen = boxWidth - 14 - filesInfo.length;
+    const shortPath = workspacePath.length > maxPathLen 
+      ? '...' + workspacePath.slice(-(maxPathLen - 3)) 
       : workspacePath;
-    const filesInfo = `${context.sourceFiles.length} files, ${Math.round(context.totalSize / 1024)}KB`;
-    console.log(chalk.cyan('║') + `  ${chalk.bold('Workspace:')} ${chalk.gray(shortPath)} ${chalk.gray(`(${filesInfo})`)}`.padEnd(boxWidth + 17) + chalk.cyan('║'));
+    console.log(boxLine(`  ${chalk.bold('Workspace:')} ${chalk.gray(shortPath)} ${chalk.gray(filesInfo)}`));
   }
   
   console.log(chalk.cyan(`╠${thinLine}╣`));
   
   // Agents
-  console.log(chalk.cyan('║') + chalk.bold('  Agenten:') + ' '.repeat(boxWidth - 12) + chalk.cyan('║'));
+  console.log(boxLine(chalk.bold('  Agenten:')));
   for (const agent of agents) {
     const providerLabel = getProviderLabel(agent.provider, agent.api?.baseUrl);
-    const agentLine = `  ${agent.emoji} ${agent.name.padEnd(12)} ${chalk.gray(`${agent.role} · ${providerLabel}`)}`;
-    console.log(chalk.cyan('║') + agentLine.padEnd(boxWidth + 9) + chalk.cyan('║'));
+    const agentInfo = `${agent.role} · ${providerLabel}`;
+    console.log(boxLine(`  ${agent.emoji} ${agent.name.padEnd(20)} ${chalk.gray(agentInfo)}`));
   }
   
   console.log(chalk.cyan(`╠${thinLine}╣`));
   
   // Settings
   const settingsLine = `  Runden: ${maxRounds}  │  Timeout: ${timeout}s  │  Kontext: ${Math.round(context.totalSize / 1024)}KB`;
-  console.log(chalk.cyan('║') + chalk.gray(settingsLine).padEnd(boxWidth + 9) + chalk.cyan('║'));
+  console.log(boxLine(chalk.gray(settingsLine)));
   
   console.log(chalk.cyan(`╚${line}╝`));
   console.log('');
