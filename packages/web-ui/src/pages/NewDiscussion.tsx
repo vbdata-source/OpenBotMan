@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2, Play, Users } from 'lucide-react'
-import { fetchTeams as apiFetchTeams, startDiscussion } from '@/lib/api'
+import { fetchTeams as apiFetchTeams, startDiscussion } from '../lib/api'
 
 interface Team {
   id: string

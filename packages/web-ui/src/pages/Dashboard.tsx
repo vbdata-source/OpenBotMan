@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Clock, CheckCircle, XCircle, Loader2, Plus } from 'lucide-react'
-import { fetchJobs as apiFetchJobs } from '@/lib/api'
+import { fetchJobs as apiFetchJobs } from '../lib/api'
 
 interface Job {
   id: string

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, CheckCircle, Clock, Download, Loader2, XCircle } from 'lucide-react'
-import { fetchJob as apiFetchJob } from '@/lib/api'
+import { fetchJob as apiFetchJob } from '../lib/api'
 
 interface AgentInfo {
   name: string
