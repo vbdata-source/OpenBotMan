@@ -39,7 +39,8 @@ export async function fetchJobs() {
 }
 
 export async function fetchJob(jobId: string) {
-  const res = await apiFetch(`/api/v1/jobs/${jobId}`)
+  // Use verbose=true to get full agent responses
+  const res = await apiFetch(`/api/v1/jobs/${jobId}?verbose=true`)
   if (!res.ok) throw new Error('Failed to fetch job')
   return res.json()
 }
