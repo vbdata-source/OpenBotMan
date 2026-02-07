@@ -130,6 +130,7 @@ export function evaluateRound(
     'SUPPORT_WITH_CONDITIONS': 0,
     'CONCERN': 0,
     'OBJECTION': 0,
+    'ERROR': 0,
   };
   
   const objections: string[] = [];
