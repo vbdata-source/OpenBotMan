@@ -349,7 +349,7 @@ program
   .option('-i, --include <patterns>', 'Glob patterns for files to include (comma-separated, e.g., "src/**/*.ts,lib/**/*.js")')
   .option('--max-context <kb>', 'Maximum context size in KB (default: 30)', '30')
   .option('-g, --github', 'Include GitHub context (issues, PRs)')
-  .option('-a, --agents <count>', 'Number of agents (1-3)', '3')
+  .option('-a, --agents <count>', 'Number of agents (default: all from config)')
   .option('-t, --timeout <seconds>', 'Timeout per agent in seconds', '60')
   .option('-m, --model <model>', 'Model to use for all agents')
   .option('-r, --max-rounds <rounds>', 'Maximum consensus rounds', '10')
@@ -397,7 +397,7 @@ program
       workspace: options.workspace,
       maxContextKb: isNaN(maxContextKb) ? 100 : maxContextKb,
       github: options.github || false,
-      agents: isNaN(agentCount) ? 3 : Math.max(1, Math.min(3, agentCount)),
+      agents: isNaN(agentCount) ? undefined : Math.max(1, agentCount),  // undefined = all from config
       timeout: isNaN(timeout) ? 60 : timeout,
       verbose: options.verbose || false,
       model: options.model,
