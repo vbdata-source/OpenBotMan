@@ -7,7 +7,7 @@ interface AgentInfo {
   name: string
   emoji?: string
   provider?: string
-  status: 'pending' | 'running' | 'complete' | 'error'
+  status: 'waiting' | 'thinking' | 'complete' | 'error'
   response?: string
   fullResponse?: string
   error?: string
@@ -304,7 +304,7 @@ export default function JobView() {
                   className={`border rounded-lg overflow-hidden transition-colors ${
                     agent.status === 'error' ? 'border-red-500/50' : 
                     agent.status === 'complete' ? 'border-green-500/30' :
-                    agent.status === 'running' ? 'border-blue-500/50' :
+                    agent.status === 'thinking' ? 'border-blue-500/50 bg-blue-500/5' :
                     'border-border'
                   }`}
                 >
@@ -323,6 +323,11 @@ export default function JobView() {
                           {agent.provider}
                         </span>
                       )}
+                      {agent.status === 'thinking' && (
+                        <span className="text-xs text-blue-500 animate-pulse font-medium">
+                          denkt nach...
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-3">
                       {agent.durationMs && (
@@ -330,8 +335,8 @@ export default function JobView() {
                           {Math.round(agent.durationMs / 1000)}s
                         </span>
                       )}
-                      {agent.status === 'pending' && <Clock className="h-4 w-4 text-yellow-500" />}
-                      {agent.status === 'running' && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
+                      {agent.status === 'waiting' && <Clock className="h-4 w-4 text-yellow-500" />}
+                      {agent.status === 'thinking' && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
                       {agent.status === 'complete' && <CheckCircle className="h-4 w-4 text-green-500" />}
                       {agent.status === 'error' && <XCircle className="h-4 w-4 text-red-500" />}
                       {hasResponse && (
