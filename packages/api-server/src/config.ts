@@ -198,6 +198,7 @@ export function loadConfig(): DiscussionConfig {
     description: t.description,
     agents: t.agents,
     default: t.default,
+    workflows: t.workflows,  // Workflow IDs for auto-team selection
   })) || [
     // Default team: all agents
     { id: 'all', name: 'Alle Experten', agents: agents.map(a => a.id) }
