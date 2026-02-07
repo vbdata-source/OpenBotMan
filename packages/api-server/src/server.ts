@@ -342,7 +342,7 @@ export function createServer(config: ApiServerConfig): Express {
       return;
     }
     
-    if (job.status === 'completed' || job.status === 'failed') {
+    if (job.status === 'complete' || job.status === 'error') {
       res.status(400).json({ error: 'Job already finished', status: job.status });
       return;
     }
