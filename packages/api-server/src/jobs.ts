@@ -139,6 +139,27 @@ class JobStore {
   }
   
   /**
+   * Set agent as error
+   */
+  setAgentError(id: string, agentName: string, errorMessage: string): void {
+    const job = this.jobs.get(id);
+    if (!job?.agents) return;
+    
+    const agent = job.agents.find(a => a.name === agentName);
+    if (agent) {
+      agent.status = 'error';
+      agent.completedAt = new Date();
+      if (agent.startedAt) {
+        agent.durationMs = agent.completedAt.getTime() - agent.startedAt.getTime();
+      }
+      agent.responsePreview = `❌ ${errorMessage.slice(0, 80)}`;
+      agent.fullResponse = errorMessage;
+    }
+    
+    this.update(id, { currentAgent: undefined });
+  }
+  
+  /**
    * Set current round
    */
   setRound(id: string, round: number, maxRounds?: number): void {

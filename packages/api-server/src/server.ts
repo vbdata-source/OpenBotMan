@@ -485,47 +485,67 @@ async function runDiscussion(
         jobStore.setAgentThinking(requestId, agent.name);
         const agentStartTime = Date.now();
         
-        // Get agent's specific provider (each agent can have different model)
-        const agentProvider = agentProviders.get(agent.id)!;
-        
-        // Build prompt based on round
-        let prompt: string;
-        if (round === 1 && roundContributions.length === 0) {
-          // First agent, first round: Proposer
-          prompt = buildProposerPrompt(topic, fullContext);
-        } else {
-          // All other cases: Responder
-          const previousContribs = round === 1 
-            ? roundContributions 
-            : [...allContributions.slice(-agentConfigs.length), ...roundContributions];
-          prompt = buildResponderPrompt(topic, fullContext, previousContribs, round, agent.role);
+        try {
+          // Get agent's specific provider (each agent can have different model)
+          const agentProvider = agentProviders.get(agent.id)!;
+          
+          // Build prompt based on round
+          let prompt: string;
+          if (round === 1 && roundContributions.length === 0) {
+            // First agent, first round: Proposer
+            prompt = buildProposerPrompt(topic, fullContext);
+          } else {
+            // All other cases: Responder
+            const previousContribs = round === 1 
+              ? roundContributions 
+              : [...allContributions.slice(-agentConfigs.length), ...roundContributions];
+            prompt = buildResponderPrompt(topic, fullContext, previousContribs, round, agent.role);
+          }
+          
+          const response = await agentProvider.send(prompt, {
+            systemPrompt: agent.systemPrompt,
+            timeoutMs: request.timeout * 1000,
+            maxTokens: agent.maxTokens || 4096,
+          });
+          
+          const { position, reason } = extractPosition(response.text);
+          const durationMs = Date.now() - agentStartTime;
+          
+          const contribution: AgentContribution = {
+            agentName: agent.name,
+            role: agent.role,
+            content: response.text,
+            position: round === 1 && roundContributions.length === 0 ? 'PROPOSAL' : position,
+            positionReason: reason,
+            durationMs,
+            model: agent.model,
+            provider: agent.provider,
+          };
+          
+          roundContributions.push(contribution);
+          allContributions.push(contribution);
+          
+          jobStore.setAgentComplete(requestId, agent.name, response.text);
+          console.log(`[${requestId}] ${agent.name} (${agent.model}): [${contribution.position}] (${Math.round(durationMs/1000)}s)`);
+          
+        } catch (agentError) {
+          // Mark agent as error but continue with other agents
+          const errorMsg = agentError instanceof Error ? agentError.message : 'Unknown error';
+          jobStore.setAgentError(requestId, agent.name, errorMsg);
+          console.error(`[${requestId}] ${agent.name} ERROR: ${errorMsg}`);
+          
+          // Add error contribution so discussion can continue
+          roundContributions.push({
+            agentName: agent.name,
+            role: agent.role,
+            content: `[Agent Error: ${errorMsg}]`,
+            position: 'ERROR',
+            positionReason: errorMsg,
+            durationMs: Date.now() - agentStartTime,
+            model: agent.model,
+            provider: agent.provider,
+          });
         }
-        
-        const response = await agentProvider.send(prompt, {
-          systemPrompt: agent.systemPrompt,
-          timeoutMs: request.timeout * 1000,
-          maxTokens: agent.maxTokens || 4096,
-        });
-        
-        const { position, reason } = extractPosition(response.text);
-        const durationMs = Date.now() - agentStartTime;
-        
-        const contribution: AgentContribution = {
-          agentName: agent.name,
-          role: agent.role,
-          content: response.text,
-          position: round === 1 && roundContributions.length === 0 ? 'PROPOSAL' : position,
-          positionReason: reason,
-          durationMs,
-          model: agent.model,      // Per-agent model!
-          provider: agent.provider, // Per-agent provider!
-        };
-        
-        roundContributions.push(contribution);
-        allContributions.push(contribution);
-        
-        jobStore.setAgentComplete(requestId, agent.name, response.text);
-        console.log(`[${requestId}] ${agent.name} (${agent.model}): [${contribution.position}] (${Math.round(durationMs/1000)}s)`);
       }
       
       // Evaluate round
