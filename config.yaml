@@ -187,7 +187,7 @@ discussion:
       name: "Research Analyst"
       emoji: "🔬"
       provider: openai
-      model: qwen/qwen3-coder-30b
+      model: openai/gpt-oss-20b
       baseUrl: http://localhost:1234/v1
       promptId: software-researcher  # Referenz auf Prompt
 
@@ -195,8 +195,10 @@ discussion:
       role: reviewer
       name: "Security & Quality Expert"
       emoji: "🔍"
-      provider: claude-cli
-      model: sonnet
+      # provider: claude-api
+      # model: claude-opus-4-6
+      provider: ollama
+      model: gpt-oss:120b-cloud
       promptId: software-reviewer  # Referenz auf Prompt
 
   # ==========================================
