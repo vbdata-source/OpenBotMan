@@ -15,6 +15,7 @@
     "clean": "turbo run clean && rm -rf node_modules",
     "start": "pnpm --filter @openbotman/orchestrator start",
     "api": "pnpm --filter @openbotman/api-server start",
+    "web": "pnpm --filter @openbotman/web-ui dev",
     "cli": "pnpm --filter @openbotman/cli start",
     "docker:build": "docker build -t openbotman .",
     "docker:run": "docker-compose up -d"
