@@ -249,7 +249,16 @@ const ROLE_EMOJI_MAP: Record<string, string> = {
 /**
  * Get display label for provider
  */
-function getProviderLabel(provider: string): string {
+function getProviderLabel(provider: string, baseUrl?: string): string {
+  // If using custom baseUrl with openai provider, it's a local API (LM Studio, vLLM, etc.)
+  if (provider === 'openai' && baseUrl) {
+    // Try to detect the type from URL
+    if (baseUrl.includes('lmstudio') || baseUrl.includes('1234')) {
+      return 'LM Studio';
+    }
+    return 'Local API';
+  }
+  
   switch (provider) {
     case 'claude-cli': return 'CLI';
     case 'claude-api': return 'Claude API';
@@ -1079,7 +1088,7 @@ async function runAgentTurn(
  * Print agent header with model info
  */
 function printAgentHeader(agent: DiscussAgentConfig): void {
-  const providerLabel = getProviderLabel(agent.provider);
+  const providerLabel = getProviderLabel(agent.provider, agent.api?.baseUrl);
   const header = `[${agent.name}] ${agent.emoji} ${agent.role.toUpperCase()} (${agent.model} via ${providerLabel})`;
   console.log(agent.color(header));
   console.log(chalk.gray('─'.repeat(60)));
@@ -1220,7 +1229,7 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
   // Agents
   console.log(chalk.cyan('║') + chalk.bold('  Agenten:') + ' '.repeat(boxWidth - 12) + chalk.cyan('║'));
   for (const agent of agents) {
-    const providerLabel = getProviderLabel(agent.provider);
+    const providerLabel = getProviderLabel(agent.provider, agent.api?.baseUrl);
     const agentLine = `  ${agent.emoji} ${agent.name.padEnd(12)} ${chalk.gray(`${agent.role} · ${providerLabel}`)}`;
     console.log(chalk.cyan('║') + agentLine.padEnd(boxWidth + 9) + chalk.cyan('║'));
   }
@@ -1306,7 +1315,7 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
       proposerSpinner.stop();
       
       const extracted = extractPosition(proposerResponse.text);
-      const providerLabel = getProviderLabel(proposer.provider);
+      const providerLabel = getProviderLabel(proposer.provider, proposer.api?.baseUrl);
       
       const proposerContrib: ConsensusContribution = {
         agentId: proposer.id,
@@ -1357,7 +1366,7 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
         agentName: proposer.name,
         role: proposer.role,
         model: proposer.model,
-        provider: getProviderLabel(proposer.provider),
+        provider: getProviderLabel(proposer.provider, proposer.api?.baseUrl),
         emoji: proposer.emoji,
         content: errorContent,
         position: 'PROPOSAL',
@@ -1394,7 +1403,7 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
         responderSpinner.stop();
         
         const { position, reason } = extractPosition(responderResponse.text);
-        const providerLabel = getProviderLabel(responder.provider);
+        const providerLabel = getProviderLabel(responder.provider, responder.api?.baseUrl);
         
         const responderContrib: ConsensusContribution = {
           agentId: responder.id,
@@ -1445,7 +1454,7 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
           agentName: responder.name,
           role: responder.role,
           model: responder.model,
-          provider: getProviderLabel(responder.provider),
+          provider: getProviderLabel(responder.provider, responder.api?.baseUrl),
           emoji: responder.emoji,
           content: errorContent,
           position: 'CONCERN',
@@ -1533,7 +1542,7 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
       name: a.name,
       role: a.role,
       model: a.model,
-      provider: getProviderLabel(a.provider),
+      provider: getProviderLabel(a.provider, a.api?.baseUrl),
     })),
   };
   
