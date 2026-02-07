@@ -429,21 +429,46 @@ async function pollJobWithProgress(
   return null;
 }
 
+interface TeamInfo {
+  id: string;
+  name: string;
+  description?: string;
+  agentCount: number;
+  default: boolean;
+  workflows: string[];
+}
+
 /**
  * Fetch available teams from server
  */
-async function fetchTeams(): Promise<Array<{ id: string; name: string; description?: string; agentCount: number; default: boolean }>> {
+async function fetchTeams(): Promise<TeamInfo[]> {
   try {
     const { apiUrl, apiKey } = getApiConfig();
     const response = await fetch(`${apiUrl}/api/v1/teams`, {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
     if (!response.ok) return [];
-    const data = await response.json() as { teams: Array<{ id: string; name: string; description?: string; agentCount: number; default: boolean }> };
+    const data = await response.json() as { teams: TeamInfo[] };
     return data.teams;
   } catch {
     return [];
   }
+}
+
+/**
+ * Get team ID for a specific workflow
+ * Returns the team configured for this workflow, or the default team
+ */
+async function getTeamForWorkflow(workflowId: string): Promise<string | undefined> {
+  const teams = await fetchTeams();
+  
+  // Find team with this workflow
+  const workflowTeam = teams.find(t => t.workflows?.includes(workflowId));
+  if (workflowTeam) return workflowTeam.id;
+  
+  // Fallback to default team
+  const defaultTeam = teams.find(t => t.default);
+  return defaultTeam?.id;
 }
 
 /**
@@ -540,11 +565,13 @@ Analysiere diesen Code auf:
 ${code}
 \`\`\``;
 
-  // No hardcoded defaults! Server reads from config.yaml
+  // Get team for code-review workflow
+  const team = await getTeamForWorkflow('code-review');
+  
   const requestBody = {
     topic,
     async: true,
-    // agents, timeout, maxRounds → from config.yaml via server
+    team,  // Workflow-specific team from config
   };
 
   await runAsyncJob(topic, requestBody, `Code Review: ${fileName}`);
@@ -583,13 +610,24 @@ async function analyzeProject() {
   
   const topic = topics[analysisType.value];
   
-  // No hardcoded defaults! Server reads from config.yaml
+  // Map analysis type to workflow ID for team selection
+  const workflowMap: Record<string, string> = {
+    full: 'full-analysis',
+    security: 'security-review',
+    performance: 'performance',
+    quality: 'code-quality',
+    architecture: 'architecture',
+  };
+  
+  // Get team for this workflow
+  const team = await getTeamForWorkflow(workflowMap[analysisType.value]);
+  
   const requestBody = {
     topic,
     workspace: workspacePath,
     include: ['**/*.ts', '**/*.js', '**/*.cs', '**/*.py', '**/*.java', '**/*.json', '**/*.yaml', '**/*.yml', '**/*.md'],
     async: true,
-    // agents, timeout, maxRounds, maxContext → from config.yaml via server
+    team,  // Workflow-specific team from config
   };
 
   await runAsyncJob(topic, requestBody, `${analysisType.label} - ${workspaceName}`);

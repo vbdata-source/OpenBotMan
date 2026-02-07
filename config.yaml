@@ -211,6 +211,7 @@ discussion:
       description: "Alle Experten für umfassende Analyse"
       agents: [planner, coder, researcher, reviewer]
       default: true
+      workflows: [full-analysis, architecture]  # Default für Vollanalyse
 
     - id: quick
       name: "⚡ Schnelle Analyse"
@@ -221,16 +222,19 @@ discussion:
       name: "💻 Code Review"
       description: "Developer + Security für Code-Qualität"
       agents: [coder, reviewer]
+      workflows: [code-review, code-quality]  # Code-bezogene Workflows
 
     - id: security
       name: "🔒 Security Fokus"
       description: "Research + Security für Sicherheitsanalyse"
       agents: [researcher, reviewer]
+      workflows: [security-review]  # Security-Workflow
 
     - id: local-only
       name: "🏠 Nur Lokal (kostenlos)"
       description: "Ollama + LM Studio - keine API-Kosten"
       agents: [coder, researcher]
+      workflows: [performance]  # Performance-Analyse lokal (schneller)
 
     - id: cloud-only
       name: "☁️ Nur Cloud (schnell)"

@@ -36,6 +36,7 @@ export interface TeamConfig {
   description?: string;
   agents: string[];  // Agent IDs
   default?: boolean;
+  workflows?: string[];  // Workflow IDs this team handles (e.g., 'security-review', 'performance')
 }
 
 /**
@@ -265,6 +266,19 @@ export function getTeams(config: DiscussionConfig): TeamConfig[] {
  */
 export function getDefaultTeam(config: DiscussionConfig): TeamConfig | undefined {
   return config.teams.find(t => t.default) || config.teams[0];
+}
+
+/**
+ * Get team for a specific workflow (e.g., 'security-review', 'performance')
+ * Falls back to default team if no workflow-specific team is found
+ */
+export function getTeamForWorkflow(config: DiscussionConfig, workflowId: string): TeamConfig | undefined {
+  // Find team with this workflow
+  const workflowTeam = config.teams.find(t => t.workflows?.includes(workflowId));
+  if (workflowTeam) return workflowTeam;
+  
+  // Fallback to default team
+  return getDefaultTeam(config);
 }
 
 // Singleton config instance

@@ -107,6 +107,7 @@ export function createServer(config: ApiServerConfig): Express {
           return agent ? { id: agent.id, name: agent.name, emoji: agent.emoji, provider: agent.provider } : null;
         }).filter(Boolean),
         default: t.default || false,
+        workflows: t.workflows || [],
       })),
       defaultTeamId: defaultTeam?.id,
     });
