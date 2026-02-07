@@ -35,7 +35,10 @@ export function saveConfig(configPath: string, config: OrchestratorConfig): void
 export function normalizeConfig(raw: Record<string, unknown>): OrchestratorConfig {
   const orchestrator = raw['orchestrator'] as Record<string, unknown> ?? {};
   const kb = raw['knowledgeBase'] as Record<string, unknown> ?? {};
-  const agents = raw['agents'] as Array<Record<string, unknown>> ?? [];
+  const discussion = raw['discussion'] as Record<string, unknown> ?? {};
+  
+  // Read agents from discussion.agents (new format) or agents (old format)
+  const agents = (discussion['agents'] ?? raw['agents'] ?? []) as Array<Record<string, unknown>>;
   const workflows = raw['workflows'] as Array<Record<string, unknown>> ?? [];
   const qualityGates = raw['qualityGates'] as Array<Record<string, unknown>> ?? [];
   
@@ -66,11 +69,30 @@ export function normalizeConfig(raw: Record<string, unknown>): OrchestratorConfi
 function normalizeAgent(raw: Record<string, unknown>): OrchestratorConfig['agents'][0] {
   const caps = raw['capabilities'] as Record<string, unknown> ?? {};
   
+  // Map provider string to LLMProvider enum
+  const providerStr = raw['provider'] as string ?? 'claude-cli';
+  let provider: LLMProvider;
+  switch (providerStr) {
+    case 'google': provider = LLMProvider.GOOGLE; break;
+    case 'openai': provider = LLMProvider.OPENAI; break;
+    case 'ollama': provider = LLMProvider.OLLAMA; break;
+    case 'claude-api': provider = LLMProvider.ANTHROPIC; break;
+    case 'claude-cli': 
+    default: provider = LLMProvider.CLAUDE_CLI; break;
+  }
+  
+  // Resolve ${VAR} references in apiKey
+  let apiKey = raw['apiKey'] as string | undefined;
+  if (apiKey?.startsWith('${') && apiKey.endsWith('}')) {
+    const varName = apiKey.slice(2, -1);
+    apiKey = process.env[varName];
+  }
+  
   return {
     id: raw['id'] as string,
-    name: raw['name'] as string,
-    role: raw['role'] as AgentRole,
-    provider: raw['provider'] as LLMProvider,
+    name: raw['name'] as string ?? raw['id'] as string,
+    role: raw['role'] as AgentRole ?? AgentRole.CODER,
+    provider,
     model: raw['model'] as string,
     cli: raw['cli'] as string | undefined,
     cliArgs: raw['cliArgs'] as string[] | undefined,
@@ -78,6 +100,8 @@ function normalizeAgent(raw: Record<string, unknown>): OrchestratorConfig['agent
     enabled: raw['enabled'] as boolean ?? true,
     maxTokens: raw['maxTokens'] as number | undefined,
     temperature: raw['temperature'] as number | undefined,
+    apiKey,
+    baseUrl: raw['baseUrl'] as string | undefined,
     capabilities: {
       code: caps['code'] as boolean ?? false,
       review: caps['review'] as boolean ?? false,

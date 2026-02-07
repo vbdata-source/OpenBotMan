@@ -111,6 +111,7 @@ export enum AgentRole {
  */
 export enum LLMProvider {
   ANTHROPIC = 'anthropic',
+  CLAUDE_CLI = 'claude-cli',
   OPENAI = 'openai',
   GOOGLE = 'google',
   OLLAMA = 'ollama',
