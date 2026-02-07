@@ -1374,6 +1374,17 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
     : options.topic;
   console.log(chalk.cyan('║') + `  ${chalk.bold('Thema:')} ${chalk.white(topicDisplay)}`.padEnd(boxWidth + 8) + chalk.cyan('║'));
   
+  // Team info (if selected)
+  if (options.team && discussionConfig?.teams) {
+    const selectedTeam = lookupTeam(discussionConfig.teams as TeamDefinition[], options.team);
+    if (selectedTeam) {
+      const teamDisplay = selectedTeam.name.length > boxWidth - 12
+        ? selectedTeam.name.substring(0, boxWidth - 15) + '...'
+        : selectedTeam.name;
+      console.log(chalk.cyan('║') + `  ${chalk.bold('Team:')} ${chalk.yellow(teamDisplay)}`.padEnd(boxWidth + 17) + chalk.cyan('║'));
+    }
+  }
+  
   // Workspace info (if provided)
   if (options.workspace || context.sourceFiles.length > 0) {
     const workspacePath = options.workspace || context.projectRoot;
