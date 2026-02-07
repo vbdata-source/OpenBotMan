@@ -159,7 +159,6 @@ export function createServer(config: ApiServerConfig): Express {
         ? getAgentsForTeam(discussionConfig, request.team)
         : getAgentsForDiscussion(discussionConfig, request.agents);
       
-      console.log(`[${requestId}] RAW REQUEST team: ${rawRequest.team}`);
       console.log(`[${requestId}] Starting discussion: "${request.topic.slice(0, 50)}..." (team=${request.team || 'none'}, ${agentConfigs.length} agents, async=${request.async})`);
       
       // ASYNC MODE: Return job ID immediately
