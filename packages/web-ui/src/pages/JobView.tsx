@@ -17,7 +17,7 @@ interface AgentInfo {
 interface Job {
   id: string
   topic: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
+  status: 'pending' | 'running' | 'complete' | 'error'
   progress?: string
   currentRound?: number
   maxRounds?: number
@@ -44,7 +44,7 @@ export default function JobView() {
       setJob(data)
       
       // Stop polling when job is done
-      if (data.status === 'completed' || data.status === 'failed') {
+      if (data.status === 'complete' || data.status === 'error') {
         return true // Signal to stop polling
       }
     } catch (error) {
@@ -179,11 +179,11 @@ export default function JobView() {
           </h1>
           <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
             <span className="flex items-center gap-1">
-              {job.status === 'completed' && <CheckCircle className="h-4 w-4 text-green-500" />}
-              {job.status === 'failed' && <XCircle className="h-4 w-4 text-red-500" />}
+              {job.status === 'complete' && <CheckCircle className="h-4 w-4 text-green-500" />}
+              {job.status === 'error' && <XCircle className="h-4 w-4 text-red-500" />}
               {isRunning && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
-              {job.status === 'completed' ? 'Abgeschlossen' : 
-               job.status === 'failed' ? 'Fehlgeschlagen' : 
+              {job.status === 'complete' ? 'Abgeschlossen' : 
+               job.status === 'error' ? 'Fehlgeschlagen' : 
                'Läuft...'}
             </span>
             {job.durationMs && (
@@ -207,8 +207,8 @@ export default function JobView() {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Export buttons - only when completed */}
-          {job.status === 'completed' && job.result && (
+          {/* Export buttons - only when complete */}
+          {job.status === 'complete' && job.result && (
             <>
               <button
                 onClick={copyToClipboard}
@@ -365,7 +365,7 @@ export default function JobView() {
       )}
 
       {/* Final Result */}
-      {job.status === 'completed' && job.result && (
+      {job.status === 'complete' && job.result && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">📋 Ergebnis</h2>
@@ -406,7 +406,7 @@ export default function JobView() {
       )}
 
       {/* Error */}
-      {job.status === 'failed' && job.error && (
+      {job.status === 'error' && job.error && (
         <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-4">
           <h3 className="font-semibold text-red-500 mb-2">Fehler</h3>
           <p className="text-red-500 text-sm">{job.error}</p>

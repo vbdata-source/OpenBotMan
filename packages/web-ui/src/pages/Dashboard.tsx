@@ -6,7 +6,7 @@ import { fetchJobs as apiFetchJobs } from '../lib/api'
 interface Job {
   id: string
   topic: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
+  status: 'pending' | 'running' | 'complete' | 'error'
   createdAt: string
   durationMs?: number
   agentCount?: number
@@ -42,9 +42,9 @@ export default function Dashboard() {
         return <Clock className="h-4 w-4 text-yellow-500" />
       case 'running':
         return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
-      case 'completed':
+      case 'complete':
         return <CheckCircle className="h-4 w-4 text-green-500" />
-      case 'failed':
+      case 'error':
         return <XCircle className="h-4 w-4 text-red-500" />
     }
   }
@@ -53,8 +53,8 @@ export default function Dashboard() {
     switch (status) {
       case 'pending': return 'Wartend'
       case 'running': return 'Läuft'
-      case 'completed': return 'Abgeschlossen'
-      case 'failed': return 'Fehlgeschlagen'
+      case 'complete': return 'Abgeschlossen'
+      case 'error': return 'Fehlgeschlagen'
     }
   }
 
