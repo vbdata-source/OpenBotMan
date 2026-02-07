@@ -11,16 +11,21 @@ export function setApiKey(key: string) {
   localStorage.setItem('openbotman-api-key', key)
 }
 
-// Fetch with auth header
+// Fetch with auth header and cache-busting
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const apiKey = getApiKey()
   
-  return fetch(path, {
+  // Add cache-buster for GET requests to prevent 304 Not Modified
+  const separator = path.includes('?') ? '&' : '?'
+  const urlWithCacheBuster = options.method === 'POST' ? path : `${path}${separator}_t=${Date.now()}`
+  
+  return fetch(urlWithCacheBuster, {
     ...options,
     headers: {
       ...options.headers,
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
     },
   })
 }
