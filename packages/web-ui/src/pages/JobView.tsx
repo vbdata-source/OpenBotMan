@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, Clock, Copy, Download, Loader2, XCircle, Check } from 'lucide-react'
-import { fetchJob as apiFetchJob } from '../lib/api'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { ArrowLeft, CheckCircle, Clock, Copy, Download, Loader2, XCircle, Check, StopCircle, Trash2 } from 'lucide-react'
+import { fetchJob as apiFetchJob, cancelJob, deleteJob } from '../lib/api'
 
 interface AgentInfo {
   name: string
@@ -30,10 +30,12 @@ interface Job {
 
 export default function JobView() {
   const { jobId } = useParams<{ jobId: string }>()
+  const navigate = useNavigate()
   const [job, setJob] = useState<Job | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
   const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set())
+  const [actionLoading, setActionLoading] = useState(false)
 
   const loadJob = useCallback(async () => {
     if (!jobId) return
@@ -111,6 +113,32 @@ export default function JobView() {
     URL.revokeObjectURL(url)
   }
 
+  async function handleCancel() {
+    if (!jobId || !confirm('Job wirklich abbrechen?')) return
+    setActionLoading(true)
+    try {
+      await cancelJob(jobId)
+      await loadJob()
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Fehler beim Abbrechen')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!jobId || !confirm('Job wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) return
+    setActionLoading(true)
+    try {
+      await deleteJob(jobId)
+      navigate('/')
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Fehler beim Löschen')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -177,27 +205,54 @@ export default function JobView() {
           </div>
         </div>
 
-        {/* Export Buttons */}
-        {job.status === 'completed' && job.result && (
-          <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Export buttons - only when completed */}
+          {job.status === 'completed' && job.result && (
+            <>
+              <button
+                onClick={copyToClipboard}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors text-sm"
+                title="In Zwischenablage kopieren"
+              >
+                {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                {copied ? 'Kopiert!' : 'Kopieren'}
+              </button>
+              <button
+                onClick={downloadMarkdown}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm"
+                title="Als Markdown-Datei herunterladen"
+              >
+                <Download className="h-4 w-4" />
+                Download
+              </button>
+            </>
+          )}
+          
+          {/* Cancel button - only when running */}
+          {isRunning && (
             <button
-              onClick={copyToClipboard}
-              className="inline-flex items-center gap-2 px-3 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 transition-colors text-sm"
-              title="In Zwischenablage kopieren"
+              onClick={handleCancel}
+              disabled={actionLoading}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors text-sm disabled:opacity-50"
+              title="Job abbrechen"
             >
-              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-              {copied ? 'Kopiert!' : 'Kopieren'}
+              <StopCircle className="h-4 w-4" />
+              Abbrechen
             </button>
-            <button
-              onClick={downloadMarkdown}
-              className="inline-flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm"
-              title="Als Markdown-Datei herunterladen"
-            >
-              <Download className="h-4 w-4" />
-              Download
-            </button>
-          </div>
-        )}
+          )}
+          
+          {/* Delete button - always visible */}
+          <button
+            onClick={handleDelete}
+            disabled={actionLoading}
+            className="inline-flex items-center gap-2 px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors text-sm disabled:opacity-50"
+            title="Job löschen"
+          >
+            <Trash2 className="h-4 w-4" />
+            Löschen
+          </button>
+        </div>
       </div>
 
       {/* Progress Bar */}

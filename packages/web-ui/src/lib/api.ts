@@ -61,3 +61,25 @@ export async function startDiscussion(topic: string, team?: string) {
   }
   return res.json()
 }
+
+export async function cancelJob(jobId: string) {
+  const res = await apiFetch(`/api/v1/jobs/${jobId}/cancel`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.message || 'Failed to cancel job')
+  }
+  return res.json()
+}
+
+export async function deleteJob(jobId: string) {
+  const res = await apiFetch(`/api/v1/jobs/${jobId}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.message || 'Failed to delete job')
+  }
+  return res.json()
+}

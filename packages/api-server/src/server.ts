@@ -304,6 +304,54 @@ export function createServer(config: ApiServerConfig): Express {
     
     res.json({ jobs, count: jobs.length });
   });
+
+  /**
+   * DELETE /api/v1/jobs/:jobId - Delete a job
+   */
+  app.delete('/api/v1/jobs/:jobId', (req: Request, res: Response) => {
+    const jobId = req.params.jobId;
+    if (!jobId) {
+      res.status(400).json({ error: 'Job ID required' });
+      return;
+    }
+    
+    const job = jobStore.get(jobId);
+    if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+    
+    jobStore.delete(jobId);
+    console.log(`[${jobId}] Job deleted`);
+    res.json({ success: true, message: 'Job deleted' });
+  });
+
+  /**
+   * POST /api/v1/jobs/:jobId/cancel - Cancel a running job
+   */
+  app.post('/api/v1/jobs/:jobId/cancel', (req: Request, res: Response) => {
+    const jobId = req.params.jobId;
+    if (!jobId) {
+      res.status(400).json({ error: 'Job ID required' });
+      return;
+    }
+    
+    const job = jobStore.get(jobId);
+    if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+    
+    if (job.status === 'completed' || job.status === 'failed') {
+      res.status(400).json({ error: 'Job already finished', status: job.status });
+      return;
+    }
+    
+    // Mark job as failed/cancelled
+    jobStore.setError(jobId, 'Cancelled by user', job.durationMs || 0);
+    console.log(`[${jobId}] Job cancelled by user`);
+    res.json({ success: true, message: 'Job cancelled' });
+  });
   
   // 404 handler
   app.use((_req: Request, res: Response) => {

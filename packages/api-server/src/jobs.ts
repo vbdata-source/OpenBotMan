@@ -271,6 +271,10 @@ class JobStore {
   list(): Job[] {
     return [...this.jobs.values()];
   }
+  
+  delete(id: string): boolean {
+    return this.jobs.delete(id);
+  }
 }
 
 // Singleton instance
