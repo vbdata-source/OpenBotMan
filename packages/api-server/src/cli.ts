@@ -38,7 +38,11 @@ for (let i = 0; i < 5; i++) {
 // NOW import modules that use config (dynamic import to ensure .env is loaded first)
 const { startServer } = await import('./server.js');
 const { getConfig } = await import('./config.js');
+const { initDatabase } = await import('./db.js');
 import type { ApiServerConfig } from './types.js';
+
+// Initialize database for job persistence
+initDatabase();
 
 // Parse command line arguments
 const args = process.argv.slice(2);
