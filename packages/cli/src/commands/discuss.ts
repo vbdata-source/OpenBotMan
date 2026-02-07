@@ -109,6 +109,7 @@ export interface DiscussionConfig {
     provider?: string;
     model?: string;
     apiKey?: string;
+    baseUrl?: string;
   }>;
 }
 
@@ -332,9 +333,9 @@ function getAgentsFromConfig(
       systemPrompt: a.systemPrompt + '\n\n' + CONSENSUS_PROTOCOL_PROMPT,
       provider: (a.provider || 'claude-cli') as 'claude-cli' | 'openai' | 'google' | 'ollama' | 'mock',
       model: a.model || config.model || 'claude-sonnet-4-20250514',
-      api: a.api ? {
-        apiKey: resolveEnvVar(a.api.apiKey),
-        baseUrl: a.api.baseUrl,
+      api: (a.apiKey || a.baseUrl) ? {
+        apiKey: resolveEnvVar(a.apiKey),
+        baseUrl: a.baseUrl,
       } : undefined,
     }));
   } else {
