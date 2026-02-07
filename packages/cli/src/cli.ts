@@ -226,10 +226,37 @@ program
 program
   .command('teams')
   .description('List available team presets')
-  .option('-c, --config <path>', 'Config file path', 'config.yaml')
+  .option('-c, --config <path>', 'Config file path')
   .action((options) => {
     try {
-      const configContent = readFileSync(options.config, 'utf-8');
+      // Search for config in multiple locations (like discuss command)
+      const searchPaths = [
+        options.config,
+        'config.yaml',
+        join(process.cwd(), 'config.yaml'),
+        join(process.cwd(), '..', '..', 'config.yaml'),
+        join(process.cwd(), '..', 'config.yaml'),
+      ].filter(Boolean) as string[];
+      
+      let configContent: string | undefined;
+      let configPath: string | undefined;
+      
+      for (const path of searchPaths) {
+        if (existsSync(path)) {
+          configContent = readFileSync(path, 'utf-8');
+          configPath = path;
+          break;
+        }
+      }
+      
+      if (!configContent) {
+        console.log(chalk.yellow('\nNo config.yaml found.'));
+        console.log(chalk.gray('Searched in: ' + searchPaths.slice(0, 3).join(', ')));
+        return;
+      }
+      
+      console.log(chalk.gray(`[Config] Loaded from: ${configPath}`));
+      
       const fullConfig = parseYaml(configContent) as { discussion?: { teams?: Array<{ id: string; name: string; description?: string; agents: string[]; default?: boolean }> } };
       const teams = fullConfig?.discussion?.teams;
       
