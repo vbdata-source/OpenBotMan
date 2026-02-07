@@ -83,6 +83,7 @@ interface ConfigFile {
       description?: string;
       agents: string[];
       default?: boolean;
+      workflows?: string[];
     }>;
   };
   orchestrator?: {
