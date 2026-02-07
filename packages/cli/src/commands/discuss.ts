@@ -1366,11 +1366,18 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
   const L = chalk.cyan('║');
   const R = chalk.cyan('║');
   
-  // Simple row builder - just pad to fixed width
-  const row = (text: string, pad: number = W) => {
-    // Truncate or pad to exact width
-    const truncated = text.length > pad ? text.substring(0, pad - 3) + '...' : text;
-    return L + truncated.padEnd(pad) + R;
+  // Count emojis in string (they take 2 cols in terminal but count as 1-2 in JS)
+  const countEmojis = (s: string): number => {
+    const emojiRegex = /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu;
+    return (s.match(emojiRegex) || []).length;
+  };
+  
+  // Row builder with emoji compensation
+  const row = (text: string) => {
+    const emojiCount = countEmojis(text);
+    const targetLen = W - emojiCount;  // Each emoji takes extra space
+    const truncated = text.length > targetLen ? text.substring(0, targetLen - 3) + '...' : text;
+    return L + truncated.padEnd(targetLen) + R;
   };
   
   console.log('\n');
