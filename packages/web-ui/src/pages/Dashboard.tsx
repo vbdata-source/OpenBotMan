@@ -121,7 +121,7 @@ export default function Dashboard() {
                       to={`/jobs/${job.id}`}
                       className="text-sm font-medium hover:text-primary transition-colors"
                     >
-                      {job.topic && job.topic.length > 50 ? job.topic.slice(0, 50) + '...' : job.topic || '-'}
+                      {(job.topic?.length ?? 0) > 50 ? job.topic?.slice(0, 50) + '...' : job.topic || 'Ohne Titel'}
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-sm text-muted-foreground">
