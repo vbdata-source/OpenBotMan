@@ -832,14 +832,22 @@ class JobsTreeProvider implements vscode.TreeDataProvider<JobTreeItem> {
         
         // Status text with provider
         let statusText = '';
+        let tooltipText = agent.name;
+        
         if (agent.status === 'thinking') {
           statusText = providerDisplay ? `${providerDisplay} · denkt nach...` : 'denkt nach...';
+          tooltipText = `${agent.name} (${providerDisplay}) - Verarbeitung läuft...`;
         } else if (agent.status === 'complete' && duration) {
           statusText = providerDisplay ? `${providerDisplay} · ${duration}` : duration;
+          tooltipText = `${agent.name} (${providerDisplay}) - Erfolgreich in ${duration}`;
         } else if (agent.status === 'waiting') {
           statusText = providerDisplay ? `${providerDisplay} · wartet` : 'wartet';
+          tooltipText = `${agent.name} (${providerDisplay}) - Wartet auf Start`;
         } else if (agent.status === 'error') {
-          statusText = 'Fehler';
+          statusText = providerDisplay ? `${providerDisplay} · ❌ FEHLER` : '❌ FEHLER';
+          // Show error message in tooltip
+          const errorMsg = agent.responsePreview || 'Unbekannter Fehler';
+          tooltipText = `❌ ${agent.name} FEHLER:\n\n${errorMsg}`;
         }
         
         const item = new JobTreeItem(
@@ -850,6 +858,7 @@ class JobsTreeProvider implements vscode.TreeDataProvider<JobTreeItem> {
         );
         
         item.description = statusText;
+        item.tooltip = new vscode.MarkdownString(tooltipText);
         
         // Set icon based on agent status
         if (agent.status === 'thinking') {
