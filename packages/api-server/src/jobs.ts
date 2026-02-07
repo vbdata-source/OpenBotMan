@@ -1,12 +1,11 @@
 /**
  * Async Job Queue for Long-Running Discussions
  * 
- * Stores jobs in SQLite for persistence across server restarts.
+ * Stores jobs in JSON file for persistence across server restarts.
  * Includes real-time agent progress tracking.
  */
 
-import { getDatabase } from './db.js';
-import type Database from 'better-sqlite3';
+import { getJob, saveJob, deleteJob as dbDeleteJob, listJobs, type StoredJob, type StoredAgent } from './db.js';
 
 export type JobStatus = 'pending' | 'running' | 'complete' | 'error' | 'timeout';
 
@@ -45,14 +44,11 @@ export interface Job {
 }
 
 /**
- * SQLite-backed job store
+ * JSON file-backed job store
  */
 class JobStore {
+  // In-memory cache for active jobs (faster updates during processing)
   private cache: Map<string, Job> = new Map();
-  
-  private get db(): Database.Database {
-    return getDatabase();
-  }
   
   /**
    * Create a new job
@@ -67,14 +63,8 @@ class JobStore {
       updatedAt: now,
     };
     
-    // Insert into database
-    this.db.prepare(`
-      INSERT INTO jobs (id, status, topic, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(id, job.status, topic || null, now.toISOString(), now.toISOString());
-    
-    // Cache for fast access
     this.cache.set(id, job);
+    this.persist(job);
     
     return job;
   }
@@ -83,22 +73,16 @@ class JobStore {
    * Get a job by ID
    */
   get(id: string): Job | undefined {
-    // Check cache first
+    // Check memory cache first
     if (this.cache.has(id)) {
       return this.cache.get(id);
     }
     
-    // Load from database
-    const row = this.db.prepare('SELECT * FROM jobs WHERE id = ?').get(id) as JobRow | undefined;
-    if (!row) return undefined;
+    // Load from file
+    const stored = getJob(id);
+    if (!stored) return undefined;
     
-    const job = this.rowToJob(row);
-    
-    // Load agents
-    const agentRows = this.db.prepare('SELECT * FROM job_agents WHERE job_id = ? ORDER BY id').all(id) as AgentRow[];
-    job.agents = agentRows.map(this.rowToAgent);
-    
-    // Cache it
+    const job = this.storedToJob(stored);
     this.cache.set(id, job);
     
     return job;
@@ -111,40 +95,8 @@ class JobStore {
     const job = this.get(id);
     if (!job) return undefined;
     
-    // Apply updates to cached job
     Object.assign(job, updates, { updatedAt: new Date() });
-    
-    // Persist to database
-    this.db.prepare(`
-      UPDATE jobs SET
-        status = ?,
-        topic = ?,
-        progress = ?,
-        result = ?,
-        action_items = ?,
-        error = ?,
-        current_round = ?,
-        max_rounds = ?,
-        current_agent = ?,
-        duration_ms = ?,
-        updated_at = ?,
-        completed_at = ?
-      WHERE id = ?
-    `).run(
-      job.status,
-      job.topic || null,
-      job.progress || null,
-      job.result || null,
-      job.actionItems ? JSON.stringify(job.actionItems) : null,
-      job.error || null,
-      job.currentRound || null,
-      job.maxRounds || null,
-      job.currentAgent || null,
-      job.durationMs || null,
-      job.updatedAt.toISOString(),
-      job.completedAt?.toISOString() || null,
-      id
-    );
+    this.persist(job);
     
     return job;
   }
@@ -165,23 +117,11 @@ class JobStore {
       provider: config.provider,
     }));
     
-    // Delete existing agents and insert new ones
-    this.db.prepare('DELETE FROM job_agents WHERE job_id = ?').run(id);
-    
-    const insertStmt = this.db.prepare(`
-      INSERT INTO job_agents (job_id, agent_id, name, role, status, model, provider)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    
-    for (const agent of agents) {
-      insertStmt.run(id, agent.id, agent.name, agent.role, agent.status, agent.model || null, agent.provider || null);
-    }
-    
     job.agents = agents;
     job.currentRound = 0;
     job.maxRounds = 5;
     
-    this.update(id, { currentRound: 0, maxRounds: 5 });
+    this.persist(job);
   }
   
   /**
@@ -195,17 +135,13 @@ class JobStore {
     if (agent) {
       agent.status = 'thinking';
       agent.startedAt = new Date();
-      
-      this.db.prepare(`
-        UPDATE job_agents SET status = ?, started_at = ?
-        WHERE job_id = ? AND name = ?
-      `).run('thinking', agent.startedAt.toISOString(), id, agentName);
     }
     
-    this.update(id, { 
-      currentAgent: agentName,
-      progress: `${agentName} denkt nach...`
-    });
+    job.currentAgent = agentName;
+    job.progress = `${agentName} denkt nach...`;
+    job.updatedAt = new Date();
+    
+    this.persist(job);
   }
   
   /**
@@ -226,27 +162,12 @@ class JobStore {
         agent.responsePreview = fullResponse.slice(0, 100);
         agent.fullResponse = fullResponse;
       }
-      
-      this.db.prepare(`
-        UPDATE job_agents SET 
-          status = ?, 
-          completed_at = ?, 
-          duration_ms = ?,
-          response_preview = ?,
-          full_response = ?
-        WHERE job_id = ? AND name = ?
-      `).run(
-        'complete',
-        agent.completedAt.toISOString(),
-        agent.durationMs || null,
-        agent.responsePreview || null,
-        agent.fullResponse || null,
-        id,
-        agentName
-      );
     }
     
-    this.update(id, { currentAgent: undefined });
+    job.currentAgent = undefined;
+    job.updatedAt = new Date();
+    
+    this.persist(job);
   }
   
   /**
@@ -265,27 +186,12 @@ class JobStore {
       }
       agent.responsePreview = `❌ ${errorMessage.slice(0, 80)}`;
       agent.fullResponse = errorMessage;
-      
-      this.db.prepare(`
-        UPDATE job_agents SET 
-          status = ?, 
-          completed_at = ?, 
-          duration_ms = ?,
-          response_preview = ?,
-          full_response = ?
-        WHERE job_id = ? AND name = ?
-      `).run(
-        'error',
-        agent.completedAt.toISOString(),
-        agent.durationMs || null,
-        agent.responsePreview,
-        agent.fullResponse,
-        id,
-        agentName
-      );
     }
     
-    this.update(id, { currentAgent: undefined });
+    job.currentAgent = undefined;
+    job.updatedAt = new Date();
+    
+    this.persist(job);
   }
   
   /**
@@ -303,22 +209,14 @@ class JobStore {
         agent.completedAt = undefined;
         agent.durationMs = undefined;
       }
-      
-      this.db.prepare(`
-        UPDATE job_agents SET 
-          status = 'waiting',
-          started_at = NULL,
-          completed_at = NULL,
-          duration_ms = NULL
-        WHERE job_id = ?
-      `).run(id);
     }
     
-    this.update(id, { 
-      currentRound: round, 
-      maxRounds: maxRounds ?? job.maxRounds,
-      progress: `Runde ${round}/${maxRounds ?? job.maxRounds}`
-    });
+    job.currentRound = round;
+    job.maxRounds = maxRounds ?? job.maxRounds;
+    job.progress = `Runde ${round}/${maxRounds ?? job.maxRounds}`;
+    job.updatedAt = new Date();
+    
+    this.persist(job);
   }
   
   setRunning(id: string, progress?: string): void {
@@ -327,75 +225,61 @@ class JobStore {
   
   setComplete(id: string, result: string, actionItems: string[], durationMs: number): void {
     const job = this.get(id);
+    if (!job) return;
     
     // Mark all agents as complete
-    if (job?.agents) {
+    if (job.agents) {
       for (const agent of job.agents) {
-        if (agent.status !== 'complete') {
+        if (agent.status !== 'complete' && agent.status !== 'error') {
           agent.status = 'complete';
         }
       }
-      
-      this.db.prepare(`
-        UPDATE job_agents SET status = 'complete'
-        WHERE job_id = ? AND status != 'complete' AND status != 'error'
-      `).run(id);
     }
     
-    this.update(id, {
-      status: 'complete',
-      result,
-      actionItems,
-      durationMs,
-      completedAt: new Date(),
-      currentAgent: undefined,
-    });
+    job.status = 'complete';
+    job.result = result;
+    job.actionItems = actionItems;
+    job.durationMs = durationMs;
+    job.completedAt = new Date();
+    job.currentAgent = undefined;
+    job.updatedAt = new Date();
+    
+    this.persist(job);
   }
   
   setError(id: string, error: string, durationMs?: number): void {
     const job = this.get(id);
+    if (!job) return;
     
     // Mark current agent as error
-    if (job?.currentAgent && job.agents) {
+    if (job.currentAgent && job.agents) {
       const agent = job.agents.find(a => a.name === job.currentAgent);
       if (agent) {
         agent.status = 'error';
-        
-        this.db.prepare(`
-          UPDATE job_agents SET status = 'error'
-          WHERE job_id = ? AND name = ?
-        `).run(id, job.currentAgent);
       }
     }
     
-    this.update(id, {
-      status: 'error',
-      error,
-      durationMs,
-      completedAt: new Date(),
-      currentAgent: undefined,
-    });
+    job.status = 'error';
+    job.error = error;
+    job.durationMs = durationMs;
+    job.completedAt = new Date();
+    job.currentAgent = undefined;
+    job.updatedAt = new Date();
+    
+    this.persist(job);
   }
   
   /**
    * List all jobs
    */
   list(): Job[] {
-    const rows = this.db.prepare(`
-      SELECT * FROM jobs ORDER BY created_at DESC LIMIT 100
-    `).all() as JobRow[];
-    
-    return rows.map(row => {
-      const job = this.rowToJob(row);
-      
-      // Load agents
-      const agentRows = this.db.prepare('SELECT * FROM job_agents WHERE job_id = ? ORDER BY id').all(row.id) as AgentRow[];
-      job.agents = agentRows.map(this.rowToAgent);
-      
-      // Update cache
-      this.cache.set(job.id, job);
-      
-      return job;
+    const storedJobs = listJobs();
+    return storedJobs.map(stored => {
+      // Use cached version if available (has latest state)
+      if (this.cache.has(stored.id)) {
+        return this.cache.get(stored.id)!;
+      }
+      return this.storedToJob(stored);
     });
   }
   
@@ -404,8 +288,13 @@ class JobStore {
    */
   delete(id: string): boolean {
     this.cache.delete(id);
-    const result = this.db.prepare('DELETE FROM jobs WHERE id = ?').run(id);
-    return result.changes > 0;
+    return dbDeleteJob(id);
+  }
+  
+  // ============ Private helpers ============
+  
+  private persist(job: Job): void {
+    saveJob(this.jobToStored(job));
   }
   
   private getRoleFromName(name: string): string {
@@ -420,74 +309,77 @@ class JobStore {
     return roles[name] || 'Expert';
   }
   
-  private rowToJob(row: JobRow): Job {
+  private jobToStored(job: Job): StoredJob {
     return {
-      id: row.id,
-      status: row.status as JobStatus,
-      topic: row.topic || undefined,
-      progress: row.progress || undefined,
-      result: row.result || undefined,
-      actionItems: row.action_items ? JSON.parse(row.action_items) : undefined,
-      error: row.error || undefined,
-      currentRound: row.current_round || undefined,
-      maxRounds: row.max_rounds || undefined,
-      currentAgent: row.current_agent || undefined,
-      durationMs: row.duration_ms || undefined,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at),
-      completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
+      id: job.id,
+      status: job.status,
+      topic: job.topic,
+      progress: job.progress,
+      result: job.result,
+      actionItems: job.actionItems,
+      error: job.error,
+      currentRound: job.currentRound,
+      maxRounds: job.maxRounds,
+      currentAgent: job.currentAgent,
+      durationMs: job.durationMs,
+      createdAt: job.createdAt.toISOString(),
+      updatedAt: job.updatedAt.toISOString(),
+      completedAt: job.completedAt?.toISOString(),
+      agents: job.agents?.map(a => this.agentToStored(a)),
     };
   }
   
-  private rowToAgent(row: AgentRow): AgentProgress {
+  private agentToStored(agent: AgentProgress): StoredAgent {
     return {
-      id: row.agent_id,
-      name: row.name,
-      role: row.role || 'Expert',
-      status: row.status as AgentStatus,
-      model: row.model || undefined,
-      provider: row.provider || undefined,
-      startedAt: row.started_at ? new Date(row.started_at) : undefined,
-      completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
-      durationMs: row.duration_ms || undefined,
-      responsePreview: row.response_preview || undefined,
-      fullResponse: row.full_response || undefined,
+      id: agent.id,
+      name: agent.name,
+      role: agent.role,
+      status: agent.status,
+      model: agent.model,
+      provider: agent.provider,
+      startedAt: agent.startedAt?.toISOString(),
+      completedAt: agent.completedAt?.toISOString(),
+      durationMs: agent.durationMs,
+      responsePreview: agent.responsePreview,
+      fullResponse: agent.fullResponse,
     };
   }
-}
-
-// Type definitions for database rows
-interface JobRow {
-  id: string;
-  status: string;
-  topic: string | null;
-  progress: string | null;
-  result: string | null;
-  action_items: string | null;
-  error: string | null;
-  current_round: number | null;
-  max_rounds: number | null;
-  current_agent: string | null;
-  duration_ms: number | null;
-  created_at: string;
-  updated_at: string;
-  completed_at: string | null;
-}
-
-interface AgentRow {
-  id: number;
-  job_id: string;
-  agent_id: string;
-  name: string;
-  role: string | null;
-  status: string;
-  model: string | null;
-  provider: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  duration_ms: number | null;
-  response_preview: string | null;
-  full_response: string | null;
+  
+  private storedToJob(stored: StoredJob): Job {
+    return {
+      id: stored.id,
+      status: stored.status as JobStatus,
+      topic: stored.topic,
+      progress: stored.progress,
+      result: stored.result,
+      actionItems: stored.actionItems,
+      error: stored.error,
+      currentRound: stored.currentRound,
+      maxRounds: stored.maxRounds,
+      currentAgent: stored.currentAgent,
+      durationMs: stored.durationMs,
+      createdAt: new Date(stored.createdAt),
+      updatedAt: new Date(stored.updatedAt),
+      completedAt: stored.completedAt ? new Date(stored.completedAt) : undefined,
+      agents: stored.agents?.map(a => this.storedToAgent(a)),
+    };
+  }
+  
+  private storedToAgent(stored: StoredAgent): AgentProgress {
+    return {
+      id: stored.id,
+      name: stored.name,
+      role: stored.role,
+      status: stored.status as AgentStatus,
+      model: stored.model,
+      provider: stored.provider,
+      startedAt: stored.startedAt ? new Date(stored.startedAt) : undefined,
+      completedAt: stored.completedAt ? new Date(stored.completedAt) : undefined,
+      durationMs: stored.durationMs,
+      responsePreview: stored.responsePreview,
+      fullResponse: stored.fullResponse,
+    };
+  }
 }
 
 // Singleton instance
