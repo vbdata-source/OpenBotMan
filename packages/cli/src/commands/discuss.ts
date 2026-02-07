@@ -1249,7 +1249,19 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
     if (available) {
       availableProviders.push(agent.name);
     } else {
-      availabilitySpinner.warn(`${agent.name}: Provider ${agent.provider} not available`);
+      // Show helpful message - especially for local APIs
+      const baseUrl = agent.api?.baseUrl;
+      let errorMsg: string;
+      
+      if (baseUrl) {
+        // Local API with custom baseUrl
+        errorMsg = `${agent.name}: Cannot connect to ${baseUrl}`;
+      } else {
+        // Cloud API
+        errorMsg = `${agent.name}: Provider ${agent.provider} not available`;
+      }
+      
+      availabilitySpinner.warn(errorMsg);
     }
   }
   
