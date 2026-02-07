@@ -408,12 +408,46 @@ function parseProviderOverride(override: string): ['claude-cli' | 'openai' | 'go
 // ============================================================================
 
 /**
+ * Validate baseUrl format and return normalized URL
+ */
+function validateBaseUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  
+  const trimmed = url.trim();
+  if (!trimmed) return undefined;
+  
+  // Must start with http:// or https://
+  if (!trimmed.match(/^https?:\/\//i)) {
+    throw new Error(
+      `Invalid baseUrl: "${trimmed}"\n` +
+      `  Must start with http:// or https://\n` +
+      `  Example: http://localhost:1234/v1`
+    );
+  }
+  
+  // Validate URL format
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.href;
+  } catch {
+    throw new Error(
+      `Invalid baseUrl format: "${trimmed}"\n` +
+      `  Please check the URL syntax.\n` +
+      `  Example: http://localhost:1234/v1`
+    );
+  }
+}
+
+/**
  * Create an LLM provider for an agent
  */
 function createAgentProvider(agent: DiscussAgentConfig, options: DiscussOptions): LLMProvider {
   // Get API key from agent.api or environment
   let apiKey = agent.api?.apiKey;
-  const baseUrl = agent.api?.baseUrl;
+  const rawBaseUrl = agent.api?.baseUrl;
+  
+  // Validate baseUrl if provided (Security: prevent invalid URLs)
+  const baseUrl = validateBaseUrl(rawBaseUrl);
   
   if (!apiKey) {
     switch (agent.provider) {

@@ -153,11 +153,42 @@ export class OpenAIProvider extends BaseProvider {
       };
     } catch (error) {
       const durationMs = Date.now() - startTime;
+      const isLocalApi = this.baseUrl !== 'https://api.openai.com/v1';
       
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
           return this.createErrorResponse('Request timed out', durationMs);
         }
+        
+        // Enhanced error messages for local APIs
+        if (isLocalApi) {
+          const localApiHint = `\n\n💡 Troubleshooting (local API at ${this.baseUrl}):\n` +
+            `   • Is your local server running? (LM Studio, Ollama, vLLM, etc.)\n` +
+            `   • Is a model loaded? Check the server's UI or logs.\n` +
+            `   • Is the port correct? Try: curl ${this.baseUrl}/models`;
+          
+          // Check for common local API errors
+          if (error.message.includes('ECONNREFUSED') || error.message.includes('fetch failed')) {
+            return this.createErrorResponse(
+              `Cannot connect to local API at ${this.baseUrl}` + localApiHint,
+              durationMs
+            );
+          }
+          
+          if (error.message.includes('No models loaded') || error.message.includes('model') && error.message.includes('not')) {
+            return this.createErrorResponse(
+              `No model loaded in local API.` + localApiHint,
+              durationMs
+            );
+          }
+          
+          // Add hint to any other local API error
+          return this.createErrorResponse(
+            error.message + localApiHint,
+            durationMs
+          );
+        }
+        
         return this.createErrorResponse(error, durationMs);
       }
       
