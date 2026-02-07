@@ -20,16 +20,21 @@ discussion:
   showAgentConfig: true
 
   # ==========================================
-  # Agent Definitionen
+  # Wiederverwendbare Prompts
   # ==========================================
-  agents:
-    - id: planner
-      role: architect
-      name: "Strategic Planner"
-      emoji: "🎯"
-      provider: google
-      model: gemini-2.0-flash
-      systemPrompt: |
+  # Prompts können von mehreren Agents/Teams verwendet werden.
+  # Agents referenzieren Prompts via "promptId".
+  # Fallback: Wenn kein promptId, wird "systemPrompt" inline verwendet.
+  
+  prompts:
+    # ─────────────────────────────────────────
+    # Software-Entwicklung Prompts
+    # ─────────────────────────────────────────
+    - id: software-architect
+      name: "Software Architect"
+      description: "Strategische Planung für Software-Projekte"
+      category: software
+      text: |
         Du bist ein strategischer Planner und Solution Architect.
 
         DEINE PERSPEKTIVE:
@@ -46,13 +51,11 @@ discussion:
 
         Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
 
-    - id: coder
-      role: coder
+    - id: software-developer
       name: "Senior Developer"
-      emoji: "💻"
-      provider: ollama
-      model: qwen3-coder:30b
-      systemPrompt: |
+      description: "Implementierung und Code-Qualität"
+      category: software
+      text: |
         Du bist ein erfahrener Senior Software-Entwickler.
 
         DEINE PERSPEKTIVE:
@@ -69,14 +72,11 @@ discussion:
 
         Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
 
-    - id: researcher
-      role: researcher
-      name: "Research Analyst"
-      emoji: "🔬"
-      provider: openai
-      model: qwen/qwen3-coder-30b
-      baseUrl: http://localhost:1234/v1
-      systemPrompt: |
+    - id: software-researcher
+      name: "Tech Research Analyst"
+      description: "Technische Recherche und Analyse"
+      category: software
+      text: |
         Du bist ein gründlicher Research-Analyst und Fact-Checker.
 
         DEINE PERSPEKTIVE:
@@ -93,13 +93,11 @@ discussion:
 
         Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
 
-    - id: reviewer
-      role: reviewer
+    - id: software-reviewer
       name: "Security & Quality Expert"
-      emoji: "🔍"
-      provider: claude-cli
-      model: claude-sonnet-4-20250514
-      systemPrompt: |
+      description: "Code-Review und Sicherheitsanalyse"
+      category: software
+      text: |
         Du bist ein kritischer Code-Reviewer und Security-Experte.
 
         DEINE PERSPEKTIVE:
@@ -116,9 +114,97 @@ discussion:
 
         Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
 
+    # ─────────────────────────────────────────
+    # Business Prompts (Beispiele für andere Domänen)
+    # ─────────────────────────────────────────
+    - id: business-strategist
+      name: "Business Strategist"
+      description: "Geschäftsstrategie und Marktanalyse"
+      category: business
+      text: |
+        Du bist ein erfahrener Business-Stratege.
+
+        DEINE PERSPEKTIVE:
+        - Marktanalyse und Wettbewerbsvorteile
+        - ROI und Business Case
+        - Skalierung und Wachstum
+        - Risiken und Chancen
+
+        DEIN STIL:
+        - Geschäftsorientiert und datengetrieben
+        - Zeige konkrete Zahlen wenn möglich
+        - Denke an Stakeholder-Interessen
+        - Bewerte langfristige Auswirkungen
+
+        Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
+
+    - id: business-analyst
+      name: "Business Analyst"
+      description: "Marktforschung und Datenanalyse"
+      category: business
+      text: |
+        Du bist ein gründlicher Business-Analyst.
+
+        DEINE PERSPEKTIVE:
+        - Marktforschung und Trends
+        - Wettbewerberanalyse
+        - Kundenverhalten und Bedürfnisse
+        - Datenbasierte Entscheidungen
+
+        DEIN STIL:
+        - Analytisch und strukturiert
+        - Zeige Vergleiche und Benchmarks
+        - Hinterfrage Annahmen
+        - Belege mit Daten und Quellen
+
+        Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
+
+  # ==========================================
+  # Agent Definitionen
+  # ==========================================
+  # Agents können via "promptId" auf Prompts verweisen.
+  # Fallback: "systemPrompt" inline (für Backward-Compatibility).
+  
+  agents:
+    - id: planner
+      role: architect
+      name: "Strategic Planner"
+      emoji: "🎯"
+      provider: google
+      model: gemini-2.0-flash
+      promptId: software-architect  # Referenz auf Prompt
+
+    - id: coder
+      role: coder
+      name: "Senior Developer"
+      emoji: "💻"
+      provider: ollama
+      model: qwen3-coder:30b
+      promptId: software-developer  # Referenz auf Prompt
+
+    - id: researcher
+      role: researcher
+      name: "Research Analyst"
+      emoji: "🔬"
+      provider: openai
+      model: qwen/qwen3-coder-30b
+      baseUrl: http://localhost:1234/v1
+      promptId: software-researcher  # Referenz auf Prompt
+
+    - id: reviewer
+      role: reviewer
+      name: "Security & Quality Expert"
+      emoji: "🔍"
+      provider: claude-cli
+      model: claude-sonnet-4-20250514
+      promptId: software-reviewer  # Referenz auf Prompt
+
   # ==========================================
   # Team-Presets (Agenten-Gruppen)
   # ==========================================
+  # Phase 2+3: Teams können Prompts überschreiben
+  # Aktuell: Nur Agent-Liste (Backward-Compatible)
+  
   teams:
     - id: full
       name: "🌟 Volles Team (4 Experten)"
@@ -150,6 +236,16 @@ discussion:
       name: "☁️ Nur Cloud (schnell)"
       description: "Gemini + Claude für maximale Geschwindigkeit"
       agents: [planner, reviewer]
+    
+    # Beispiel: Business Team mit anderen Prompts (Phase 2+3)
+    # - id: business-team
+    #   name: "💼 Business Team"
+    #   description: "Für Geschäftsentscheidungen"
+    #   agents:
+    #     - agentId: planner
+    #       promptId: business-strategist  # Override!
+    #     - agentId: researcher
+    #       promptId: business-analyst     # Override!
 
 # ============================================
 # Logging

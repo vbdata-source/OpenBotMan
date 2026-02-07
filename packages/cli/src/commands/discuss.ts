@@ -91,6 +91,17 @@ export interface DiscussOptions {
   maxContextKb?: number; // Max context size in KB (default: 30)
 }
 
+/**
+ * Prompt definition for reusable system prompts
+ */
+export interface PromptDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  text: string;
+}
+
 export interface DiscussionConfig {
   model?: string;
   provider?: string;
@@ -99,13 +110,15 @@ export interface DiscussionConfig {
   maxRounds?: number;
   outputDir?: string;
   showAgentConfig?: boolean;
+  prompts?: PromptDefinition[];  // Reusable prompts
   agents?: Array<{
     id: string;
     role: string;
     name: string;
     emoji: string;
     color?: string;
-    systemPrompt: string;
+    systemPrompt?: string;   // Inline prompt (fallback)
+    promptId?: string;       // Reference to prompts section
     provider?: string;
     model?: string;
     apiKey?: string;
@@ -323,6 +336,44 @@ function loadDiscussionConfig(configPath?: string): DiscussionConfig | null {
 }
 
 /**
+ * Lookup a prompt by ID from the prompts section
+ * Returns the prompt text, or undefined if not found
+ */
+function lookupPrompt(prompts: PromptDefinition[] | undefined, promptId: string): string | undefined {
+  if (!prompts || !promptId) return undefined;
+  const prompt = prompts.find(p => p.id === promptId);
+  return prompt?.text;
+}
+
+/**
+ * Get the system prompt for an agent
+ * Priority: promptId lookup → inline systemPrompt → error
+ */
+function getAgentSystemPrompt(
+  agent: { promptId?: string; systemPrompt?: string; id: string; name: string },
+  prompts: PromptDefinition[] | undefined
+): string {
+  // Try promptId first
+  if (agent.promptId) {
+    const promptText = lookupPrompt(prompts, agent.promptId);
+    if (promptText) {
+      return promptText;
+    }
+    // Prompt not found - warn but continue
+    console.log(chalk.yellow(`  [Config] Warning: Prompt "${agent.promptId}" not found for agent "${agent.name}", using fallback`));
+  }
+  
+  // Fallback to inline systemPrompt
+  if (agent.systemPrompt) {
+    return agent.systemPrompt;
+  }
+  
+  // No prompt at all - use default
+  console.log(chalk.yellow(`  [Config] Warning: No prompt for agent "${agent.name}", using default`));
+  return `Du bist ein hilfreicher Assistent mit der Rolle "${agent.id}". Antworte auf Deutsch.`;
+}
+
+/**
  * Merge config agents with defaults and apply overrides
  */
 function getAgentsFromConfig(
@@ -332,21 +383,29 @@ function getAgentsFromConfig(
   let agents: DiscussAgentConfig[];
   
   if (config?.agents && config.agents.length > 0) {
+    // Get prompts for lookup
+    const prompts = config.prompts;
+    
     // Convert config agents to internal format
-    agents = config.agents.map((a) => ({
-      id: a.id,
-      name: a.name,
-      role: a.role as 'coder' | 'reviewer' | 'architect' | 'planner' | 'researcher',
-      emoji: a.emoji || ROLE_EMOJI_MAP[a.role] || '🤖',
-      color: COLOR_MAP[a.color || 'white'] || chalk.white,
-      systemPrompt: a.systemPrompt + '\n\n' + CONSENSUS_PROTOCOL_PROMPT,
-      provider: (a.provider || 'claude-cli') as 'claude-cli' | 'openai' | 'google' | 'ollama' | 'mock',
-      model: a.model || config.model || 'claude-sonnet-4-20250514',
-      api: (a.apiKey || a.baseUrl) ? {
-        apiKey: resolveEnvVar(a.apiKey),
-        baseUrl: a.baseUrl,
-      } : undefined,
-    }));
+    agents = config.agents.map((a) => {
+      // Resolve prompt (promptId → systemPrompt → default)
+      const resolvedPrompt = getAgentSystemPrompt(a, prompts);
+      
+      return {
+        id: a.id,
+        name: a.name,
+        role: a.role as 'coder' | 'reviewer' | 'architect' | 'planner' | 'researcher',
+        emoji: a.emoji || ROLE_EMOJI_MAP[a.role] || '🤖',
+        color: COLOR_MAP[a.color || 'white'] || chalk.white,
+        systemPrompt: resolvedPrompt + '\n\n' + CONSENSUS_PROTOCOL_PROMPT,
+        provider: (a.provider || 'claude-cli') as 'claude-cli' | 'openai' | 'google' | 'ollama' | 'mock',
+        model: a.model || config.model || 'claude-sonnet-4-20250514',
+        api: (a.apiKey || a.baseUrl) ? {
+          apiKey: resolveEnvVar(a.apiKey),
+          baseUrl: a.baseUrl,
+        } : undefined,
+      };
+    });
   } else {
     agents = [...DEFAULT_AGENTS];
   }
