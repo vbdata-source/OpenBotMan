@@ -241,9 +241,16 @@ async function ensureServerRunning(): Promise<boolean> {
 /**
  * Activate extension
  */
+// Build timestamp (set at compile time)
+const BUILD_TIME = new Date().toISOString();
+
 export function activate(context: vscode.ExtensionContext) {
   outputChannel = vscode.window.createOutputChannel('OpenBotMan');
-  outputChannel.appendLine('OpenBotMan extension starting...');
+  
+  // Show version info for debugging
+  const ext = vscode.extensions.getExtension('vbdata.openbotman-vscode');
+  const version = ext?.packageJSON?.version || 'unknown';
+  outputChannel.appendLine(`OpenBotMan extension v${version} (built: ${BUILD_TIME})`);
   
   // Status bar
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -266,7 +273,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('openbotman.refreshJobs', () => jobsProvider.refresh()),
   );
   
-  outputChannel.appendLine('OpenBotMan extension activated!');
+  outputChannel.appendLine('OpenBotMan extension ready!');
 }
 
 /**
