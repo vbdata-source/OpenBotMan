@@ -1358,77 +1358,65 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
     };
   }
 
-  // Info Header with Box Design
-  const boxWidth = 60;  // Inner content width
-  const line = '═'.repeat(boxWidth);
-  const thinLine = '─'.repeat(boxWidth);
+  // Info Header with Box Design - Simple fixed-width approach
+  const W = 60;  // Total inner width
+  const topBorder = chalk.cyan('╔' + '═'.repeat(W) + '╗');
+  const midBorder = chalk.cyan('╠' + '─'.repeat(W) + '╣');
+  const botBorder = chalk.cyan('╚' + '═'.repeat(W) + '╝');
+  const L = chalk.cyan('║');
+  const R = chalk.cyan('║');
   
-  // Helper: pad raw string THEN apply color
-  const makeRow = (rawContent: string, colorFn?: (s: string) => string): string => {
-    // Calculate padding based on raw content length (without colors)
-    // Account for emojis (count as 2 in terminal but 1-2 in JS)
-    let extraWidth = 0;
-    for (const char of rawContent) {
-      if (char.codePointAt(0)! > 0x1F00) extraWidth += 1;  // Emoji adjustment
-    }
-    const contentLen = rawContent.length + extraWidth;
-    const padding = Math.max(0, boxWidth - contentLen);
-    const paddedRaw = rawContent + ' '.repeat(padding);
-    const colored = colorFn ? colorFn(paddedRaw) : paddedRaw;
-    return chalk.cyan('║') + colored + chalk.cyan('║');
+  // Simple row builder - just pad to fixed width
+  const row = (text: string, pad: number = W) => {
+    // Truncate or pad to exact width
+    const truncated = text.length > pad ? text.substring(0, pad - 3) + '...' : text;
+    return L + truncated.padEnd(pad) + R;
   };
   
   console.log('\n');
-  console.log(chalk.cyan(`╔${line}╗`));
-  console.log(makeRow('  🤖 OpenBotMan Multi-Agent Discussion', chalk.bold.white));
-  console.log(chalk.cyan(`╠${thinLine}╣`));
+  console.log(topBorder);
+  console.log(row('  🤖 OpenBotMan Multi-Agent Discussion'));
+  console.log(midBorder);
   
   // Topic
-  const maxLen = boxWidth - 4;
-  const topicRaw = options.topic.length > maxLen - 8 
-    ? `  Thema: ${options.topic.substring(0, maxLen - 11)}...`
-    : `  Thema: ${options.topic}`;
-  console.log(makeRow(topicRaw));
+  console.log(row(`  Thema: ${options.topic}`));
   
-  // Team info (if selected)
+  // Team
   if (options.team && discussionConfig?.teams) {
     const selectedTeam = lookupTeam(discussionConfig.teams as TeamDefinition[], options.team);
     if (selectedTeam) {
-      const teamRaw = selectedTeam.name.length > maxLen - 8
-        ? `  Team: ${selectedTeam.name.substring(0, maxLen - 11)}...`
-        : `  Team: ${selectedTeam.name}`;
-      console.log(makeRow(teamRaw));
+      console.log(row(`  Team: ${selectedTeam.name}`));
     }
   }
   
   // Workspace
-  if (options.workspace || context.sourceFiles.length > 0) {
+  if (context.sourceFiles.length > 0) {
     const workspacePath = options.workspace || context.projectRoot;
     const filesInfo = `(${context.sourceFiles.length} files, ${Math.round(context.totalSize / 1024)}KB)`;
-    const maxPathLen = maxLen - 14 - filesInfo.length;
-    const shortPath = workspacePath.length > maxPathLen 
-      ? '...' + workspacePath.slice(-(maxPathLen - 3)) 
+    const maxPath = W - 16 - filesInfo.length;
+    const shortPath = workspacePath.length > maxPath 
+      ? '...' + workspacePath.slice(-maxPath + 3) 
       : workspacePath;
-    console.log(makeRow(`  Workspace: ${shortPath} ${filesInfo}`));
+    console.log(row(`  Workspace: ${shortPath} ${filesInfo}`));
   }
   
-  console.log(chalk.cyan(`╠${thinLine}╣`));
+  console.log(midBorder);
   
   // Agents
-  console.log(makeRow('  Agenten:'));
+  console.log(row('  Agenten:'));
   for (const agent of agents) {
     const providerLabel = getProviderLabel(agent.provider, agent.api?.baseUrl);
-    const nameCol = agent.name.substring(0, 22).padEnd(22);
-    const infoCol = `${agent.role} · ${providerLabel}`;
-    console.log(makeRow(`  ${agent.emoji} ${nameCol} ${infoCol}`));
+    // Fixed columns: emoji(2) + space + name(24) + info(rest)
+    const agentLine = `  ${agent.emoji} ${agent.name.padEnd(24)}${agent.role} · ${providerLabel}`;
+    console.log(row(agentLine));
   }
   
-  console.log(chalk.cyan(`╠${thinLine}╣`));
+  console.log(midBorder);
   
   // Settings
-  console.log(makeRow(`  Runden: ${maxRounds}  │  Timeout: ${timeout}s  │  Kontext: ${Math.round(context.totalSize / 1024)}KB`));
+  console.log(row(`  Runden: ${maxRounds}  │  Timeout: ${timeout}s  │  Kontext: ${Math.round(context.totalSize / 1024)}KB`));
   
-  console.log(chalk.cyan(`╚${line}╝`));
+  console.log(botBorder);
   console.log('');
 
   // Context status (already loaded above for header)
