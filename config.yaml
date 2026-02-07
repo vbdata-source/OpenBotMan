@@ -74,7 +74,7 @@ discussion:
       name: "Research Analyst"
       emoji: "🔬"
       provider: openai
-      model: local-model
+      model: qwen/qwen3-coder-30b
       baseUrl: http://localhost:1234/v1
       systemPrompt: |
         Du bist ein gründlicher Research-Analyst und Fact-Checker.
