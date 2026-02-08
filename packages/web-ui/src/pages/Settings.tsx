@@ -113,23 +113,6 @@ export default function Settings() {
     setTimeout(() => setApiKeySaved(false), 2000)
   }
 
-  // Save Agents
-  async function handleSaveAgents() {
-    setSaving(true)
-    try {
-      await fetchApi('/config/agents', {
-        method: 'PUT',
-        body: JSON.stringify({ agents }),
-      })
-      setHasChanges(false)
-      await loadData()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   // Delete Agent
   async function handleDeleteAgent(agentId: string) {
     if (!confirm(`Agent "${agentId}" wirklich löschen?`)) return
@@ -140,23 +123,6 @@ export default function Settings() {
       await loadData()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Löschen')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  // Save Teams
-  async function handleSaveTeams() {
-    setSaving(true)
-    try {
-      await fetchApi('/config/teams', {
-        method: 'PUT',
-        body: JSON.stringify({ teams }),
-      })
-      setHasChanges(false)
-      await loadData()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
     } finally {
       setSaving(false)
     }
@@ -194,18 +160,6 @@ export default function Settings() {
     } finally {
       setSaving(false)
     }
-  }
-
-  // Update agent in local state
-  function updateAgent(agentId: string, updates: Partial<Agent>) {
-    setAgents(prev => prev.map(a => a.id === agentId ? { ...a, ...updates } : a))
-    setHasChanges(true)
-  }
-
-  // Update team in local state
-  function updateTeam(teamId: string, updates: Partial<Team>) {
-    setTeams(prev => prev.map(t => t.id === teamId ? { ...t, ...updates } : t))
-    setHasChanges(true)
   }
 
   // Add new agent
