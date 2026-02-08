@@ -131,7 +131,7 @@ export default function NewDiscussion() {
         topic.trim(), 
         selectedTeam || undefined,
         workspace.trim() || undefined,
-        includePatterns.length > 0 ? includePatterns : undefined,
+        includePatterns.length > 0 ? includePatterns : ['**/*.ts', '**/*.tsx'],  // Default pattern!
         ignorePatterns.length > 0 ? ignorePatterns : undefined
       )
       navigate(`/jobs/${data.id}`)
