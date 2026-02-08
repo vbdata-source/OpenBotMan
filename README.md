@@ -116,7 +116,9 @@ Das Web-UI bietet eine graphische Oberfläche für Diskussionen:
 - **Neue Diskussion** - Team auswählen, Thema eingeben
 - **Job-Ansicht** - Live-Status, Agent-Fortschritt, Ergebnis
 
-![Dashboard Screenshot](docs/assets/dashboard.png)
+![Dashboard - Übersicht](docs/assets/dashboard.png)
+
+![Dashboard - Job Details](docs/assets/dashboard2.png)
 
 
 **Start:** `pnpm api` + `pnpm web` → http://localhost:3000
