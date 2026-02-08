@@ -4,7 +4,7 @@
  * Loads agent definitions from config.yaml with per-agent model/provider support.
  */
 
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import YAML from 'yaml';
 
@@ -372,8 +372,6 @@ export function getRawConfig(): { path: string; content: ConfigFile } | null {
 /**
  * Save config to file
  */
-import { writeFileSync } from 'fs';
-
 export function saveConfig(updates: {
   agents?: AgentConfig[];
   teams?: TeamConfig[];
