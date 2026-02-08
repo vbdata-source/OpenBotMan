@@ -30,7 +30,7 @@ import {
 import { createProvider } from '@openbotman/orchestrator';
 
 // Import config loader
-import { getConfig, getAgentsForDiscussion, getAgentsForTeam, getTeams, getDefaultTeam } from './config.js';
+import { getConfig, getAgentsForDiscussion, getAgentsForTeam, getTeams, getDefaultTeam, saveConfig, reloadConfig, getAgentsSafe } from './config.js';
 
 /**
  * Create and configure the Express server
@@ -351,6 +351,293 @@ export function createServer(config: ApiServerConfig): Express {
     jobStore.setError(jobId, 'Cancelled by user', job.durationMs || 0);
     console.log(`[${jobId}] Job cancelled by user`);
     res.json({ success: true, message: 'Job cancelled' });
+  });
+
+  // ============================================
+  // Config Management Endpoints
+  // ============================================
+
+  /**
+   * GET /api/v1/config/agents - List all agents (with masked API keys)
+   */
+  app.get('/api/v1/config/agents', (_req: Request, res: Response) => {
+    const config = getConfig();
+    const agents = getAgentsSafe(config);
+    res.json({ agents });
+  });
+
+  /**
+   * PUT /api/v1/config/agents - Update all agents
+   */
+  app.put('/api/v1/config/agents', (req: Request, res: Response) => {
+    const { agents } = req.body;
+    
+    if (!Array.isArray(agents)) {
+      res.status(400).json({ error: 'agents must be an array' });
+      return;
+    }
+    
+    const result = saveConfig({ agents });
+    if (result.success) {
+      res.json({ success: true, message: 'Agents saved' });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  });
+
+  /**
+   * POST /api/v1/config/agents - Add a new agent
+   */
+  app.post('/api/v1/config/agents', (req: Request, res: Response) => {
+    const newAgent = req.body;
+    
+    if (!newAgent.id || !newAgent.name) {
+      res.status(400).json({ error: 'id and name are required' });
+      return;
+    }
+    
+    const config = getConfig();
+    const existingIds = config.agents.map(a => a.id);
+    
+    if (existingIds.includes(newAgent.id)) {
+      res.status(400).json({ error: `Agent with id '${newAgent.id}' already exists` });
+      return;
+    }
+    
+    const agents = [...config.agents, {
+      id: newAgent.id,
+      name: newAgent.name,
+      role: newAgent.role || 'Expert',
+      provider: newAgent.provider || 'claude-cli',
+      model: newAgent.model || 'claude-sonnet-4-20250514',
+      systemPrompt: newAgent.systemPrompt || 'Du bist ein hilfreicher Experte.',
+      emoji: newAgent.emoji,
+      apiKey: newAgent.apiKey,
+      baseUrl: newAgent.baseUrl,
+      maxTokens: newAgent.maxTokens,
+    }];
+    
+    const result = saveConfig({ agents });
+    if (result.success) {
+      reloadConfig();
+      res.json({ success: true, message: 'Agent added' });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  });
+
+  /**
+   * PUT /api/v1/config/agents/:agentId - Update a specific agent
+   */
+  app.put('/api/v1/config/agents/:agentId', (req: Request, res: Response) => {
+    const { agentId } = req.params;
+    const updates = req.body;
+    
+    const config = getConfig();
+    const agentIndex = config.agents.findIndex(a => a.id === agentId);
+    
+    if (agentIndex === -1) {
+      res.status(404).json({ error: `Agent '${agentId}' not found` });
+      return;
+    }
+    
+    const agents = [...config.agents];
+    agents[agentIndex] = { ...agents[agentIndex], ...updates, id: agentId }; // Can't change id
+    
+    const result = saveConfig({ agents });
+    if (result.success) {
+      reloadConfig();
+      res.json({ success: true, message: 'Agent updated' });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  });
+
+  /**
+   * DELETE /api/v1/config/agents/:agentId - Delete an agent
+   */
+  app.delete('/api/v1/config/agents/:agentId', (req: Request, res: Response) => {
+    const { agentId } = req.params;
+    
+    const config = getConfig();
+    const agents = config.agents.filter(a => a.id !== agentId);
+    
+    if (agents.length === config.agents.length) {
+      res.status(404).json({ error: `Agent '${agentId}' not found` });
+      return;
+    }
+    
+    // Also remove from teams
+    const teams = config.teams.map(t => ({
+      ...t,
+      agents: t.agents.filter(id => id !== agentId)
+    }));
+    
+    const result = saveConfig({ agents, teams });
+    if (result.success) {
+      reloadConfig();
+      res.json({ success: true, message: 'Agent deleted' });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  });
+
+  /**
+   * GET /api/v1/config/teams - List all teams
+   */
+  app.get('/api/v1/config/teams', (_req: Request, res: Response) => {
+    const config = getConfig();
+    res.json({ teams: config.teams });
+  });
+
+  /**
+   * PUT /api/v1/config/teams - Update all teams
+   */
+  app.put('/api/v1/config/teams', (req: Request, res: Response) => {
+    const { teams } = req.body;
+    
+    if (!Array.isArray(teams)) {
+      res.status(400).json({ error: 'teams must be an array' });
+      return;
+    }
+    
+    const result = saveConfig({ teams });
+    if (result.success) {
+      reloadConfig();
+      res.json({ success: true, message: 'Teams saved' });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  });
+
+  /**
+   * POST /api/v1/config/teams - Add a new team
+   */
+  app.post('/api/v1/config/teams', (req: Request, res: Response) => {
+    const newTeam = req.body;
+    
+    if (!newTeam.id || !newTeam.name) {
+      res.status(400).json({ error: 'id and name are required' });
+      return;
+    }
+    
+    const config = getConfig();
+    const existingIds = config.teams.map(t => t.id);
+    
+    if (existingIds.includes(newTeam.id)) {
+      res.status(400).json({ error: `Team with id '${newTeam.id}' already exists` });
+      return;
+    }
+    
+    const teams = [...config.teams, {
+      id: newTeam.id,
+      name: newTeam.name,
+      description: newTeam.description,
+      agents: newTeam.agents || [],
+      default: newTeam.default || false,
+    }];
+    
+    const result = saveConfig({ teams });
+    if (result.success) {
+      reloadConfig();
+      res.json({ success: true, message: 'Team added' });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  });
+
+  /**
+   * PUT /api/v1/config/teams/:teamId - Update a specific team
+   */
+  app.put('/api/v1/config/teams/:teamId', (req: Request, res: Response) => {
+    const { teamId } = req.params;
+    const updates = req.body;
+    
+    const config = getConfig();
+    const teamIndex = config.teams.findIndex(t => t.id === teamId);
+    
+    if (teamIndex === -1) {
+      res.status(404).json({ error: `Team '${teamId}' not found` });
+      return;
+    }
+    
+    const teams = [...config.teams];
+    teams[teamIndex] = { ...teams[teamIndex], ...updates, id: teamId }; // Can't change id
+    
+    const result = saveConfig({ teams });
+    if (result.success) {
+      reloadConfig();
+      res.json({ success: true, message: 'Team updated' });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  });
+
+  /**
+   * DELETE /api/v1/config/teams/:teamId - Delete a team
+   */
+  app.delete('/api/v1/config/teams/:teamId', (req: Request, res: Response) => {
+    const { teamId } = req.params;
+    
+    const config = getConfig();
+    const teams = config.teams.filter(t => t.id !== teamId);
+    
+    if (teams.length === config.teams.length) {
+      res.status(404).json({ error: `Team '${teamId}' not found` });
+      return;
+    }
+    
+    const result = saveConfig({ teams });
+    if (result.success) {
+      reloadConfig();
+      res.json({ success: true, message: 'Team deleted' });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  });
+
+  /**
+   * GET /api/v1/config/settings - Get global settings
+   */
+  app.get('/api/v1/config/settings', (_req: Request, res: Response) => {
+    const config = getConfig();
+    res.json({
+      maxRounds: config.maxRounds,
+      timeout: config.timeout,
+      maxContext: config.maxContext,
+      model: config.model,
+      outputDir: config.outputDir,
+    });
+  });
+
+  /**
+   * PUT /api/v1/config/settings - Update global settings
+   */
+  app.put('/api/v1/config/settings', (req: Request, res: Response) => {
+    const settings = req.body;
+    
+    const result = saveConfig({ settings });
+    if (result.success) {
+      reloadConfig();
+      res.json({ success: true, message: 'Settings saved' });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  });
+
+  /**
+   * GET /api/v1/config/providers - List available providers
+   */
+  app.get('/api/v1/config/providers', (_req: Request, res: Response) => {
+    res.json({
+      providers: [
+        { id: 'claude-cli', name: 'Claude CLI (Pro-Abo)', requiresKey: false },
+        { id: 'claude-api', name: 'Claude API', requiresKey: true, keyEnv: 'ANTHROPIC_API_KEY' },
+        { id: 'google', name: 'Google Gemini', requiresKey: true, keyEnv: 'GOOGLE_API_KEY' },
+        { id: 'openai', name: 'OpenAI / Compatible', requiresKey: true, keyEnv: 'OPENAI_API_KEY', supportsBaseUrl: true },
+        { id: 'ollama', name: 'Ollama (Lokal)', requiresKey: false },
+      ]
+    });
   });
   
   // 404 handler

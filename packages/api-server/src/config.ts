@@ -285,6 +285,7 @@ export function getTeamForWorkflow(config: DiscussionConfig, workflowId: string)
 
 // Singleton config instance
 let cachedConfig: DiscussionConfig | null = null;
+let configFilePath: string | null = null;
 
 /**
  * Get config (cached)
@@ -302,4 +303,141 @@ export function getConfig(): DiscussionConfig {
 export function reloadConfig(): DiscussionConfig {
   cachedConfig = null;
   return getConfig();
+}
+
+/**
+ * Find config file path
+ */
+function findConfigPath(): string | null {
+  if (configFilePath) return configFilePath;
+  
+  for (const path of CONFIG_SEARCH_PATHS) {
+    if (path && existsSync(path)) {
+      configFilePath = path;
+      return path;
+    }
+  }
+  return null;
+}
+
+/**
+ * Get raw config file content (for editing)
+ */
+export function getRawConfig(): { path: string; content: ConfigFile } | null {
+  const path = findConfigPath();
+  if (!path) return null;
+  
+  try {
+    const content = readFileSync(path, 'utf-8');
+    return { path, content: YAML.parse(content) as ConfigFile };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save config to file
+ */
+import { writeFileSync } from 'fs';
+
+export function saveConfig(updates: {
+  agents?: AgentConfig[];
+  teams?: TeamConfig[];
+  settings?: { maxRounds?: number; timeout?: number; maxContext?: number };
+}): { success: boolean; error?: string } {
+  const path = findConfigPath();
+  if (!path) {
+    return { success: false, error: 'Config file not found' };
+  }
+  
+  try {
+    // Load current config
+    const content = readFileSync(path, 'utf-8');
+    const config = YAML.parse(content) as ConfigFile;
+    
+    // Ensure discussion section exists
+    if (!config.discussion) {
+      config.discussion = {};
+    }
+    
+    // Update agents
+    if (updates.agents) {
+      config.discussion.agents = updates.agents.map(a => ({
+        id: a.id,
+        name: a.name,
+        role: a.role,
+        provider: a.provider,
+        model: a.model,
+        systemPrompt: a.systemPrompt,
+        emoji: a.emoji,
+        color: a.color,
+        apiKey: a.apiKey,
+        baseUrl: a.baseUrl,
+        rateLimitDelayMs: a.rateLimitDelayMs,
+        maxTokens: a.maxTokens,
+        temperature: a.temperature,
+      }));
+    }
+    
+    // Update teams
+    if (updates.teams) {
+      config.discussion.teams = updates.teams.map(t => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        agents: t.agents,
+        default: t.default,
+        workflows: t.workflows,
+      }));
+    }
+    
+    // Update settings
+    if (updates.settings) {
+      if (updates.settings.maxRounds !== undefined) {
+        config.discussion.maxRounds = updates.settings.maxRounds;
+      }
+      if (updates.settings.timeout !== undefined) {
+        config.discussion.timeout = updates.settings.timeout;
+      }
+      if (updates.settings.maxContext !== undefined) {
+        config.discussion.maxContext = updates.settings.maxContext;
+      }
+    }
+    
+    // Write back to file
+    const yamlContent = YAML.stringify(config, { indent: 2 });
+    writeFileSync(path, yamlContent, 'utf-8');
+    
+    // Clear cache so next read gets fresh data
+    cachedConfig = null;
+    
+    console.log(`[Config] Saved to: ${path}`);
+    return { success: true };
+    
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`[Config] Save failed: ${message}`);
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Mask API key for display (show only last 4 chars)
+ */
+export function maskApiKey(key: string | undefined): string | undefined {
+  if (!key) return undefined;
+  if (key.startsWith('${')) return key; // Env var reference, show as-is
+  if (key.length <= 8) return '****';
+  return key.slice(0, 4) + '...' + key.slice(-4);
+}
+
+/**
+ * Get agents with masked API keys (for frontend)
+ */
+export function getAgentsSafe(config: DiscussionConfig): Array<AgentConfig & { apiKeyMasked?: string }> {
+  return config.agents.map(a => ({
+    ...a,
+    apiKey: undefined, // Don't send actual key
+    apiKeyMasked: maskApiKey(a.apiKey),
+  }));
 }
