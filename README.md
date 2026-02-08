@@ -52,8 +52,9 @@ OpenBotMan koordiniert 4 Experten:
 - Node.js 20+ 
 - pnpm 8+
 - Mindestens ein LLM Provider:
-  - **Kostenlos:** Ollama (lokal) oder LM Studio
-  - **Cloud:** Claude Pro, Google AI, OpenAI
+  - **Kostenlos/Lokal:** Ollama oder LM Studio
+  - **Claude Pro-Abo:** Unlimited via Claude CLI (empfohlen!)
+  - **Cloud APIs:** Claude API, Google AI, OpenAI (pay-per-token)
 
 ### Installation
 
@@ -193,14 +194,16 @@ OPENBOTMAN_API_KEYS=local-dev-key
 
 ## 🤖 Unterstützte Provider
 
-| Provider | Typ | Konfiguration |
-|----------|-----|---------------|
-| `claude-cli` | Cloud (Pro-Abo) | Claude CLI installieren |
-| `claude-api` | Cloud | `ANTHROPIC_API_KEY` |
-| `google` | Cloud | `GOOGLE_API_KEY` |
-| `openai` | Cloud | `OPENAI_API_KEY` |
-| `ollama` | Lokal (kostenlos) | Ollama installieren |
-| `openai` + `baseUrl` | Lokal | LM Studio, vLLM, etc. |
+| Provider | Typ | Kosten | Konfiguration |
+|----------|-----|--------|---------------|
+| `claude-cli` | Claude Pro-Abo | ~$20/Monat, unlimited | [Claude CLI](https://docs.anthropic.com/en/docs/claude-cli) installieren |
+| `claude-api` | Claude API | Pay-per-token | `ANTHROPIC_API_KEY` |
+| `google` | Gemini API | Pay-per-token | `GOOGLE_API_KEY` |
+| `openai` | OpenAI API | Pay-per-token | `OPENAI_API_KEY` |
+| `ollama` | Lokal | Kostenlos | [Ollama](https://ollama.ai) installieren |
+| `openai` + `baseUrl` | Lokal | Kostenlos | LM Studio, vLLM, etc. |
+
+**Empfehlung:** Claude Pro-Abo (`claude-cli`) für unbegrenzte Nutzung, kombiniert mit lokalen Modellen (Ollama) für schnelle/günstige Agents.
 
 ---
 
