@@ -50,10 +50,23 @@ export async function fetchJob(jobId: string) {
   return res.json()
 }
 
-export async function startDiscussion(topic: string, team?: string) {
+export async function startDiscussion(
+  topic: string, 
+  team?: string,
+  workspace?: string,
+  include?: string[],
+  ignore?: string[]
+) {
+  const body: Record<string, unknown> = { topic, async: true }
+  
+  if (team) body.team = team
+  if (workspace) body.workspace = workspace
+  if (include && include.length > 0) body.include = include
+  if (ignore && ignore.length > 0) body.ignore = ignore
+  
   const res = await apiFetch('/api/v1/discuss', {
     method: 'POST',
-    body: JSON.stringify({ topic, team, async: true }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     const error = await res.json()

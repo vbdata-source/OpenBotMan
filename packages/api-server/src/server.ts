@@ -12,7 +12,7 @@ import { v4 as uuid } from 'uuid';
 import { readFileSync, existsSync } from 'fs';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { DiscussRequestSchema, type DiscussResponse, type HealthResponse, type ApiServerConfig } from './types.js';
-import { loadWorkspaceContext, formatWorkspaceContext } from './workspace.js';
+import { loadWorkspaceContext, formatWorkspaceContext, getWorkspacePreview, validateWorkspacePath } from './workspace.js';
 import { jobStore } from './jobs.js';
 import {
   extractPosition,
@@ -351,6 +351,57 @@ export function createServer(config: ApiServerConfig): Express {
     jobStore.setError(jobId, 'Cancelled by user', job.durationMs || 0);
     console.log(`[${jobId}] Job cancelled by user`);
     res.json({ success: true, message: 'Job cancelled' });
+  });
+
+  // ============================================
+  // Workspace Endpoints
+  // ============================================
+
+  /**
+   * POST /api/v1/workspace/validate - Validate workspace path
+   */
+  app.post('/api/v1/workspace/validate', (req: Request, res: Response) => {
+    const { path: workspacePath } = req.body as { path?: string };
+    
+    if (!workspacePath) {
+      res.status(400).json({ valid: false, error: 'Pfad ist erforderlich' });
+      return;
+    }
+    
+    const result = validateWorkspacePath(workspacePath);
+    res.json(result);
+  });
+
+  /**
+   * POST /api/v1/workspace/preview - Preview files that would be loaded
+   */
+  app.post('/api/v1/workspace/preview', async (req: Request, res: Response) => {
+    const { 
+      path: workspacePath, 
+      include = ['**/*.ts', '**/*.tsx'], 
+      ignore = [] 
+    } = req.body as { 
+      path?: string; 
+      include?: string[]; 
+      ignore?: string[] 
+    };
+    
+    if (!workspacePath) {
+      res.status(400).json({ files: [], error: 'Pfad ist erforderlich' });
+      return;
+    }
+    
+    const result = await getWorkspacePreview(workspacePath, include, ignore);
+    
+    // Add total stats
+    const totalSize = result.files.reduce((sum, f) => sum + f.size, 0);
+    
+    res.json({
+      ...result,
+      totalFiles: result.files.length,
+      totalSize,
+      totalSizeKB: Math.round(totalSize / 1024),
+    });
   });
 
   // ============================================
@@ -832,6 +883,7 @@ async function runDiscussion(
     model?: string;
     workspace?: string;
     include?: string[];
+    ignore?: string[];
     maxContext?: number;
     promptFile?: string;
   },
@@ -853,12 +905,15 @@ async function runDiscussion(
   
   // Load workspace context if specified
   let workspaceContext = '';
+  let contextSizeKB = 0;
   if (request.workspace && request.include && request.include.length > 0) {
     try {
       const maxBytes = (request.maxContext ?? 100) * 1024;
-      const context = await loadWorkspaceContext(request.workspace, request.include, maxBytes);
+      const customIgnore = request.ignore ?? [];
+      const context = await loadWorkspaceContext(request.workspace, request.include, maxBytes, customIgnore);
       workspaceContext = formatWorkspaceContext(context);
-      console.log(`[${requestId}] Loaded workspace: ${context.fileCount} files, ${Math.round(context.totalSize / 1024)}KB`);
+      contextSizeKB = Math.round(context.totalSize / 1024);
+      console.log(`[${requestId}] Loaded workspace: ${context.fileCount} files, ${contextSizeKB}KB`);
     } catch (error) {
       console.warn(`[${requestId}] Could not load workspace: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

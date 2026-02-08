@@ -32,6 +32,9 @@ export const DiscussRequestSchema = z.object({
   /** Include patterns - glob patterns for files to load from workspace */
   include: z.array(z.string()).optional(),
   
+  /** Ignore patterns - additional glob patterns to exclude from workspace */
+  ignore: z.array(z.string()).optional(),
+  
   /** Max context size in KB - defaults from config.yaml */
   maxContext: z.number().int().min(1).max(500).optional(),
   
