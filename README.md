@@ -124,19 +124,47 @@ Das Web-UI bietet eine graphische Oberfläche für Diskussionen:
 
 ## 🔧 VSCode Extension
 
-Diskussionen direkt aus der IDE:
+Volle Integration direkt in der IDE!
 
-- `Ctrl+Shift+O` - Neue Diskussion starten
-- `Ctrl+Shift+R` - Code-Review für aktuelle Datei
-- Team-Auswahl im Quick-Pick
-- Ergebnis als Markdown gespeichert
+### Befehle & Shortcuts
 
-**Installation:**
+| Shortcut | Befehl | Beschreibung |
+|----------|--------|--------------|
+| `Ctrl+Shift+O` | Experten fragen | Neue Diskussion mit Team-Auswahl |
+| `Ctrl+Shift+R` | Code Review | Review der aktuellen Datei |
+| `Ctrl+Shift+Alt+O` | Projekt analysieren | Ganzes Projekt analysieren |
+| - | Status prüfen | API-Server Verbindung testen |
+| - | Server starten | API-Server aus VSCode starten |
+
+### Features
+
+- **Team-Auswahl** - Quick-Pick mit allen konfigurierten Teams
+- **Live-Status** - Agent-Fortschritt in Echtzeit sehen
+- **Auto-Save** - Ergebnisse als Markdown im Projekt speichern
+- **Activity Bar** - Sidebar mit aktiven Jobs
+- **Verbose-Levels** - 0=Nur Ergebnis, 1=Live-Updates, 2=Thinking
+
+### Einstellungen
+
+| Setting | Default | Beschreibung |
+|---------|---------|--------------|
+| `openbotman.apiUrl` | `http://localhost:8080` | API Server URL |
+| `openbotman.apiKey` | - | API Key |
+| `openbotman.timeoutMinutes` | 60 | Job-Timeout |
+| `openbotman.verboseLevel` | 1 | 0/1/2 (Details oben) |
+| `openbotman.autoSaveResults` | true | Auto-Speichern |
+| `openbotman.discussionsPath` | `discussions` | Speicher-Ordner |
+
+### Installation
+
 ```bash
-cd packages/ide-vscode
+cd C:\Sources\OpenBotMan
+pnpm build
+cd packages\ide-vscode
 pnpm run compile && npx vsce package --no-dependencies
-# → .vsix in VSCode installieren
 ```
+
+Dann in VSCode: `Ctrl+Shift+P` → "Install from VSIX" → `.vsix` auswählen
 
 ---
 
