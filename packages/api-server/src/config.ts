@@ -509,9 +509,9 @@ export function getPromptsFull(): PromptConfigFull[] {
     const content = readFileSync(path, 'utf-8');
     const config = YAML.parse(content) as ConfigFile;
     
-    return (config.discussion?.prompts || []).map(p => ({
+    return (config.discussion?.prompts || []).map((p): PromptConfigFull => ({
       id: p.id,
-      name: p.name || p.id,
+      name: p.name ?? p.id,
       description: p.description,
       category: p.category,
       text: p.text,
