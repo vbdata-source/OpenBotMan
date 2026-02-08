@@ -4,16 +4,31 @@
 
 ---
 
-## 🎯 Kurzfristig (Geplant)
+## ✅ Bereits Implementiert
 
-### Settings Web-UI
+- [x] Web-UI Dashboard (Jobs, Neue Diskussion, Job-Details)
+- [x] VSCode Extension (Shortcuts, Live-Status, Auto-Save)
+- [x] Multi-Provider Support (Claude, Gemini, Ollama, LM Studio)
+- [x] Agent Teams
+- [x] Job Persistenz (JSON)
+- [x] Parallele Diskussionen
+
+---
+
+## 🎯 Kurzfristig (Nächste Schritte)
+
+### Settings-Seite in Web-UI
 - [ ] Graphischer Agent-Editor
 - [ ] Team-Editor
 - [ ] Config speichern → config.yaml
 
 ### WebSockets
 - [ ] Real-time Updates statt Polling
-- [ ] Live Agent-Status
+- [ ] Live Agent-Status ohne Refresh
+
+---
+
+## 🔮 Mittelfristig (Geplant)
 
 ### Web-Recherche
 - [ ] Pre-Discussion Search (Brave/Tavily API)

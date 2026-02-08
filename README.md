@@ -289,13 +289,19 @@ pnpm --filter @openbotman/api-server dev
 
 ## 🗺️ Roadmap
 
-Siehe [docs/FUTURE-IDEAS.md](docs/FUTURE-IDEAS.md) für geplante Features:
+Siehe [docs/FUTURE-IDEAS.md](docs/FUTURE-IDEAS.md) für alle geplanten Features.
 
-- [ ] Settings Web-UI (graphischer Config-Editor)
-- [ ] WebSockets für Real-time Updates
+**Nächste Schritte:**
+
+- [ ] Settings-Seite in Web-UI (graphischer Config-Editor)
+- [ ] WebSockets für Real-time Updates (aktuell: Polling)
+- [ ] Globales `openbotman` CLI Command
+
+**Später:**
+
 - [ ] Web-Recherche Integration
-- [ ] Globales `openbotman` CLI
 - [ ] Docker Deployment
+- [ ] Knowledge Base
 
 ---
 
