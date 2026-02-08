@@ -171,15 +171,18 @@ export function evaluateRound(
  * Build prompt for first round (proposal)
  */
 export function buildProposerPrompt(topic: string, context: string): string {
+  const hasCode = context && context.includes('```');
+  
   return `Du bist der erste Agent in einer Multi-Agent-Diskussion.
 
 ## Deine Aufgabe
 Analysiere das folgende Thema und erstelle einen strukturierten Vorschlag.
+${hasCode ? '\n**WICHTIG:** Dir wurde Quellcode zur Analyse bereitgestellt. Beziehe dich konkret auf den Code, nenne Dateinamen und Zeilennummern wo relevant!' : ''}
 
 ## Thema
 ${topic}
 
-${context ? `## Kontext\n${context}` : ''}
+${context ? `## Code-Kontext (analysiere diesen Code!)\n${context}` : ''}
 
 ## Format
 Beende deine Analyse mit einer klaren Position:
@@ -206,12 +209,15 @@ export function buildResponderPrompt(
     .map(c => `### ${c.agentName} (${c.role}) - [${c.position}]\n${c.content}`)
     .join('\n\n---\n\n');
   
+  const hasCode = context && context.includes('```');
+  
   return `Du bist ein ${agentRole} in Runde ${round} einer Multi-Agent-Diskussion.
+${hasCode ? '\n**WICHTIG:** Dir wurde Quellcode zur Analyse bereitgestellt. Beziehe dich konkret auf den Code!' : ''}
 
 ## Thema
 ${topic}
 
-${context ? `## Kontext\n${context}` : ''}
+${context ? `## Code-Kontext\n${context}` : ''}
 
 ## Bisherige Beiträge
 ${previousResponses}
