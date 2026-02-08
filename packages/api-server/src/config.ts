@@ -395,30 +395,22 @@ export function saveConfig(updates: {
     // Update agents
     if (updates.agents) {
       config.discussion.agents = updates.agents.map(a => {
-        const agent: Record<string, unknown> = {
+        const agent = {
           id: a.id,
           name: a.name,
           role: a.role,
           provider: a.provider,
           model: a.model,
           emoji: a.emoji,
+          promptId: a.promptId,
+          systemPrompt: a.systemPrompt,
+          color: a.color,
+          apiKey: a.apiKey,
+          baseUrl: a.baseUrl,
+          rateLimitDelayMs: a.rateLimitDelayMs,
+          maxTokens: a.maxTokens,
+          temperature: a.temperature,
         };
-        
-        // Use promptId OR systemPrompt, not both
-        if (a.promptId) {
-          agent.promptId = a.promptId;
-        } else if (a.systemPrompt) {
-          agent.systemPrompt = a.systemPrompt;
-        }
-        
-        // Optional fields
-        if (a.color) agent.color = a.color;
-        if (a.apiKey) agent.apiKey = a.apiKey;
-        if (a.baseUrl) agent.baseUrl = a.baseUrl;
-        if (a.rateLimitDelayMs) agent.rateLimitDelayMs = a.rateLimitDelayMs;
-        if (a.maxTokens) agent.maxTokens = a.maxTokens;
-        if (a.temperature) agent.temperature = a.temperature;
-        
         return agent;
       });
     }
