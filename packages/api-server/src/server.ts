@@ -30,7 +30,7 @@ import {
 import { createProvider } from '@openbotman/orchestrator';
 
 // Import config loader
-import { getConfig, getAgentsForDiscussion, getAgentsForTeam, getTeams, getDefaultTeam, saveConfig, reloadConfig, getAgentsSafe, getPrompts, getPromptsFull, savePrompts, type PromptConfig } from './config.js';
+import { getConfig, getAgentsForDiscussion, getAgentsForTeam, getTeams, getDefaultTeam, saveConfig, reloadConfig, getAgentsSafe, getPrompts, getPromptsFull, savePrompts, type PromptConfigFull } from './config.js';
 
 /**
  * Create and configure the Express server
@@ -660,7 +660,7 @@ export function createServer(config: ApiServerConfig): Express {
    * POST /api/v1/config/prompts - Add a new prompt
    */
   app.post('/api/v1/config/prompts', (req: Request, res: Response) => {
-    const newPrompt = req.body as PromptConfig;
+    const newPrompt = req.body as PromptConfigFull;
     
     if (!newPrompt.id || !newPrompt.text) {
       res.status(400).json({ error: 'Missing required fields: id, text' });
@@ -696,7 +696,7 @@ export function createServer(config: ApiServerConfig): Express {
    */
   app.put('/api/v1/config/prompts/:promptId', (req: Request, res: Response) => {
     const { promptId } = req.params;
-    const updates = req.body as Partial<PromptConfig>;
+    const updates = req.body as Partial<PromptConfigFull>;
     
     const prompts = getPromptsFull();
     const index = prompts.findIndex(p => p.id === promptId);

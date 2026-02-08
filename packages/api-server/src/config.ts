@@ -466,9 +466,9 @@ export function saveConfig(updates: {
 }
 
 /**
- * Full prompt config (for editing)
+ * Full prompt config (for editing) - exported for API
  */
-export interface PromptConfig {
+export interface PromptConfigFull {
   id: string;
   name: string;
   description?: string;
@@ -501,7 +501,7 @@ export function getPrompts(): Array<{ id: string; name: string; description?: st
 /**
  * Get all prompts with full text (for editing)
  */
-export function getPromptsFull(): PromptConfig[] {
+export function getPromptsFull(): PromptConfigFull[] {
   const path = findConfigPath();
   if (!path) return [];
   
@@ -524,7 +524,7 @@ export function getPromptsFull(): PromptConfig[] {
 /**
  * Save prompts to config file
  */
-export function savePrompts(prompts: PromptConfig[]): { success: boolean; error?: string } {
+export function savePrompts(prompts: PromptConfigFull[]): { success: boolean; error?: string } {
   const path = findConfigPath();
   if (!path) {
     return { success: false, error: 'Config file not found' };
