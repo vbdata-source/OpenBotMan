@@ -177,7 +177,15 @@ export function buildProposerPrompt(topic: string, context: string): string {
 
 ## Deine Aufgabe
 Analysiere das folgende Thema und erstelle einen strukturierten Vorschlag.
-${hasCode ? '\n**WICHTIG:** Dir wurde Quellcode zur Analyse bereitgestellt. Beziehe dich konkret auf den Code, nenne Dateinamen und Zeilennummern wo relevant!' : ''}
+${hasCode ? `
+**WICHTIG - CODE-ANALYSE PFLICHT:**
+Dir wurde Quellcode zur Analyse bereitgestellt. Du MUSST:
+1. Konkrete Dateinamen nennen (z.B. "In config.ts...")
+2. Spezifische Funktionen/Variablen referenzieren
+3. Code-Stellen zitieren wenn du Probleme findest
+4. Verbesserungen mit konkreten Code-Beispielen zeigen
+
+Beginne deine Analyse mit: "## Code-Analyse" und liste die analysierten Dateien auf!` : ''}
 
 ## Thema
 ${topic}
@@ -212,7 +220,9 @@ export function buildResponderPrompt(
   const hasCode = context && context.includes('```');
   
   return `Du bist ein ${agentRole} in Runde ${round} einer Multi-Agent-Diskussion.
-${hasCode ? '\n**WICHTIG:** Dir wurde Quellcode zur Analyse bereitgestellt. Beziehe dich konkret auf den Code!' : ''}
+${hasCode ? `
+**WICHTIG - CODE-ANALYSE:**
+Dir wurde Quellcode bereitgestellt. Referenziere konkrete Dateien, Funktionen und Code-Stellen in deiner Analyse!` : ''}
 
 ## Thema
 ${topic}
