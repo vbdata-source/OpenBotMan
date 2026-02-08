@@ -727,12 +727,15 @@ export default function Settings() {
                 <label className="text-sm font-medium">Prompt Template</label>
                 <select
                   value={editingAgent.promptId || ''}
-                  onChange={(e) => setEditingAgent({ 
-                    ...editingAgent, 
-                    promptId: e.target.value || undefined,
-                    // Clear systemPrompt if using promptId
-                    systemPrompt: e.target.value ? '' : editingAgent.systemPrompt
-                  })}
+                  onChange={(e) => {
+                    const selectedPrompt = prompts.find(p => p.id === e.target.value)
+                    setEditingAgent({ 
+                      ...editingAgent, 
+                      promptId: e.target.value || undefined,
+                      // Show selected prompt's text live
+                      systemPrompt: selectedPrompt?.text || editingAgent.systemPrompt
+                    })
+                  }}
                   className="w-full mt-1 px-3 py-2 bg-background border border-input rounded-md"
                 >
                   <option value="">-- Eigener Prompt --</option>
