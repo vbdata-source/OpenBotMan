@@ -466,7 +466,18 @@ export function saveConfig(updates: {
 }
 
 /**
- * Get available prompts for dropdown
+ * Full prompt config (for editing)
+ */
+export interface PromptConfig {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  text: string;
+}
+
+/**
+ * Get available prompts for dropdown (without text)
  */
 export function getPrompts(): Array<{ id: string; name: string; description?: string; category?: string }> {
   const path = findConfigPath();
@@ -484,6 +495,67 @@ export function getPrompts(): Array<{ id: string; name: string; description?: st
     }));
   } catch {
     return [];
+  }
+}
+
+/**
+ * Get all prompts with full text (for editing)
+ */
+export function getPromptsFull(): PromptConfig[] {
+  const path = findConfigPath();
+  if (!path) return [];
+  
+  try {
+    const content = readFileSync(path, 'utf-8');
+    const config = YAML.parse(content) as ConfigFile;
+    
+    return (config.discussion?.prompts || []).map(p => ({
+      id: p.id,
+      name: p.name || p.id,
+      description: p.description,
+      category: p.category,
+      text: p.text,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Save prompts to config file
+ */
+export function savePrompts(prompts: PromptConfig[]): { success: boolean; error?: string } {
+  const path = findConfigPath();
+  if (!path) {
+    return { success: false, error: 'Config file not found' };
+  }
+  
+  try {
+    const content = readFileSync(path, 'utf-8');
+    const config = YAML.parse(content) as ConfigFile;
+    
+    if (!config.discussion) {
+      config.discussion = {};
+    }
+    
+    config.discussion.prompts = prompts.map(p => ({
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      category: p.category,
+      text: p.text,
+    }));
+    
+    const yamlContent = YAML.stringify(config, { indent: 2 });
+    writeFileSync(path, yamlContent, 'utf-8');
+    
+    cachedConfig = null;
+    console.log(`[Config] Saved ${prompts.length} prompts to: ${path}`);
+    return { success: true };
+    
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return { success: false, error: message };
   }
 }
 

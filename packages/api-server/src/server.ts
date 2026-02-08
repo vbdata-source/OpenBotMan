@@ -30,7 +30,7 @@ import {
 import { createProvider } from '@openbotman/orchestrator';
 
 // Import config loader
-import { getConfig, getAgentsForDiscussion, getAgentsForTeam, getTeams, getDefaultTeam, saveConfig, reloadConfig, getAgentsSafe, getPrompts } from './config.js';
+import { getConfig, getAgentsForDiscussion, getAgentsForTeam, getTeams, getDefaultTeam, saveConfig, reloadConfig, getAgentsSafe, getPrompts, getPromptsFull, savePrompts, type PromptConfig } from './config.js';
 
 /**
  * Create and configure the Express server
@@ -646,6 +646,115 @@ export function createServer(config: ApiServerConfig): Express {
   app.get('/api/v1/config/prompts', (_req: Request, res: Response) => {
     const prompts = getPrompts();
     res.json({ prompts });
+  });
+
+  /**
+   * GET /api/v1/config/prompts/full - List all prompts with full text (for editing)
+   */
+  app.get('/api/v1/config/prompts/full', (_req: Request, res: Response) => {
+    const prompts = getPromptsFull();
+    res.json({ prompts });
+  });
+
+  /**
+   * POST /api/v1/config/prompts - Add a new prompt
+   */
+  app.post('/api/v1/config/prompts', (req: Request, res: Response) => {
+    const newPrompt = req.body as PromptConfig;
+    
+    if (!newPrompt.id || !newPrompt.text) {
+      res.status(400).json({ error: 'Missing required fields: id, text' });
+      return;
+    }
+    
+    const prompts = getPromptsFull();
+    
+    if (prompts.find(p => p.id === newPrompt.id)) {
+      res.status(409).json({ error: `Prompt '${newPrompt.id}' already exists` });
+      return;
+    }
+    
+    prompts.push({
+      id: newPrompt.id,
+      name: newPrompt.name || newPrompt.id,
+      description: newPrompt.description,
+      category: newPrompt.category,
+      text: newPrompt.text,
+    });
+    
+    const result = savePrompts(prompts);
+    if (!result.success) {
+      res.status(500).json({ error: result.error });
+      return;
+    }
+    
+    res.status(201).json({ success: true, prompt: newPrompt });
+  });
+
+  /**
+   * PUT /api/v1/config/prompts/:promptId - Update a specific prompt
+   */
+  app.put('/api/v1/config/prompts/:promptId', (req: Request, res: Response) => {
+    const { promptId } = req.params;
+    const updates = req.body as Partial<PromptConfig>;
+    
+    const prompts = getPromptsFull();
+    const index = prompts.findIndex(p => p.id === promptId);
+    
+    if (index === -1) {
+      res.status(404).json({ error: `Prompt '${promptId}' not found` });
+      return;
+    }
+    
+    prompts[index] = {
+      ...prompts[index],
+      ...updates,
+      id: promptId, // ID cannot change
+    };
+    
+    const result = savePrompts(prompts);
+    if (!result.success) {
+      res.status(500).json({ error: result.error });
+      return;
+    }
+    
+    res.json({ success: true, prompt: prompts[index] });
+  });
+
+  /**
+   * DELETE /api/v1/config/prompts/:promptId - Delete a prompt
+   */
+  app.delete('/api/v1/config/prompts/:promptId', (req: Request, res: Response) => {
+    const { promptId } = req.params;
+    
+    const prompts = getPromptsFull();
+    const index = prompts.findIndex(p => p.id === promptId);
+    
+    if (index === -1) {
+      res.status(404).json({ error: `Prompt '${promptId}' not found` });
+      return;
+    }
+    
+    // Check if prompt is in use by any agent
+    const config = getConfig();
+    const usedBy = config.agents.filter(a => a.promptId === promptId);
+    if (usedBy.length > 0) {
+      res.status(409).json({ 
+        error: `Prompt is in use by agents: ${usedBy.map(a => a.name).join(', ')}`,
+        usedBy: usedBy.map(a => a.id),
+      });
+      return;
+    }
+    
+    prompts.splice(index, 1);
+    
+    const result = savePrompts(prompts);
+    if (!result.success) {
+      res.status(500).json({ error: result.error });
+      return;
+    }
+    
+    res.json({ success: true, deleted: promptId });
   });
   
   // 404 handler

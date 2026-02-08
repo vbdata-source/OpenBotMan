@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Key, Save, Users, Settings as SettingsIcon, Bot, Plus, Pencil, Trash2, Check, X, AlertCircle } from 'lucide-react'
+import { Key, Save, Users, Settings as SettingsIcon, Bot, Plus, Pencil, Trash2, Check, X, AlertCircle, FileText } from 'lucide-react'
 import { getApiKey, setApiKey } from '../lib/api'
 
 // Types
@@ -23,6 +23,7 @@ interface Prompt {
   name: string
   description?: string
   category?: string
+  text?: string  // Full text for editing
 }
 
 interface Team {
@@ -68,7 +69,7 @@ async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState<'agents' | 'teams' | 'general' | 'api'>('agents')
+  const [activeTab, setActiveTab] = useState<'agents' | 'prompts' | 'teams' | 'general' | 'api'>('agents')
   
   // API Key (local storage)
   const [apiKeyValue, setApiKeyValue] = useState(getApiKey())
@@ -87,6 +88,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false)
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null)
   const [editingTeam, setEditingTeam] = useState<Team | null>(null)
+  const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null)
   const [hasChanges, setHasChanges] = useState(false)
 
   // Load data
@@ -103,7 +105,7 @@ export default function Settings() {
         fetchApi<{ teams: Team[] }>('/config/teams'),
         fetchApi<GlobalSettings>('/config/settings'),
         fetchApi<{ providers: Provider[] }>('/config/providers'),
-        fetchApi<{ prompts: Prompt[] }>('/config/prompts'),
+        fetchApi<{ prompts: Prompt[] }>('/config/prompts/full'),  // Full prompts with text
       ])
       setAgents(agentsRes.agents)
       setTeams(teamsRes.teams)
@@ -283,6 +285,7 @@ export default function Settings() {
       <div className="flex border-b border-border mb-6">
         {[
           { id: 'agents', label: 'Agents', icon: Bot },
+          { id: 'prompts', label: 'Prompts', icon: FileText },
           { id: 'teams', label: 'Teams', icon: Users },
           { id: 'general', label: 'Allgemein', icon: SettingsIcon },
           { id: 'api', label: 'API Key', icon: Key },
@@ -367,6 +370,89 @@ export default function Settings() {
                       </span>
                     )}
                   </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ============ PROMPTS TAB ============ */}
+        {activeTab === 'prompts' && (
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold">Prompts ({prompts.length})</h2>
+              <button
+                onClick={() => setEditingPrompt({
+                  id: `prompt-${Date.now()}`,
+                  name: 'Neuer Prompt',
+                  description: '',
+                  category: 'custom',
+                  text: 'Du bist ein hilfreicher Experte.\n\nDEINE PERSPEKTIVE:\n- ...\n\nDEIN STIL:\n- ...\n\nAntworte auf Deutsch.',
+                })}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm"
+              >
+                <Plus className="h-4 w-4" />
+                Prompt hinzufügen
+              </button>
+            </div>
+
+            <div className="grid gap-4">
+              {prompts.map(prompt => (
+                <div key={prompt.id} className="p-4 border border-border rounded-lg bg-muted/30">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-medium">{prompt.name}</h3>
+                      {prompt.description && (
+                        <p className="text-sm text-muted-foreground mt-1">{prompt.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setEditingPrompt({ ...prompt })}
+                        className="p-2 hover:bg-muted rounded"
+                        title="Bearbeiten"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`Prompt "${prompt.name}" wirklich löschen?`)) return
+                          setSaving(true)
+                          try {
+                            await fetchApi(`/config/prompts/${prompt.id}`, { method: 'DELETE' })
+                            await loadData()
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : 'Fehler beim Löschen')
+                          } finally {
+                            setSaving(false)
+                          }
+                        }}
+                        className="p-2 hover:bg-red-500/10 text-red-500 rounded"
+                        title="Löschen"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="inline-block px-2 py-0.5 bg-muted rounded text-sm">{prompt.id}</span>
+                    {prompt.category && (
+                      <span className="inline-block px-2 py-0.5 bg-blue-500/10 text-blue-600 rounded text-sm">
+                        📁 {prompt.category}
+                      </span>
+                    )}
+                    {/* Show which agents use this prompt */}
+                    {agents.filter(a => a.promptId === prompt.id).map(agent => (
+                      <span key={agent.id} className="inline-block px-2 py-0.5 bg-green-500/10 text-green-600 rounded text-sm">
+                        {agent.emoji || '🤖'} {agent.name}
+                      </span>
+                    ))}
+                  </div>
+                  {prompt.text && (
+                    <pre className="mt-3 p-3 bg-muted rounded text-xs overflow-x-auto max-h-24 overflow-y-auto">
+                      {prompt.text.slice(0, 300)}{prompt.text.length > 300 ? '...' : ''}
+                    </pre>
+                  )}
                 </div>
               ))}
             </div>
@@ -810,6 +896,136 @@ export default function Settings() {
               <button
                 onClick={saveEditingTeam}
                 disabled={saving || !editingTeam.id || !editingTeam.name}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
+              >
+                <Check className="h-4 w-4" />
+                {saving ? 'Speichern...' : 'Speichern'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============ PROMPT EDIT MODAL ============ */}
+      {editingPrompt && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background border border-border rounded-lg shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4">
+            <div className="p-4 border-b border-border flex justify-between items-center">
+              <h3 className="text-lg font-semibold">
+                {prompts.find(p => p.id === editingPrompt.id) ? 'Prompt bearbeiten' : 'Neuer Prompt'}
+              </h3>
+              <button onClick={() => setEditingPrompt(null)} className="p-1 hover:bg-muted rounded">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">ID</label>
+                  <input
+                    type="text"
+                    value={editingPrompt.id}
+                    onChange={(e) => setEditingPrompt({ ...editingPrompt, id: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })}
+                    disabled={!!prompts.find(p => p.id === editingPrompt.id)}
+                    className="w-full mt-1 px-3 py-2 bg-background border border-input rounded-md disabled:opacity-50"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Kategorie</label>
+                  <input
+                    type="text"
+                    value={editingPrompt.category || ''}
+                    onChange={(e) => setEditingPrompt({ ...editingPrompt, category: e.target.value })}
+                    placeholder="z.B. software, business"
+                    className="w-full mt-1 px-3 py-2 bg-background border border-input rounded-md"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium">Name</label>
+                <input
+                  type="text"
+                  value={editingPrompt.name}
+                  onChange={(e) => setEditingPrompt({ ...editingPrompt, name: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 bg-background border border-input rounded-md"
+                />
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium">Beschreibung (optional)</label>
+                <input
+                  type="text"
+                  value={editingPrompt.description || ''}
+                  onChange={(e) => setEditingPrompt({ ...editingPrompt, description: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 bg-background border border-input rounded-md"
+                />
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium">Prompt Text</label>
+                <textarea
+                  value={editingPrompt.text || ''}
+                  onChange={(e) => setEditingPrompt({ ...editingPrompt, text: e.target.value })}
+                  rows={12}
+                  className="w-full mt-1 px-3 py-2 bg-background border border-input rounded-md resize-y font-mono text-sm"
+                  placeholder="Du bist ein...&#10;&#10;DEINE PERSPEKTIVE:&#10;- ...&#10;&#10;DEIN STIL:&#10;- ..."
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Der System-Prompt für den Agent. Beschreibe Rolle, Perspektive und Stil.
+                </p>
+              </div>
+
+              {/* Show which agents use this prompt */}
+              {prompts.find(p => p.id === editingPrompt.id) && (
+                <div>
+                  <label className="text-sm font-medium">Verwendet von</label>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {agents.filter(a => a.promptId === editingPrompt.id).map(agent => (
+                      <span key={agent.id} className="inline-flex items-center gap-1 px-2 py-1 bg-muted rounded text-sm">
+                        {agent.emoji || '🤖'} {agent.name}
+                      </span>
+                    ))}
+                    {agents.filter(a => a.promptId === editingPrompt.id).length === 0 && (
+                      <span className="text-sm text-muted-foreground">Kein Agent verwendet diesen Prompt</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-border flex justify-end gap-2">
+              <button
+                onClick={() => setEditingPrompt(null)}
+                className="px-4 py-2 text-muted-foreground hover:text-foreground"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={async () => {
+                  if (!editingPrompt) return
+                  setSaving(true)
+                  try {
+                    const exists = prompts.find(p => p.id === editingPrompt.id)
+                    if (exists) {
+                      await fetchApi(`/config/prompts/${editingPrompt.id}`, {
+                        method: 'PUT',
+                        body: JSON.stringify(editingPrompt),
+                      })
+                    } else {
+                      await fetchApi('/config/prompts', {
+                        method: 'POST',
+                        body: JSON.stringify(editingPrompt),
+                      })
+                    }
+                    setEditingPrompt(null)
+                    await loadData()
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
+                  } finally {
+                    setSaving(false)
+                  }
+                }}
+                disabled={saving || !editingPrompt.id || !editingPrompt.name || !editingPrompt.text}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
               >
                 <Check className="h-4 w-4" />
