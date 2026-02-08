@@ -706,7 +706,7 @@ export function createServer(config: ApiServerConfig): Express {
       return;
     }
     
-    const current = prompts[index];
+    const current = prompts[index]!;  // We checked index exists above
     prompts[index] = {
       id: promptId as string,
       name: updates.name ?? current.name,
