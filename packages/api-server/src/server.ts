@@ -706,10 +706,13 @@ export function createServer(config: ApiServerConfig): Express {
       return;
     }
     
+    const current = prompts[index];
     prompts[index] = {
-      ...prompts[index],
-      ...updates,
-      id: promptId as string, // ID cannot change (validated above)
+      id: promptId as string,
+      name: updates.name ?? current.name,
+      description: updates.description ?? current.description,
+      category: updates.category ?? current.category,
+      text: updates.text ?? current.text,
     };
     
     const result = savePrompts(prompts);
