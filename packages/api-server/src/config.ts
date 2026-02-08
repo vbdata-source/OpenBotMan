@@ -18,6 +18,7 @@ export interface AgentConfig {
   provider: 'claude-cli' | 'claude-api' | 'openai' | 'google' | 'ollama' | 'mock';
   model: string;
   systemPrompt: string;
+  promptId?: string;  // Reference to prompts[] entry
   emoji?: string;
   color?: string;
   apiKey?: string;
@@ -55,6 +56,14 @@ export interface DiscussionConfig {
 /**
  * Full config structure (subset of config.yaml)
  */
+interface PromptConfig {
+  id: string;
+  name?: string;
+  description?: string;
+  category?: string;
+  text: string;
+}
+
 interface ConfigFile {
   discussion?: {
     model?: string;
@@ -62,6 +71,7 @@ interface ConfigFile {
     maxRounds?: number;
     outputDir?: string;
     maxContext?: number;
+    prompts?: PromptConfig[];
     agents?: Array<{
       id: string;
       name?: string;
@@ -69,6 +79,7 @@ interface ConfigFile {
       provider?: string;
       model?: string;
       systemPrompt?: string;
+      promptId?: string;  // Reference to prompts[]
       emoji?: string;
       color?: string;
       apiKey?: string;
@@ -167,25 +178,48 @@ export function loadConfig(): DiscussionConfig {
   const defaultModel = discussion.model || orchestrator.model || 'claude-sonnet-4-20250514';
   const defaultProvider = (orchestrator.provider as AgentConfig['provider']) || 'claude-cli';
 
+  // Load prompts for promptId resolution
+  const prompts = new Map<string, string>();
+  if (discussion.prompts && Array.isArray(discussion.prompts)) {
+    for (const p of discussion.prompts) {
+      if (p.id && p.text) {
+        prompts.set(p.id, p.text);
+      }
+    }
+    console.log(`[Config] Loaded ${prompts.size} prompts`);
+  }
+
   // Load agents from config or use defaults
   let agents: AgentConfig[];
   
   if (discussion.agents && discussion.agents.length > 0) {
-    agents = discussion.agents.map((a, i) => ({
-      id: a.id || `agent-${i}`,
-      name: a.name || a.id || `Agent ${i + 1}`,
-      role: a.role || 'Expert',
-      provider: (a.provider as AgentConfig['provider']) || defaultProvider,
-      model: a.model || defaultModel,
-      systemPrompt: a.systemPrompt || `Du bist ein hilfreicher Experte.`,
-      emoji: a.emoji,
-      color: a.color,
-      apiKey: a.apiKey ? resolveEnvVar(a.apiKey) : undefined,
-      baseUrl: a.baseUrl,  // For OpenAI-compatible APIs
-      rateLimitDelayMs: a.rateLimitDelayMs,
-      maxTokens: a.maxTokens || 4096,
-      temperature: a.temperature,
-    }));
+    agents = discussion.agents.map((a, i) => {
+      // Resolve promptId to actual system prompt
+      let systemPrompt = a.systemPrompt || '';
+      if (a.promptId && prompts.has(a.promptId)) {
+        systemPrompt = prompts.get(a.promptId) || '';
+      }
+      if (!systemPrompt) {
+        systemPrompt = 'Du bist ein hilfreicher Experte.';
+      }
+      
+      return {
+        id: a.id || `agent-${i}`,
+        name: a.name || a.id || `Agent ${i + 1}`,
+        role: a.role || 'Expert',
+        provider: (a.provider as AgentConfig['provider']) || defaultProvider,
+        model: a.model || defaultModel,
+        systemPrompt,
+        promptId: a.promptId,  // Keep reference for UI
+        emoji: a.emoji,
+        color: a.color,
+        apiKey: a.apiKey ? resolveEnvVar(a.apiKey) : undefined,
+        baseUrl: a.baseUrl,  // For OpenAI-compatible APIs
+        rateLimitDelayMs: a.rateLimitDelayMs,
+        maxTokens: a.maxTokens || 4096,
+        temperature: a.temperature,
+      };
+    });
     console.log(`[Config] Loaded ${agents.length} agents from config`);
   } else {
     agents = DEFAULT_AGENTS;
@@ -362,21 +396,33 @@ export function saveConfig(updates: {
     
     // Update agents
     if (updates.agents) {
-      config.discussion.agents = updates.agents.map(a => ({
-        id: a.id,
-        name: a.name,
-        role: a.role,
-        provider: a.provider,
-        model: a.model,
-        systemPrompt: a.systemPrompt,
-        emoji: a.emoji,
-        color: a.color,
-        apiKey: a.apiKey,
-        baseUrl: a.baseUrl,
-        rateLimitDelayMs: a.rateLimitDelayMs,
-        maxTokens: a.maxTokens,
-        temperature: a.temperature,
-      }));
+      config.discussion.agents = updates.agents.map(a => {
+        const agent: Record<string, unknown> = {
+          id: a.id,
+          name: a.name,
+          role: a.role,
+          provider: a.provider,
+          model: a.model,
+          emoji: a.emoji,
+        };
+        
+        // Use promptId OR systemPrompt, not both
+        if (a.promptId) {
+          agent.promptId = a.promptId;
+        } else if (a.systemPrompt) {
+          agent.systemPrompt = a.systemPrompt;
+        }
+        
+        // Optional fields
+        if (a.color) agent.color = a.color;
+        if (a.apiKey) agent.apiKey = a.apiKey;
+        if (a.baseUrl) agent.baseUrl = a.baseUrl;
+        if (a.rateLimitDelayMs) agent.rateLimitDelayMs = a.rateLimitDelayMs;
+        if (a.maxTokens) agent.maxTokens = a.maxTokens;
+        if (a.temperature) agent.temperature = a.temperature;
+        
+        return agent;
+      });
     }
     
     // Update teams
@@ -418,6 +464,28 @@ export function saveConfig(updates: {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error(`[Config] Save failed: ${message}`);
     return { success: false, error: message };
+  }
+}
+
+/**
+ * Get available prompts for dropdown
+ */
+export function getPrompts(): Array<{ id: string; name: string; description?: string; category?: string }> {
+  const path = findConfigPath();
+  if (!path) return [];
+  
+  try {
+    const content = readFileSync(path, 'utf-8');
+    const config = YAML.parse(content) as ConfigFile;
+    
+    return (config.discussion?.prompts || []).map(p => ({
+      id: p.id,
+      name: p.name || p.id,
+      description: p.description,
+      category: p.category,
+    }));
+  } catch {
+    return [];
   }
 }
 

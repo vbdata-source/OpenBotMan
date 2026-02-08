@@ -30,7 +30,7 @@ import {
 import { createProvider } from '@openbotman/orchestrator';
 
 // Import config loader
-import { getConfig, getAgentsForDiscussion, getAgentsForTeam, getTeams, getDefaultTeam, saveConfig, reloadConfig, getAgentsSafe } from './config.js';
+import { getConfig, getAgentsForDiscussion, getAgentsForTeam, getTeams, getDefaultTeam, saveConfig, reloadConfig, getAgentsSafe, getPrompts } from './config.js';
 
 /**
  * Create and configure the Express server
@@ -638,6 +638,14 @@ export function createServer(config: ApiServerConfig): Express {
         { id: 'ollama', name: 'Ollama (Lokal)', requiresKey: false },
       ]
     });
+  });
+
+  /**
+   * GET /api/v1/config/prompts - List available prompts for dropdown
+   */
+  app.get('/api/v1/config/prompts', (_req: Request, res: Response) => {
+    const prompts = getPrompts();
+    res.json({ prompts });
   });
   
   // 404 handler

@@ -11,10 +11,18 @@ interface Agent {
   provider: string
   model: string
   systemPrompt: string
+  promptId?: string  // Reference to prompts
   apiKey?: string
   apiKeyMasked?: string
   baseUrl?: string
   maxTokens?: number
+}
+
+interface Prompt {
+  id: string
+  name: string
+  description?: string
+  category?: string
 }
 
 interface Team {
@@ -71,6 +79,7 @@ export default function Settings() {
   const [teams, setTeams] = useState<Team[]>([])
   const [settings, setSettings] = useState<GlobalSettings | null>(null)
   const [providers, setProviders] = useState<Provider[]>([])
+  const [prompts, setPrompts] = useState<Prompt[]>([])
   
   // UI state
   const [loading, setLoading] = useState(true)
@@ -89,16 +98,18 @@ export default function Settings() {
     setLoading(true)
     setError(null)
     try {
-      const [agentsRes, teamsRes, settingsRes, providersRes] = await Promise.all([
+      const [agentsRes, teamsRes, settingsRes, providersRes, promptsRes] = await Promise.all([
         fetchApi<{ agents: Agent[] }>('/config/agents'),
         fetchApi<{ teams: Team[] }>('/config/teams'),
         fetchApi<GlobalSettings>('/config/settings'),
         fetchApi<{ providers: Provider[] }>('/config/providers'),
+        fetchApi<{ prompts: Prompt[] }>('/config/prompts'),
       ])
       setAgents(agentsRes.agents)
       setTeams(teamsRes.teams)
       setSettings(settingsRes)
       setProviders(providersRes.providers)
+      setPrompts(promptsRes.prompts)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Laden')
     } finally {
@@ -338,16 +349,21 @@ export default function Settings() {
                       </button>
                     </div>
                   </div>
-                  <div className="mt-2 text-sm text-muted-foreground">
-                    <span className="inline-block px-2 py-0.5 bg-muted rounded mr-2">{agent.role}</span>
+                  <div className="mt-2 text-sm text-muted-foreground flex flex-wrap gap-2">
+                    <span className="inline-block px-2 py-0.5 bg-muted rounded">{agent.role}</span>
+                    {agent.promptId && (
+                      <span className="inline-block px-2 py-0.5 bg-purple-500/10 text-purple-600 rounded">
+                        📝 {agent.promptId}
+                      </span>
+                    )}
                     {agent.apiKeyMasked && (
                       <span className="inline-block px-2 py-0.5 bg-green-500/10 text-green-600 rounded">
-                        API Key: {agent.apiKeyMasked}
+                        🔑 {agent.apiKeyMasked}
                       </span>
                     )}
                     {agent.baseUrl && (
-                      <span className="inline-block px-2 py-0.5 bg-blue-500/10 text-blue-600 rounded ml-2">
-                        {agent.baseUrl}
+                      <span className="inline-block px-2 py-0.5 bg-blue-500/10 text-blue-600 rounded">
+                        🔗 {agent.baseUrl}
                       </span>
                     )}
                   </div>
@@ -620,15 +636,56 @@ export default function Settings() {
                 </div>
               )}
               
+              {/* Prompt Selection */}
               <div>
-                <label className="text-sm font-medium">System Prompt</label>
-                <textarea
-                  value={editingAgent.systemPrompt}
-                  onChange={(e) => setEditingAgent({ ...editingAgent, systemPrompt: e.target.value })}
-                  rows={4}
-                  className="w-full mt-1 px-3 py-2 bg-background border border-input rounded-md resize-y"
-                />
+                <label className="text-sm font-medium">Prompt Template</label>
+                <select
+                  value={editingAgent.promptId || ''}
+                  onChange={(e) => setEditingAgent({ 
+                    ...editingAgent, 
+                    promptId: e.target.value || undefined,
+                    // Clear systemPrompt if using promptId
+                    systemPrompt: e.target.value ? '' : editingAgent.systemPrompt
+                  })}
+                  className="w-full mt-1 px-3 py-2 bg-background border border-input rounded-md"
+                >
+                  <option value="">-- Eigener Prompt --</option>
+                  {prompts.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.category && `(${p.category})`}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Wähle einen vordefinierten Prompt oder schreibe einen eigenen.
+                </p>
               </div>
+
+              {/* System Prompt - only if no promptId */}
+              {!editingAgent.promptId && (
+                <div>
+                  <label className="text-sm font-medium">System Prompt (eigener)</label>
+                  <textarea
+                    value={editingAgent.systemPrompt}
+                    onChange={(e) => setEditingAgent({ ...editingAgent, systemPrompt: e.target.value })}
+                    rows={4}
+                    className="w-full mt-1 px-3 py-2 bg-background border border-input rounded-md resize-y"
+                  />
+                </div>
+              )}
+              
+              {/* Show resolved prompt if using promptId */}
+              {editingAgent.promptId && (
+                <div>
+                  <label className="text-sm font-medium">Aufgelöster Prompt (read-only)</label>
+                  <textarea
+                    value={editingAgent.systemPrompt}
+                    readOnly
+                    rows={4}
+                    className="w-full mt-1 px-3 py-2 bg-muted border border-input rounded-md resize-y text-muted-foreground"
+                  />
+                </div>
+              )}
               
               <div>
                 <label className="text-sm font-medium">API Key (optional)</label>
