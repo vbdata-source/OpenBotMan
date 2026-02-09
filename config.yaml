@@ -212,8 +212,7 @@ discussion:
       name: "🌟 Volles Team (4 Experten)"
       description: "Alle Experten für umfassende Analyse"
       agents: [planner, coder, researcher, reviewer]
-      default: true
-      workflows: [full-analysis, architecture]  # Default für Vollanalyse
+      workflows: [full-analysis, architecture]  # Vollanalyse
 
     - id: quick
       name: "⚡ Schnelle Analyse"
@@ -242,6 +241,7 @@ discussion:
       name: "☁️ Nur Cloud (schnell)"
       description: "Gemini + Claude für maximale Geschwindigkeit"
       agents: [planner, reviewer]
+      default: true
     
     # Beispiel: Business Team mit anderen Prompts (Phase 2+3)
     # - id: business-team
