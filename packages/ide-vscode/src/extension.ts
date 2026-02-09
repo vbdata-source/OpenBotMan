@@ -141,7 +141,7 @@ async function isServerRunning(): Promise<boolean> {
     console.log(`[OpenBotMan] Health Check: ${apiUrl}/health`);
     outputChannel?.appendLine(`[Health Check] Trying ${apiUrl}/health...`);
     const response = await fetch(`${apiUrl}/health`, { 
-      signal: AbortSignal.timeout(3000) 
+      signal: AbortSignal.timeout(10000)  // 10 seconds timeout
     });
     console.log(`[OpenBotMan] Health Check Response: ${response.status}`);
     outputChannel?.appendLine(`[Health Check] Response: ${response.status} ${response.statusText}`);
