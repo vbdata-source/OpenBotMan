@@ -134,10 +134,11 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
+    "build": "tsc -p ./ && vsce package --no-dependencies",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
     "test": "echo 'VS Code extension tests require VS Code. Skipping.'",
-    "package": "vsce package",
+    "package": "vsce package --no-dependencies",
     "publish": "vsce publish"
   },
   "devDependencies": {
