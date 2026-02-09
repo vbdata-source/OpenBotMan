@@ -252,12 +252,15 @@ async function ensureServerRunning(): Promise<boolean> {
 const BUILD_TIME = new Date().toISOString();
 
 export function activate(context: vscode.ExtensionContext) {
+  console.log('[OpenBotMan] ========== EXTENSION ACTIVATING ==========');
   outputChannel = vscode.window.createOutputChannel('OpenBotMan');
   
   // Show version info for debugging
   const ext = vscode.extensions.getExtension('vbdata.openbotman-vscode');
   const version = ext?.packageJSON?.version || 'unknown';
+  console.log(`[OpenBotMan] Version: ${version}, Build: ${BUILD_TIME}`);
   outputChannel.appendLine(`OpenBotMan extension v${version} (built: ${BUILD_TIME})`);
+  outputChannel.show(); // Force show output panel
   
   // Status bar
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
