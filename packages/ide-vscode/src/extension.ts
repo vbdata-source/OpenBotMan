@@ -138,11 +138,15 @@ duration: ${durationStr}
 async function isServerRunning(): Promise<boolean> {
   try {
     const { apiUrl } = getApiConfig();
+    outputChannel.appendLine(`[Health Check] Trying ${apiUrl}/health...`);
     const response = await fetch(`${apiUrl}/health`, { 
       signal: AbortSignal.timeout(3000) 
     });
+    outputChannel.appendLine(`[Health Check] Response: ${response.status} ${response.statusText}`);
     return response.ok;
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    outputChannel.appendLine(`[Health Check] Failed: ${message}`);
     return false;
   }
 }
