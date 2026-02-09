@@ -984,7 +984,7 @@ export default function Settings() {
                 <div>
                   <label className="text-sm font-medium">Verwendet von</label>
                   <div className="mt-1 flex flex-wrap gap-2">
-                    {agents.filter(a => a.promptId === editingPrompt.id).map(agent => (
+                    {agents.filter(a => a.promptId === editingPrompt.id).map((agent: Agent) => (
                       <span key={agent.id} className="inline-flex items-center gap-1 px-2 py-1 bg-muted rounded text-sm">
                         {agent.emoji || '🤖'} {agent.name}
                       </span>
