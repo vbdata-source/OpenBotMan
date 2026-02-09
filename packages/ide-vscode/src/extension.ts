@@ -494,9 +494,16 @@ async function startDiscussion() {
   
   let selectedTeamId: string | undefined;
   if (teams.length > 0) {
-    const teamItems = teams.map(t => ({
-      label: t.name,
-      description: `${t.agentCount} Agents`,
+    // Sort teams so default team comes first
+    const sortedTeams = [...teams].sort((a, b) => {
+      if (a.default && !b.default) return -1;
+      if (!a.default && b.default) return 1;
+      return 0;
+    });
+    
+    const teamItems = sortedTeams.map(t => ({
+      label: t.default ? `⭐ ${t.name}` : t.name,
+      description: `${t.agentCount} Agents${t.default ? ' (Standard)' : ''}`,
       detail: t.description,
       id: t.id,
     }));
