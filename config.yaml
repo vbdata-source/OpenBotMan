@@ -1,38 +1,12 @@
-# ============================================
-# OpenBotMan Configuration
-# ============================================
-# Multi-Provider Setup: Cloud + Lokal
-#
-# Provider-Optionen:
-#   claude-cli  - Claude via CLI (Pro-Abo)
-#   claude-api  - Claude via API (ANTHROPIC_API_KEY)
-#   google      - Gemini (GOOGLE_API_KEY)
-#   openai      - GPT-4 oder OpenAI-kompatible APIs (LM Studio, vLLM, etc.)
-#   ollama      - Lokale LLMs (http://localhost:11434)
-
-# ============================================
-# Discussion Settings
-# ============================================
 discussion:
   maxRounds: 10
-  timeout: 300
+  timeout: 3000
   maxContext: 50000
   showAgentConfig: true
-
-  # ==========================================
-  # Wiederverwendbare Prompts
-  # ==========================================
-  # Prompts können von mehreren Agents/Teams verwendet werden.
-  # Agents referenzieren Prompts via "promptId".
-  # Fallback: Wenn kein promptId, wird "systemPrompt" inline verwendet.
-  
   prompts:
-    # ─────────────────────────────────────────
-    # Software-Entwicklung Prompts
-    # ─────────────────────────────────────────
     - id: software-architect
-      name: "Software Architect"
-      description: "Strategische Planung für Software-Projekte"
+      name: Software Architect
+      description: Strategische Planung für Software-Projekte
       category: software
       text: |
         Du bist ein strategischer Planner und Solution Architect.
@@ -50,10 +24,9 @@ discussion:
         - Denke an MVP vs. langfristige Vision
 
         Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
-
     - id: software-developer
-      name: "Senior Developer"
-      description: "Implementierung und Code-Qualität"
+      name: Senior Developer
+      description: Implementierung und Code-Qualität
       category: software
       text: |
         Du bist ein erfahrener Senior Software-Entwickler.
@@ -71,10 +44,9 @@ discussion:
         - Bewerte Aufwand realistisch
 
         Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
-
     - id: software-researcher
-      name: "Tech Research Analyst"
-      description: "Technische Recherche und Analyse"
+      name: Tech Research Analyst
+      description: Technische Recherche und Analyse
       category: software
       text: |
         Du bist ein gründlicher Research-Analyst und Fact-Checker.
@@ -92,10 +64,9 @@ discussion:
         - Belege Aussagen mit Argumenten
 
         Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
-
     - id: software-reviewer
-      name: "Security & Quality Expert"
-      description: "Code-Review und Sicherheitsanalyse"
+      name: Security & Quality Expert
+      description: Code-Review und Sicherheitsanalyse
       category: software
       text: |
         Du bist ein kritischer Code-Reviewer und Security-Experte.
@@ -113,13 +84,9 @@ discussion:
         - Priorisiere nach Schweregrad
 
         Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
-
-    # ─────────────────────────────────────────
-    # Business Prompts (Beispiele für andere Domänen)
-    # ─────────────────────────────────────────
     - id: business-strategist
-      name: "Business Strategist"
-      description: "Geschäftsstrategie und Marktanalyse"
+      name: Business Strategist
+      description: Geschäftsstrategie und Marktanalyse
       category: business
       text: |
         Du bist ein erfahrener Business-Stratege.
@@ -137,10 +104,9 @@ discussion:
         - Bewerte langfristige Auswirkungen
 
         Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
-
     - id: business-analyst
-      name: "Business Analyst"
-      description: "Marktforschung und Datenanalyse"
+      name: Business Analyst
+      description: Marktforschung und Datenanalyse
       category: business
       text: |
         Du bist ein gründlicher Business-Analyst.
@@ -158,111 +124,215 @@ discussion:
         - Belege mit Daten und Quellen
 
         Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
+    - id: ux-designer-prompt
+      name: UX/UI Designer
+      description: Nutzerzentrierte Perspektive und Interface-Design
+      category: software
+      text: |
+        Du bist ein erfahrener UX/UI Designer mit Fokus auf Developer Tools.
 
-  # ==========================================
-  # Agent Definitionen
-  # ==========================================
-  # Agents können via "promptId" auf Prompts verweisen.
-  # Fallback: "systemPrompt" inline (für Backward-Compatibility).
-  
+        DEINE PERSPEKTIVE:
+        - Nutzererfahrung und Usability
+        - Intuitive Bedienbarkeit ohne Dokumentation
+        - Konsistenz in der UI (Patterns, Farben, Abstände)
+        - Accessibility und Barrierefreiheit
+        - Mobile-First und Responsive Design
+
+        DEIN STIL:
+        - Denke immer aus Sicht des Endnutzers
+        - Hinterfrage komplizierte Workflows
+        - Schlage konkrete UI-Verbesserungen vor
+        - Zeige Wireframes/Mockups (ASCII) wenn hilfreich
+        - "Don't make me think" - Prinzip
+
+        Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
   agents:
     - id: planner
+      name: Strategic Planner
       role: architect
-      name: "Strategic Planner"
-      emoji: "🎯"
       provider: google
       model: gemini-2.0-flash
-      promptId: software-architect  # Referenz auf Prompt
+      emoji: 🎯
+      promptId: software-architect
+      systemPrompt: |
+        Du bist ein strategischer Planner und Solution Architect.
 
+        DEINE PERSPEKTIVE:
+        - Gesamtarchitektur und strategische Ausrichtung
+        - Trade-offs zwischen verschiedenen Ansätzen
+        - Priorisierung und Roadmap-Planung
+        - Risikobewertung und Alternativen
+
+        DEIN STIL:
+        - Strategisch und ausgewogen
+        - Zeige Architektur-Diagramme (ASCII) wenn hilfreich
+        - Bewerte Vor- und Nachteile objektiv
+        - Denke an MVP vs. langfristige Vision
+
+        Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
+      maxTokens: 4096
     - id: coder
+      name: Senior Developer
       role: coder
-      name: "Senior Developer"
-      emoji: "💻"
       provider: ollama
       model: qwen3-coder:30b
-      promptId: software-developer  # Referenz auf Prompt
+      emoji: 💻
+      promptId: software-developer
+      systemPrompt: |
+        Du bist ein erfahrener Senior Software-Entwickler.
 
+        DEINE PERSPEKTIVE:
+        - Implementierungs-Details und Code-Qualität
+        - Praktische Umsetzbarkeit und Aufwand
+        - Performance und Skalierbarkeit
+        - Konkrete Code-Vorschläge
+
+        DEIN STIL:
+        - Pragmatisch und lösungsorientiert
+        - Zeige Code-Beispiele wenn sinnvoll
+        - Denke an Edge-Cases und Error-Handling
+        - Bewerte Aufwand realistisch
+
+        Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
+      maxTokens: 4096
     - id: researcher
+      name: Research Analyst
       role: researcher
-      name: "Research Analyst"
-      emoji: "🔬"
       provider: openai
       model: openai/gpt-oss-20b
-      baseUrl: http://localhost:1234/v1
-      promptId: software-researcher  # Referenz auf Prompt
+      emoji: 🔬
+      promptId: software-researcher
+      systemPrompt: |
+        Du bist ein gründlicher Research-Analyst und Fact-Checker.
 
+        DEINE PERSPEKTIVE:
+        - Tiefgehende Analyse und Hintergrundrecherche
+        - Fakten prüfen und Quellen hinterfragen
+        - Alternativen und Vergleiche aufzeigen
+        - Langfristige Trends und Auswirkungen
+
+        DEIN STIL:
+        - Analytisch und faktenbasiert
+        - Stelle kritische Fragen
+        - Zeige verschiedene Perspektiven
+        - Belege Aussagen mit Argumenten
+
+        Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
+      baseUrl: http://localhost:1234/v1
+      maxTokens: 4096
     - id: reviewer
+      name: Security & Quality Expert
       role: reviewer
-      name: "Security & Quality Expert"
-      emoji: "🔍"
-      # provider: claude-api
-      # model: claude-opus-4-6
       provider: ollama
       model: gpt-oss:120b-cloud
-      promptId: software-reviewer  # Referenz auf Prompt
+      emoji: 🔍
+      promptId: software-reviewer
+      systemPrompt: |
+        Du bist ein kritischer Code-Reviewer und Security-Experte.
 
-  # ==========================================
-  # Team-Presets (Agenten-Gruppen)
-  # ==========================================
-  # Phase 2+3: Teams können Prompts überschreiben
-  # Aktuell: Nur Agent-Liste (Backward-Compatible)
-  
+        DEINE PERSPEKTIVE:
+        - Sicherheitslücken und Vulnerabilities
+        - Performance-Bottlenecks
+        - Edge-Cases und Fehlerszenarien
+        - Code-Qualität und Wartbarkeit
+
+        DEIN STIL:
+        - Kritisch aber konstruktiv
+        - Zeige konkrete Risiken mit Beispielen
+        - Schlage Mitigationen vor
+        - Priorisiere nach Schweregrad
+
+        Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
+      maxTokens: 4096
+    - id: ux
+      name: UX Designer
+      role: Designer
+      provider: google
+      model: gemini-2.0-flash
+      emoji: 🤖
+      promptId: ux-designer-prompt
+      systemPrompt: |
+        Du bist ein erfahrener UX/UI Designer mit Fokus auf Developer Tools.
+
+        DEINE PERSPEKTIVE:
+        - Nutzererfahrung und Usability
+        - Intuitive Bedienbarkeit ohne Dokumentation
+        - Konsistenz in der UI (Patterns, Farben, Abstände)
+        - Accessibility und Barrierefreiheit
+        - Mobile-First und Responsive Design
+
+        DEIN STIL:
+        - Denke immer aus Sicht des Endnutzers
+        - Hinterfrage komplizierte Workflows
+        - Schlage konkrete UI-Verbesserungen vor
+        - Zeige Wireframes/Mockups (ASCII) wenn hilfreich
+        - "Don't make me think" - Prinzip
+
+        Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
+      maxTokens: 4096
   teams:
     - id: full
-      name: "🌟 Volles Team (4 Experten)"
-      description: "Alle Experten für umfassende Analyse"
-      agents: [planner, coder, researcher, reviewer]
-      default: true
-      workflows: [full-analysis, architecture]  # Default für Vollanalyse
-
+      name: 🌟 Volles Team (4 Experten)
+      description: Alle Experten für umfassende Analyse
+      agents:
+        - planner
+        - coder
+        - researcher
+        - reviewer
+      default: false
+      workflows:
+        - full-analysis
+        - architecture
     - id: quick
-      name: "⚡ Schnelle Analyse"
-      description: "Planner + Reviewer für schnelle Einschätzung"
-      agents: [planner, reviewer]
-
+      name: ⚡ Schnelle Analyse
+      description: Planner + Reviewer für schnelle Einschätzung
+      agents:
+        - planner
+        - reviewer
     - id: code-review
-      name: "💻 Code Review"
-      description: "Developer + Security für Code-Qualität"
-      agents: [coder, reviewer]
-      workflows: [code-review, code-quality]  # Code-bezogene Workflows
-
+      name: 💻 Code Review
+      description: Developer + Security für Code-Qualität
+      agents:
+        - coder
+        - reviewer
+      workflows:
+        - code-review
+        - code-quality
     - id: security
-      name: "🔒 Security Fokus"
-      description: "Research + Security für Sicherheitsanalyse"
-      agents: [researcher, reviewer]
-      workflows: [security-review]  # Security-Workflow
-
+      name: 🔒 Security Fokus
+      description: Research + Security für Sicherheitsanalyse
+      agents:
+        - researcher
+        - reviewer
+      workflows:
+        - security-review
     - id: local-only
-      name: "🏠 Nur Lokal (kostenlos)"
-      description: "Ollama + LM Studio - keine API-Kosten"
-      agents: [coder, researcher]
-      workflows: [performance]  # Performance-Analyse lokal (schneller)
-
+      name: 🏠 Nur Lokal (kostenlos)
+      description: Ollama + LM Studio - keine API-Kosten
+      agents:
+        - coder
+        - researcher
+      workflows:
+        - performance
     - id: cloud-only
-      name: "☁️ Nur Cloud (schnell)"
-      description: "Gemini + Claude für maximale Geschwindigkeit"
-      agents: [planner, reviewer]
-    
-    # Beispiel: Business Team mit anderen Prompts (Phase 2+3)
-    # - id: business-team
-    #   name: "💼 Business Team"
-    #   description: "Für Geschäftsentscheidungen"
-    #   agents:
-    #     - agentId: planner
-    #       promptId: business-strategist  # Override!
-    #     - agentId: researcher
-    #       promptId: business-analyst     # Override!
-
-# ============================================
-# Logging
-# ============================================
+      name: ☁️ Nur Cloud (schnell)
+      description: Gemini + Claude für maximale Geschwindigkeit
+      agents:
+        - planner
+        - reviewer
+    - id: team-full-ux
+      name: Volles Team + UX
+      description: 5 Experten inkl. UX-Perspektive für nutzerfreundliche Lösungen
+      agents:
+        - planner
+        - coder
+        - researcher
+        - reviewer
+        - ux
+      default: true
 logging:
   level: info
   format: pretty
-
-# ============================================
-# Security (API Server)
-# ============================================
 security:
   enabled: true
   rateLimit:
