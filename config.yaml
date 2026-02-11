@@ -223,66 +223,28 @@ discussion:
     - id: reviewer
       name: Security & Quality Expert
       role: reviewer
+      name: "Security & Quality Expert"
+      emoji: "🔍"
+      # provider: claude-api
+      # model: claude-opus-4-6
       provider: ollama
       model: gpt-oss:120b-cloud
-      emoji: 🔍
-      promptId: software-reviewer
-      systemPrompt: |
-        Du bist ein kritischer Code-Reviewer und Security-Experte.
+      promptId: software-reviewer  # Referenz auf Prompt
 
-        DEINE PERSPEKTIVE:
-        - Sicherheitslücken und Vulnerabilities
-        - Performance-Bottlenecks
-        - Edge-Cases und Fehlerszenarien
-        - Code-Qualität und Wartbarkeit
-
-        DEIN STIL:
-        - Kritisch aber konstruktiv
-        - Zeige konkrete Risiken mit Beispielen
-        - Schlage Mitigationen vor
-        - Priorisiere nach Schweregrad
-
-        Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
-      maxTokens: 4096
-    - id: ux
-      name: UX Designer
-      role: Designer
-      provider: google
-      model: gemini-2.0-flash
-      emoji: 🤖
-      promptId: ux-designer-prompt
-      systemPrompt: |
-        Du bist ein erfahrener UX/UI Designer mit Fokus auf Developer Tools.
-
-        DEINE PERSPEKTIVE:
-        - Nutzererfahrung und Usability
-        - Intuitive Bedienbarkeit ohne Dokumentation
-        - Konsistenz in der UI (Patterns, Farben, Abstände)
-        - Accessibility und Barrierefreiheit
-        - Mobile-First und Responsive Design
-
-        DEIN STIL:
-        - Denke immer aus Sicht des Endnutzers
-        - Hinterfrage komplizierte Workflows
-        - Schlage konkrete UI-Verbesserungen vor
-        - Zeige Wireframes/Mockups (ASCII) wenn hilfreich
-        - "Don't make me think" - Prinzip
-
-        Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
-      maxTokens: 4096
+  # ==========================================
+  # Team-Presets (Agenten-Gruppen)
+  # ==========================================
+  # Phase 2+3: Teams können Prompts überschreiben
+  # Aktuell: Nur Agent-Liste (Backward-Compatible)
+  
   teams:
     - id: full
-      name: 🌟 Volles Team (4 Experten)
-      description: Alle Experten für umfassende Analyse
-      agents:
-        - planner
-        - coder
-        - researcher
-        - reviewer
-      default: false
-      workflows:
-        - full-analysis
-        - architecture
+      name: "🌟 Volles Team (4 Experten)"
+      description: "Alle Experten für umfassende Analyse"
+      agents: [planner, coder, researcher, reviewer]
+      default: true
+      workflows: [full-analysis, architecture]  # Default für Vollanalyse
+
     - id: quick
       name: ⚡ Schnelle Analyse
       description: Planner + Reviewer für schnelle Einschätzung
@@ -315,21 +277,23 @@ discussion:
       workflows:
         - performance
     - id: cloud-only
-      name: ☁️ Nur Cloud (schnell)
-      description: Gemini + Claude für maximale Geschwindigkeit
-      agents:
-        - planner
-        - reviewer
-    - id: team-full-ux
-      name: Volles Team + UX
-      description: 5 Experten inkl. UX-Perspektive für nutzerfreundliche Lösungen
-      agents:
-        - planner
-        - coder
-        - researcher
-        - reviewer
-        - ux
-      default: true
+      name: "☁️ Nur Cloud (schnell)"
+      description: "Gemini + Claude für maximale Geschwindigkeit"
+      agents: [planner, reviewer]
+    
+    # Beispiel: Business Team mit anderen Prompts (Phase 2+3)
+    # - id: business-team
+    #   name: "💼 Business Team"
+    #   description: "Für Geschäftsentscheidungen"
+    #   agents:
+    #     - agentId: planner
+    #       promptId: business-strategist  # Override!
+    #     - agentId: researcher
+    #       promptId: business-analyst     # Override!
+
+# ============================================
+# Logging
+# ============================================
 logging:
   level: info
   format: pretty

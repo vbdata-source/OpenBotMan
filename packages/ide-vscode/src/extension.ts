@@ -138,11 +138,18 @@ duration: ${durationStr}
 async function isServerRunning(): Promise<boolean> {
   try {
     const { apiUrl } = getApiConfig();
+    console.log(`[OpenBotMan] Health Check: ${apiUrl}/health`);
+    outputChannel?.appendLine(`[Health Check] Trying ${apiUrl}/health...`);
     const response = await fetch(`${apiUrl}/health`, { 
-      signal: AbortSignal.timeout(3000) 
+      signal: AbortSignal.timeout(10000)  // 10 seconds timeout
     });
+    console.log(`[OpenBotMan] Health Check Response: ${response.status}`);
+    outputChannel?.appendLine(`[Health Check] Response: ${response.status} ${response.statusText}`);
     return response.ok;
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.log(`[OpenBotMan] Health Check Failed: ${message}`);
+    outputChannel?.appendLine(`[Health Check] Failed: ${message}`);
     return false;
   }
 }
@@ -245,12 +252,15 @@ async function ensureServerRunning(): Promise<boolean> {
 const BUILD_TIME = new Date().toISOString();
 
 export function activate(context: vscode.ExtensionContext) {
+  console.log('[OpenBotMan] ========== EXTENSION ACTIVATING ==========');
   outputChannel = vscode.window.createOutputChannel('OpenBotMan');
   
   // Show version info for debugging
   const ext = vscode.extensions.getExtension('vbdata.openbotman-vscode');
   const version = ext?.packageJSON?.version || 'unknown';
+  console.log(`[OpenBotMan] Version: ${version}, Build: ${BUILD_TIME}`);
   outputChannel.appendLine(`OpenBotMan extension v${version} (built: ${BUILD_TIME})`);
+  outputChannel.show(); // Force show output panel
   
   // Status bar
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -494,9 +504,16 @@ async function startDiscussion() {
   
   let selectedTeamId: string | undefined;
   if (teams.length > 0) {
-    const teamItems = teams.map(t => ({
-      label: t.name,
-      description: `${t.agentCount} Agents`,
+    // Sort teams so default team comes first
+    const sortedTeams = [...teams].sort((a, b) => {
+      if (a.default && !b.default) return -1;
+      if (!a.default && b.default) return 1;
+      return 0;
+    });
+    
+    const teamItems = sortedTeams.map(t => ({
+      label: t.default ? `⭐ ${t.name}` : t.name,
+      description: `${t.agentCount} Agents${t.default ? ' (Standard)' : ''}`,
       detail: t.description,
       id: t.id,
     }));
@@ -572,13 +589,36 @@ Analysiere diesen Code auf:
 ${code}
 \`\`\``;
 
-  // Get team for code-review workflow
-  const team = await getTeamForWorkflow('code-review');
+  // Let user select team
+  const teams = await fetchTeams();
+  let selectedTeamId: string | undefined;
+  
+  if (teams.length > 0) {
+    const sortedTeams = [...teams].sort((a, b) => {
+      if (a.default && !b.default) return -1;
+      if (!a.default && b.default) return 1;
+      return 0;
+    });
+    
+    const teamItems = sortedTeams.map(t => ({
+      label: t.default ? `⭐ ${t.name}` : t.name,
+      description: `${t.agentCount} Agents${t.default ? ' (Standard)' : ''}`,
+      detail: t.description,
+      id: t.id,
+    }));
+    
+    const selectedTeam = await vscode.window.showQuickPick(teamItems, {
+      placeHolder: 'Welches Experten-Team soll den Code Review durchführen?',
+    });
+    
+    if (!selectedTeam) return;
+    selectedTeamId = selectedTeam.id;
+  }
   
   const requestBody = {
     topic,
     async: true,
-    team,  // Workflow-specific team from config
+    team: selectedTeamId,
   };
 
   await runAsyncJob(topic, requestBody, `Code Review: ${fileName}`);
@@ -617,24 +657,39 @@ async function analyzeProject() {
   
   const topic = topics[analysisType.value];
   
-  // Map analysis type to workflow ID for team selection
-  const workflowMap: Record<string, string> = {
-    full: 'full-analysis',
-    security: 'security-review',
-    performance: 'performance',
-    quality: 'code-quality',
-    architecture: 'architecture',
-  };
+  // Let user select team
+  const teams = await fetchTeams();
+  let selectedTeamId: string | undefined;
   
-  // Get team for this workflow
-  const team = await getTeamForWorkflow(workflowMap[analysisType.value]);
+  if (teams.length > 0) {
+    // Sort teams so default team comes first
+    const sortedTeams = [...teams].sort((a, b) => {
+      if (a.default && !b.default) return -1;
+      if (!a.default && b.default) return 1;
+      return 0;
+    });
+    
+    const teamItems = sortedTeams.map(t => ({
+      label: t.default ? `⭐ ${t.name}` : t.name,
+      description: `${t.agentCount} Agents${t.default ? ' (Standard)' : ''}`,
+      detail: t.description,
+      id: t.id,
+    }));
+    
+    const selectedTeam = await vscode.window.showQuickPick(teamItems, {
+      placeHolder: 'Welches Experten-Team soll die Analyse durchführen?',
+    });
+    
+    if (!selectedTeam) return; // User cancelled
+    selectedTeamId = selectedTeam.id;
+  }
   
   const requestBody = {
     topic,
     workspace: workspacePath,
     include: ['**/*.ts', '**/*.js', '**/*.cs', '**/*.py', '**/*.java', '**/*.json', '**/*.yaml', '**/*.yml', '**/*.md'],
     async: true,
-    team,  // Workflow-specific team from config
+    team: selectedTeamId,
   };
 
   await runAsyncJob(topic, requestBody, `${analysisType.label} - ${workspaceName}`);
