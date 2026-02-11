@@ -2,7 +2,7 @@
   "name": "openbotman-vscode",
   "displayName": "OpenBotMan",
   "description": "Multi-Agent AI Orchestration for VS Code",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "publisher": "vbdata",
   "repository": {
     "type": "git",

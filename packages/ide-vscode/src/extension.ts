@@ -589,13 +589,36 @@ Analysiere diesen Code auf:
 ${code}
 \`\`\``;
 
-  // Get team for code-review workflow
-  const team = await getTeamForWorkflow('code-review');
+  // Let user select team
+  const teams = await fetchTeams();
+  let selectedTeamId: string | undefined;
+  
+  if (teams.length > 0) {
+    const sortedTeams = [...teams].sort((a, b) => {
+      if (a.default && !b.default) return -1;
+      if (!a.default && b.default) return 1;
+      return 0;
+    });
+    
+    const teamItems = sortedTeams.map(t => ({
+      label: t.default ? `⭐ ${t.name}` : t.name,
+      description: `${t.agentCount} Agents${t.default ? ' (Standard)' : ''}`,
+      detail: t.description,
+      id: t.id,
+    }));
+    
+    const selectedTeam = await vscode.window.showQuickPick(teamItems, {
+      placeHolder: 'Welches Experten-Team soll den Code Review durchführen?',
+    });
+    
+    if (!selectedTeam) return;
+    selectedTeamId = selectedTeam.id;
+  }
   
   const requestBody = {
     topic,
     async: true,
-    team,  // Workflow-specific team from config
+    team: selectedTeamId,
   };
 
   await runAsyncJob(topic, requestBody, `Code Review: ${fileName}`);
@@ -634,24 +657,39 @@ async function analyzeProject() {
   
   const topic = topics[analysisType.value];
   
-  // Map analysis type to workflow ID for team selection
-  const workflowMap: Record<string, string> = {
-    full: 'full-analysis',
-    security: 'security-review',
-    performance: 'performance',
-    quality: 'code-quality',
-    architecture: 'architecture',
-  };
+  // Let user select team
+  const teams = await fetchTeams();
+  let selectedTeamId: string | undefined;
   
-  // Get team for this workflow
-  const team = await getTeamForWorkflow(workflowMap[analysisType.value]);
+  if (teams.length > 0) {
+    // Sort teams so default team comes first
+    const sortedTeams = [...teams].sort((a, b) => {
+      if (a.default && !b.default) return -1;
+      if (!a.default && b.default) return 1;
+      return 0;
+    });
+    
+    const teamItems = sortedTeams.map(t => ({
+      label: t.default ? `⭐ ${t.name}` : t.name,
+      description: `${t.agentCount} Agents${t.default ? ' (Standard)' : ''}`,
+      detail: t.description,
+      id: t.id,
+    }));
+    
+    const selectedTeam = await vscode.window.showQuickPick(teamItems, {
+      placeHolder: 'Welches Experten-Team soll die Analyse durchführen?',
+    });
+    
+    if (!selectedTeam) return; // User cancelled
+    selectedTeamId = selectedTeam.id;
+  }
   
   const requestBody = {
     topic,
     workspace: workspacePath,
     include: ['**/*.ts', '**/*.js', '**/*.cs', '**/*.py', '**/*.java', '**/*.json', '**/*.yaml', '**/*.yml', '**/*.md'],
     async: true,
-    team,  // Workflow-specific team from config
+    team: selectedTeamId,
   };
 
   await runAsyncJob(topic, requestBody, `${analysisType.label} - ${workspaceName}`);
