@@ -223,7 +223,6 @@ discussion:
     - id: reviewer
       name: Security & Quality Expert
       role: reviewer
-      name: "Security & Quality Expert"
       emoji: "🔍"
       # provider: claude-api
       # model: claude-opus-4-6
