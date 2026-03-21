@@ -209,14 +209,27 @@ export function evaluateRound(
 /**
  * Build prompt for first round (proposal)
  */
-export function buildProposerPrompt(topic: string, context: string): string {
+export function buildProposerPrompt(
+  topic: string,
+  context: string,
+  options?: { contextType?: 'inventory' | 'raw-code' | 'none' }
+): string {
   const hasCode = context && context.includes('```');
-  
+  const hasInventory = options?.contextType === 'inventory';
+
   return `Du bist der erste Agent in einer Multi-Agent-Diskussion.
 
 ## Deine Aufgabe
 Analysiere das folgende Thema und erstelle einen strukturierten Vorschlag.
-${hasCode ? `
+${hasInventory ? `
+**PROJEKT-INVENTAR + CODE bereitgestellt:**
+Du hast ein strukturiertes Projekt-Inventar (Datei-Uebersicht + Abhaengigkeitsgraph) erhalten,
+gefolgt von dem Quellcode der wichtigsten Dateien.
+1. Nutze das Inventar fuer den Gesamtueberblick (Architektur, Abhaengigkeiten)
+2. Analysiere den bereitgestellten Quellcode im Detail
+3. Referenziere konkrete Dateien, Funktionen und Code-Stellen
+4. Wenn du Code einer nicht enthaltenen Datei benoetigst, nenne den Pfad explizit` :
+hasCode ? `
 **WICHTIG - CODE-ANALYSE PFLICHT:**
 Dir wurde Quellcode zur Analyse bereitgestellt. Du MUSST:
 1. Konkrete Dateinamen nennen (z.B. "In config.ts...")
@@ -251,13 +264,15 @@ export function buildResponderPrompt(
   previousContributions: AgentContribution[],
   round: number,
   agentRole: string,
-  resolvedPoints: string[] = []
+  resolvedPoints: string[] = [],
+  options?: { contextType?: 'inventory' | 'raw-code' | 'none' }
 ): string {
   const previousResponses = previousContributions
     .map(c => `### ${c.agentName} (${c.role}) - [${c.position}]\n${c.content}`)
     .join('\n\n---\n\n');
 
   const hasCode = context && context.includes('```');
+  const hasInventory = options?.contextType === 'inventory';
 
   const resolvedSection = resolvedPoints.length > 0
     ? `\n## Bereits geklärte Punkte (NICHT erneut diskutieren!)
@@ -269,7 +284,11 @@ ${resolvedPoints.map(p => `- [x] ${p}`).join('\n')}
     : '';
 
   return `Du bist ein ${agentRole} in Runde ${round} einer Multi-Agent-Diskussion.
-${hasCode ? `
+${hasInventory ? `
+**PROJEKT-INVENTAR + CODE bereitgestellt:**
+Nutze das Inventar fuer den Gesamtueberblick und den Quellcode fuer Detail-Analyse.
+Referenziere konkrete Dateien, Funktionen und Code-Stellen!` :
+hasCode ? `
 **WICHTIG - CODE-ANALYSE:**
 Dir wurde Quellcode bereitgestellt. Referenziere konkrete Dateien, Funktionen und Code-Stellen in deiner Analyse!` : ''}
 

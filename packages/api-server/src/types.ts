@@ -41,6 +41,9 @@ export const DiscussRequestSchema = z.object({
   /** Prompt file path - load topic from a markdown file */
   promptFile: z.string().optional(),
   
+  /** Inventory mode - automatic project inventory before discussion (default: true when workspace is set) */
+  inventory: z.boolean().optional(),
+
   /** Async mode - return job ID immediately, poll for results */
   async: z.boolean().optional().default(false),
 });

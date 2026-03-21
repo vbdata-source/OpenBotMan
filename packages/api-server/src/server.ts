@@ -13,6 +13,7 @@ import { readFileSync, existsSync } from 'fs';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { DiscussRequestSchema, type DiscussResponse, type HealthResponse, type ApiServerConfig } from './types.js';
 import { loadWorkspaceContext, formatWorkspaceContext, getWorkspacePreview, validateWorkspacePath } from './workspace.js';
+import { generateInventory, buildFullContext } from './inventory.js';
 import { jobStore } from './jobs.js';
 import {
   extractPosition,
@@ -886,6 +887,7 @@ async function runDiscussion(
     ignore?: string[];
     maxContext?: number;
     promptFile?: string;
+    inventory?: boolean;
   },
   config: ApiServerConfig,
   requestId: string
@@ -905,22 +907,39 @@ async function runDiscussion(
   
   // Load workspace context if specified
   let workspaceContext = '';
+  let wsContext: import('./workspace.js').WorkspaceContext | null = null;
   let contextSizeKB = 0;
+  let contextType: 'inventory' | 'raw-code' | 'none' = 'none';
+
   if (request.workspace && request.include && request.include.length > 0) {
     try {
       const maxBytes = (request.maxContext ?? 100) * 1024;
       const customIgnore = request.ignore ?? [];
-      const context = await loadWorkspaceContext(request.workspace, request.include, maxBytes, customIgnore);
-      workspaceContext = formatWorkspaceContext(context);
-      contextSizeKB = Math.round(context.totalSize / 1024);
-      console.log(`[${requestId}] Loaded workspace: ${context.fileCount} files, ${contextSizeKB}KB`);
+      wsContext = await loadWorkspaceContext(request.workspace, request.include, maxBytes, customIgnore);
+      workspaceContext = formatWorkspaceContext(wsContext);
+      contextSizeKB = Math.round(wsContext.totalSize / 1024);
+      contextType = 'raw-code';
+      console.log(`[${requestId}] Loaded workspace: ${wsContext.fileCount} files, ${contextSizeKB}KB`);
     } catch (error) {
       console.warn(`[${requestId}] Could not load workspace: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
-  
-  // Build the full context
-  const fullContext = workspaceContext || '';
+
+  // Inventory phase: generate inventory + budget-controlled raw code
+  let fullContext = workspaceContext || '';
+  if (wsContext && request.inventory !== false) {
+    try {
+      const inventory = generateInventory(wsContext);
+      const maxBytes = (request.maxContext ?? 100) * 1024;
+      const result = buildFullContext(wsContext, inventory, maxBytes);
+      fullContext = result.context;
+      contextType = result.contextType;
+      console.log(`[${requestId}] Inventory: ${inventory.fileCount} files, context ${Math.round(Buffer.byteLength(fullContext, 'utf-8') / 1024)}KB (Inventar + priorisierter Code)`);
+    } catch (error) {
+      console.warn(`[${requestId}] Inventory failed, using raw context: ${error}`);
+      // fullContext remains workspaceContext (fallback)
+    }
+  }
 
   // Load agent definitions from config.yaml (supports per-agent model/provider)
   const discussionConfig = getConfig();
@@ -1010,14 +1029,14 @@ async function runDiscussion(
           let prompt: string;
           if (round === 1 && roundContributions.length === 0) {
             // First agent, first round: Proposer
-            prompt = buildProposerPrompt(topic, fullContext);
+            prompt = buildProposerPrompt(topic, fullContext, { contextType });
           } else {
             // All other cases: Responder
-            const previousContribs = round === 1 
-              ? roundContributions 
+            const previousContribs = round === 1
+              ? roundContributions
               : [...allContributions.slice(-agentConfigs.length), ...roundContributions];
             const prevResolved = rounds.length > 0 ? rounds[rounds.length - 1]!.resolvedPoints : [];
-            prompt = buildResponderPrompt(topic, fullContext, previousContribs, round, agent.role, prevResolved);
+            prompt = buildResponderPrompt(topic, fullContext, previousContribs, round, agent.role, prevResolved, { contextType });
           }
           
           const response = await agentProvider.send(prompt, {
