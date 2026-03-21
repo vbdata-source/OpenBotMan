@@ -63,27 +63,30 @@ export interface ConsensusContribution {
 export interface RoundStatus {
   /** Round number (1-indexed) */
   round: number;
-  
+
   /** Total rounds allowed */
   maxRounds: number;
-  
+
   /** All contributions this round */
   contributions: ConsensusContribution[];
-  
+
   /** Count by position type */
   positionCounts: Record<ConsensusPosition, number>;
-  
+
   /** Whether consensus was reached */
   consensusReached: boolean;
-  
+
   /** List of blocking objections */
   objections: string[];
-  
+
   /** List of concerns (non-blocking) */
   concerns: string[];
-  
+
   /** List of conditions */
   conditions: string[];
+
+  /** Points that have been resolved/agreed upon across rounds */
+  resolvedPoints: string[];
 }
 
 /**
@@ -269,12 +272,40 @@ export function extractActionItems(content: string): Array<{ task: string; assig
 // ============================================================================
 
 /**
+ * Extract resolved/agreed points from contributions.
+ * Identifies points that agents explicitly agreed on or marked as resolved.
+ */
+export function extractResolvedPoints(contributions: ConsensusContribution[]): string[] {
+  const resolved: string[] = [];
+
+  for (const contrib of contributions) {
+    if (contrib.position === 'SUPPORT' || contrib.position === 'SUPPORT_WITH_CONDITIONS' || contrib.position === 'PROPOSAL') {
+      const lines = contrib.content.split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        // Capture numbered recommendations, action items, and bullet points from proposals/agreements
+        const numberedMatch = trimmed.match(/^\d+\.\s+\*\*(.+?)\*\*/);
+        const actionMatch = trimmed.match(/^- \[ \]\s+(.+)/);
+        const checkMatch = trimmed.match(/^[-*]\s+\[?[xX✓]\]?\s*(.+)/);
+        const match = numberedMatch || actionMatch || checkMatch;
+        if (match && match[1] && match[1].length > 10) {
+          resolved.push(match[1].trim());
+        }
+      }
+    }
+  }
+
+  return resolved;
+}
+
+/**
  * Evaluate a round's contributions
  */
 export function evaluateRound(
   round: number,
   maxRounds: number,
-  contributions: ConsensusContribution[]
+  contributions: ConsensusContribution[],
+  previousResolvedPoints: string[] = []
 ): RoundStatus {
   const positionCounts: Record<ConsensusPosition, number> = {
     'PROPOSAL': 0,
@@ -283,22 +314,22 @@ export function evaluateRound(
     'CONCERN': 0,
     'OBJECTION': 0,
   };
-  
+
   const objections: string[] = [];
   const concerns: string[] = [];
   const conditions: string[] = [];
-  
+
   for (const contrib of contributions) {
     positionCounts[contrib.position]++;
-    
+
     if (contrib.position === 'OBJECTION') {
       objections.push(`${contrib.agentName}: ${contrib.positionReason || 'No reason given'}`);
     }
-    
+
     if (contrib.position === 'CONCERN') {
       concerns.push(`${contrib.agentName}: ${contrib.positionReason || 'Unspecified concern'}`);
     }
-    
+
     if (contrib.position === 'SUPPORT_WITH_CONDITIONS') {
       const extractedConditions = extractConditions(contrib.content);
       conditions.push(...extractedConditions.map(c => `${contrib.agentName}: ${c}`));
@@ -307,19 +338,23 @@ export function evaluateRound(
       }
     }
   }
-  
+
+  // Build resolved points: carry forward previous + extract new from this round
+  const newResolved = extractResolvedPoints(contributions);
+  const resolvedPoints = [...new Set([...previousResolvedPoints, ...newResolved])];
+
   // Consensus is reached when:
   // - No OBJECTION votes
   // - At least one vote (excluding PROPOSAL)
   // - All votes are SUPPORT or SUPPORT_WITH_CONDITIONS
   const votingContributions = contributions.filter(c => c.position !== 'PROPOSAL');
-  const consensusReached = 
+  const consensusReached =
     positionCounts['OBJECTION'] === 0 &&
     votingContributions.length > 0 &&
-    votingContributions.every(c => 
+    votingContributions.every(c =>
       c.position === 'SUPPORT' || c.position === 'SUPPORT_WITH_CONDITIONS'
     );
-  
+
   return {
     round,
     maxRounds,
@@ -329,6 +364,7 @@ export function evaluateRound(
     objections,
     concerns,
     conditions,
+    resolvedPoints,
   };
 }
 
@@ -402,10 +438,10 @@ export function buildProposerPrompt(
   previousRound?: RoundStatus
 ): string {
   const parts: string[] = [];
-  
+
   parts.push(`# Diskussions-Thema\n${topic}`);
   parts.push('');
-  
+
   if (round === 1) {
     parts.push('## Deine Aufgabe');
     parts.push('Erstelle einen initialen Vorschlag zu diesem Thema.');
@@ -415,46 +451,59 @@ export function buildProposerPrompt(
   } else if (previousRound) {
     parts.push(`## Runde ${round} - Überarbeiteter Vorschlag`);
     parts.push('');
+
+    // Show resolved points checklist
+    if (previousRound.resolvedPoints.length > 0) {
+      parts.push('### Bereits geklärte Punkte (NICHT erneut diskutieren!)');
+      parts.push('Diese Punkte sind abgeschlossen. Übernimm sie unverändert in deinen Vorschlag.');
+      parts.push('');
+      for (const point of previousRound.resolvedPoints) {
+        parts.push(`- [x] ${point}`);
+      }
+      parts.push('');
+    }
+
     parts.push('Basierend auf dem Feedback der vorherigen Runde:');
     parts.push('');
-    
+
     // Include feedback
     if (previousRound.objections.length > 0) {
-      parts.push('### 🚫 Einsprüche (müssen adressiert werden):');
+      parts.push('### Offene Einsprüche (MÜSSEN adressiert werden):');
       for (const obj of previousRound.objections) {
         parts.push(`- ${obj}`);
       }
       parts.push('');
     }
-    
+
     if (previousRound.concerns.length > 0) {
-      parts.push('### ⚠️ Bedenken:');
+      parts.push('### Offene Bedenken:');
       for (const concern of previousRound.concerns) {
         parts.push(`- ${concern}`);
       }
       parts.push('');
     }
-    
+
     if (previousRound.conditions.length > 0) {
-      parts.push('### 📋 Bedingungen:');
+      parts.push('### Offene Bedingungen:');
       for (const condition of previousRound.conditions) {
         parts.push(`- ${condition}`);
       }
       parts.push('');
     }
-    
+
     parts.push('### Vorherige Beiträge:');
     for (const contrib of previousRound.contributions) {
       parts.push(`**[${contrib.agentName}]** (${contrib.position})`);
       parts.push(contrib.content.slice(0, 500) + (contrib.content.length > 500 ? '...' : ''));
       parts.push('');
     }
-    
+
     parts.push('---');
-    parts.push('Erstelle einen ÜBERARBEITETEN Vorschlag, der das Feedback berücksichtigt.');
+    parts.push('Erstelle einen ÜBERARBEITETEN Vorschlag, der NUR die offenen Punkte adressiert.');
+    parts.push('Bereits geklärte Punkte übernehmen, NICHT erneut diskutieren.');
     parts.push('[POSITION: PROPOSAL] am Ende deiner Antwort.');
   }
-  
+
   return parts.join('\n');
 }
 
@@ -466,18 +515,32 @@ export function buildResponderPrompt(
   round: number,
   proposal: ConsensusContribution,
   previousResponses: ConsensusContribution[],
-  agentRole: string
+  agentRole: string,
+  resolvedPoints: string[] = []
 ): string {
   const parts: string[] = [];
-  
+
   parts.push(`# Diskussions-Thema\n${topic}`);
   parts.push('');
+
+  // Show resolved points checklist
+  if (resolvedPoints.length > 0) {
+    parts.push('## Bereits geklärte Punkte (NICHT erneut diskutieren!)');
+    parts.push('Die folgenden Punkte wurden in vorherigen Runden akzeptiert.');
+    parts.push('Wiederhole oder diskutiere diese NICHT. Konzentriere dich NUR auf offene Punkte.');
+    parts.push('');
+    for (const point of resolvedPoints) {
+      parts.push(`- [x] ${point}`);
+    }
+    parts.push('');
+  }
+
   parts.push(`## Runde ${round} - Aktueller Vorschlag`);
   parts.push('');
   parts.push(`**[${proposal.agentName}]** (${proposal.role})`);
   parts.push(proposal.content);
   parts.push('');
-  
+
   if (previousResponses.length > 0) {
     parts.push('## Bisherige Reaktionen dieser Runde:');
     for (const resp of previousResponses) {
@@ -486,17 +549,17 @@ export function buildResponderPrompt(
       parts.push('');
     }
   }
-  
+
   parts.push('---');
-  parts.push(`Als ${agentRole}: Reagiere auf den Vorschlag.`);
-  parts.push('Analysiere kritisch und gib deine Position an.');
+  parts.push(`Als ${agentRole}: Reagiere NUR auf offene Punkte im Vorschlag.`);
+  parts.push('Bereits geklärte Punkte sind abgehakt - nicht wiederholen.');
   parts.push('');
   parts.push('WICHTIG: Beende deine Antwort mit einer Position:');
   parts.push('- [POSITION: SUPPORT] - Volle Zustimmung');
   parts.push('- [POSITION: SUPPORT_WITH_CONDITIONS] - Mit Bedingungen');
   parts.push('- [POSITION: CONCERN] - Bedenken (kein Veto)');
   parts.push('- [POSITION: OBJECTION] - Einspruch (blockiert)');
-  
+
   return parts.join('\n');
 }
 

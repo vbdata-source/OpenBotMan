@@ -1,6 +1,6 @@
 discussion:
   maxRounds: 10
-  timeout: 3000
+  timeout: 180
   maxContext: 50000
   showAgentConfig: true
   prompts:
@@ -198,8 +198,8 @@ discussion:
     - id: researcher
       name: Research Analyst
       role: researcher
-      provider: openai
-      model: openai/gpt-oss-20b
+      provider: ollama
+      model: deepseek-r1:8b
       emoji: 🔬
       promptId: software-researcher
       systemPrompt: |
@@ -218,32 +218,44 @@ discussion:
         - Belege Aussagen mit Argumenten
 
         Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
-      baseUrl: http://localhost:1234/v1
       maxTokens: 4096
     - id: reviewer
       name: Security & Quality Expert
       role: reviewer
-      emoji: "🔍"
-      # provider: claude-api
-      # model: claude-opus-4-6
       provider: ollama
-      model: gpt-oss:120b-cloud
-      promptId: software-reviewer  # Referenz auf Prompt
+      model: qwen3:30b-a3b
+      emoji: 🔍
+      promptId: software-reviewer
+      systemPrompt: |
+        Du bist ein kritischer Code-Reviewer und Security-Experte.
 
-  # ==========================================
-  # Team-Presets (Agenten-Gruppen)
-  # ==========================================
-  # Phase 2+3: Teams können Prompts überschreiben
-  # Aktuell: Nur Agent-Liste (Backward-Compatible)
-  
+        DEINE PERSPEKTIVE:
+        - Sicherheitslücken und Vulnerabilities
+        - Performance-Bottlenecks
+        - Edge-Cases und Fehlerszenarien
+        - Code-Qualität und Wartbarkeit
+
+        DEIN STIL:
+        - Kritisch aber konstruktiv
+        - Zeige konkrete Risiken mit Beispielen
+        - Schlage Mitigationen vor
+        - Priorisiere nach Schweregrad
+
+        Antworte auf Deutsch. Fasse am Ende deine Position klar zusammen.
+      maxTokens: 4096
   teams:
     - id: full
-      name: "🌟 Volles Team (4 Experten)"
-      description: "Alle Experten für umfassende Analyse"
-      agents: [planner, coder, researcher, reviewer]
+      name: 🌟 Volles Team (4 Experten)
+      description: Alle Experten für umfassende Analyse
+      agents:
+        - planner
+        - coder
+        - researcher
+        - reviewer
       default: true
-      workflows: [full-analysis, architecture]  # Default für Vollanalyse
-
+      workflows:
+        - full-analysis
+        - architecture
     - id: quick
       name: ⚡ Schnelle Analyse
       description: Planner + Reviewer für schnelle Einschätzung
@@ -276,23 +288,11 @@ discussion:
       workflows:
         - performance
     - id: cloud-only
-      name: "☁️ Nur Cloud (schnell)"
-      description: "Gemini + Claude für maximale Geschwindigkeit"
-      agents: [planner, reviewer]
-    
-    # Beispiel: Business Team mit anderen Prompts (Phase 2+3)
-    # - id: business-team
-    #   name: "💼 Business Team"
-    #   description: "Für Geschäftsentscheidungen"
-    #   agents:
-    #     - agentId: planner
-    #       promptId: business-strategist  # Override!
-    #     - agentId: researcher
-    #       promptId: business-analyst     # Override!
-
-# ============================================
-# Logging
-# ============================================
+      name: ☁️ Nur Cloud (schnell)
+      description: Gemini + Claude für maximale Geschwindigkeit
+      agents:
+        - planner
+        - reviewer
 logging:
   level: info
   format: pretty

@@ -56,4 +56,9 @@ htmlcov/
 Thumbs.db
 node_modules/
 .turbo/
-nul 
+
+# Build output
+dist/
+
+# Discussions (local only)
+discussions/

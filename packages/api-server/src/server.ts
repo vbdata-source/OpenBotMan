@@ -1016,7 +1016,8 @@ async function runDiscussion(
             const previousContribs = round === 1 
               ? roundContributions 
               : [...allContributions.slice(-agentConfigs.length), ...roundContributions];
-            prompt = buildResponderPrompt(topic, fullContext, previousContribs, round, agent.role);
+            const prevResolved = rounds.length > 0 ? rounds[rounds.length - 1]!.resolvedPoints : [];
+            prompt = buildResponderPrompt(topic, fullContext, previousContribs, round, agent.role, prevResolved);
           }
           
           const response = await agentProvider.send(prompt, {
@@ -1066,7 +1067,8 @@ async function runDiscussion(
       }
       
       // Evaluate round
-      const roundResult = evaluateRound(round, roundContributions);
+      const prevResolved = rounds.length > 0 ? rounds[rounds.length - 1]!.resolvedPoints : [];
+      const roundResult = evaluateRound(round, roundContributions, prevResolved);
       rounds.push(roundResult);
       consensusReached = roundResult.consensusReached;
       

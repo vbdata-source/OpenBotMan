@@ -1551,7 +1551,8 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
         round,
         contributions[0]!, // The proposal
         contributions.slice(1), // Previous responses this round
-        responder.role
+        responder.role,
+        previousRound?.resolvedPoints ?? []
       );
       
       const fullResponderPrompt = contextStr 
@@ -1631,7 +1632,7 @@ export async function runDiscussion(options: DiscussOptions): Promise<Discussion
     }
     
     // Evaluate round
-    const roundStatus = evaluateRound(round, maxRounds, contributions);
+    const roundStatus = evaluateRound(round, maxRounds, contributions, previousRound?.resolvedPoints ?? []);
     rounds.push(roundStatus);
     previousRound = roundStatus;
     

@@ -31,6 +31,7 @@ export interface RoundResult {
   consensusReached: boolean;
   objections: string[];
   concerns: string[];
+  resolvedPoints: string[];
 }
 
 export interface ConsensusResult {
@@ -118,11 +119,44 @@ export function extractPosition(content: string): {
 }
 
 /**
+ * Extract resolved/agreed points from contributions where all agents agree.
+ * Points are considered resolved when supported (SUPPORT or SUPPORT_WITH_CONDITIONS)
+ * and no one objects.
+ */
+export function extractResolvedPoints(contributions: AgentContribution[]): string[] {
+  const resolved: string[] = [];
+
+  for (const contrib of contributions) {
+    if (contrib.position === 'SUPPORT' || contrib.position === 'SUPPORT_WITH_CONDITIONS') {
+      // Extract key points from supportive contributions
+      const lines = contrib.content.split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        // Capture bullet points, numbered items, and action items that indicate agreement
+        if (
+          (trimmed.match(/^[-*]\s+\[?[xX✓]\]?\s*(.+)/) ||
+           trimmed.match(/^(?:stimme zu|einverstanden|unterstütze|agree|support):\s*(.+)/i) ||
+           trimmed.match(/^✅\s*(.+)/))
+        ) {
+          const point = trimmed.replace(/^[-*]\s+\[?[xX✓]\]?\s*/, '').replace(/^✅\s*/, '').trim();
+          if (point.length > 10) {
+            resolved.push(point);
+          }
+        }
+      }
+    }
+  }
+
+  return resolved;
+}
+
+/**
  * Evaluate round for consensus
  */
 export function evaluateRound(
   round: number,
-  contributions: AgentContribution[]
+  contributions: AgentContribution[],
+  previousResolvedPoints: string[] = []
 ): RoundResult {
   const positionCounts: Record<ConsensusPosition, number> = {
     'PROPOSAL': 0,
@@ -132,31 +166,35 @@ export function evaluateRound(
     'OBJECTION': 0,
     'ERROR': 0,
   };
-  
+
   const objections: string[] = [];
   const concerns: string[] = [];
-  
+
   for (const contrib of contributions) {
     positionCounts[contrib.position]++;
-    
+
     if (contrib.position === 'OBJECTION') {
       objections.push(`${contrib.agentName}: ${contrib.positionReason || 'Keine Begründung'}`);
     }
-    
+
     if (contrib.position === 'CONCERN') {
       concerns.push(`${contrib.agentName}: ${contrib.positionReason || 'Unspezifiziertes Bedenken'}`);
     }
   }
-  
+
+  // Build resolved points: carry forward previous + extract new from this round
+  const newResolved = extractResolvedPoints(contributions);
+  const resolvedPoints = [...new Set([...previousResolvedPoints, ...newResolved])];
+
   // Consensus: No objections and all support or conditional support
   const votingContributions = contributions.filter(c => c.position !== 'PROPOSAL');
-  const consensusReached = 
+  const consensusReached =
     positionCounts['OBJECTION'] === 0 &&
     votingContributions.length > 0 &&
-    votingContributions.every(c => 
+    votingContributions.every(c =>
       c.position === 'SUPPORT' || c.position === 'SUPPORT_WITH_CONDITIONS'
     );
-  
+
   return {
     round,
     contributions,
@@ -164,6 +202,7 @@ export function evaluateRound(
     consensusReached,
     objections,
     concerns,
+    resolvedPoints,
   };
 }
 
@@ -211,14 +250,24 @@ export function buildResponderPrompt(
   context: string,
   previousContributions: AgentContribution[],
   round: number,
-  agentRole: string
+  agentRole: string,
+  resolvedPoints: string[] = []
 ): string {
   const previousResponses = previousContributions
     .map(c => `### ${c.agentName} (${c.role}) - [${c.position}]\n${c.content}`)
     .join('\n\n---\n\n');
-  
+
   const hasCode = context && context.includes('```');
-  
+
+  const resolvedSection = resolvedPoints.length > 0
+    ? `\n## Bereits geklärte Punkte (NICHT erneut diskutieren!)
+Die folgenden Punkte wurden in vorherigen Runden bereits akzeptiert.
+Wiederhole oder diskutiere diese NICHT erneut. Konzentriere dich NUR auf offene Punkte.
+
+${resolvedPoints.map(p => `- [x] ${p}`).join('\n')}
+`
+    : '';
+
   return `Du bist ein ${agentRole} in Runde ${round} einer Multi-Agent-Diskussion.
 ${hasCode ? `
 **WICHTIG - CODE-ANALYSE:**
@@ -228,15 +277,16 @@ Dir wurde Quellcode bereitgestellt. Referenziere konkrete Dateien, Funktionen un
 ${topic}
 
 ${context ? `## Code-Kontext\n${context}` : ''}
-
+${resolvedSection}
 ## Bisherige Beiträge
 ${previousResponses}
 
 ## Deine Aufgabe
-1. Bewerte die bisherigen Analysen kritisch
-2. Ergänze fehlende Perspektiven
+1. Bewerte NUR die noch OFFENEN Punkte kritisch
+2. Ergänze fehlende Perspektiven zu offenen Punkten
 3. Reagiere auf Punkte der anderen Agents
 4. Bei Meinungsverschiedenheiten: Begründe deine Position
+5. Wiederhole KEINE bereits geklärten Punkte
 
 ## Position (PFLICHT!)
 Beende mit genau einer dieser Positionen:
