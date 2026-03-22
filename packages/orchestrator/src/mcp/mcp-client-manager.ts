@@ -81,9 +81,10 @@ export class MCPClientManager {
     }
 
     // Resolve relative paths in args (e.g. "tools/fetch-mcp/server.mjs")
+    // Use forward slashes to avoid Windows backslash escape issues in child processes
     const resolvedArgs = config.args?.map(arg => {
       if (arg.endsWith('.js') || arg.endsWith('.mjs') || arg.endsWith('.ts')) {
-        return resolve(arg);
+        return resolve(arg).replace(/\\/g, '/');
       }
       return arg;
     });
