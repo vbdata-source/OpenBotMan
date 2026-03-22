@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
-import { Bot, LayoutDashboard, Plus, Settings } from 'lucide-react'
+import { Bot, LayoutDashboard, Plus, Wrench, Settings } from 'lucide-react'
 
 export default function Layout() {
   const location = useLocation()
@@ -7,6 +7,7 @@ export default function Layout() {
   const navItems = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/new', label: 'Neue Diskussion', icon: Plus },
+    { path: '/tools', label: 'Tools', icon: Wrench },
     { path: '/settings', label: 'Einstellungen', icon: Settings },
   ]
 

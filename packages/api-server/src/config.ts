@@ -97,6 +97,15 @@ interface ConfigFile {
       workflows?: string[];
     }>;
   };
+  mcpServers?: Array<{
+    id: string;
+    name: string;
+    command: string;
+    args?: string[];
+    env?: Record<string, string>;
+    allowedAgents?: string[];
+    enabled?: boolean;
+  }>;
   orchestrator?: {
     provider?: string;
     model?: string;
@@ -376,6 +385,15 @@ export function saveConfig(updates: {
   agents?: AgentConfig[];
   teams?: TeamConfig[];
   settings?: { maxRounds?: number; timeout?: number; maxContext?: number };
+  mcpServers?: Array<{
+    id: string;
+    name: string;
+    command: string;
+    args?: string[];
+    env?: Record<string, string>;
+    allowedAgents?: string[];
+    enabled?: boolean;
+  }>;
 }): { success: boolean; error?: string } {
   const path = findConfigPath();
   if (!path) {
@@ -440,6 +458,11 @@ export function saveConfig(updates: {
       }
     }
     
+    // Update MCP servers
+    if (updates.mcpServers) {
+      config.mcpServers = updates.mcpServers;
+    }
+
     // Write back to file
     const yamlContent = YAML.stringify(config, { indent: 2 });
     writeFileSync(path, yamlContent, 'utf-8');
@@ -569,5 +592,31 @@ export function getAgentsSafe(config: DiscussionConfig): Array<AgentConfig & { a
     ...a,
     apiKey: undefined, // Don't send actual key
     apiKeyMasked: maskApiKey(a.apiKey),
+  }));
+}
+
+/**
+ * Get MCP server configurations from config.yaml
+ */
+export function getMcpServers(): Array<{
+  id: string;
+  name: string;
+  command: string;
+  args?: string[];
+  allowedAgents?: string[];
+  enabled: boolean;
+}> {
+  const raw = getRawConfig();
+  if (!raw) return [];
+
+  const servers = raw.content.mcpServers ?? [];
+  return servers.map(s => ({
+    id: s.id,
+    name: s.name,
+    command: s.command,
+    args: s.args,
+    allowedAgents: s.allowedAgents,
+    enabled: s.enabled !== false,
+    // Note: env vars are NOT exposed to frontend (security)
   }));
 }

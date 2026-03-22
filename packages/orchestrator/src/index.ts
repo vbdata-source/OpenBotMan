@@ -13,6 +13,8 @@ export * from './agent-communication.js';
 export * from './enhanced-discussion.js';
 export * from './auth/index.js';
 export * from './providers/index.js';
+export * from './tools/index.js';
+export { MCPClientManager, type MCPServerConfig } from './mcp/mcp-client-manager.js';
 
 // Re-export main classes
 export { Orchestrator } from './orchestrator.js';

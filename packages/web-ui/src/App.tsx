@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import NewDiscussion from './pages/NewDiscussion'
 import JobView from './pages/JobView'
 import Settings from './pages/Settings'
+import Tools from './pages/Tools'
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
         <Route index element={<Dashboard />} />
         <Route path="new" element={<NewDiscussion />} />
         <Route path="jobs/:jobId" element={<JobView />} />
+        <Route path="tools" element={<Tools />} />
         <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>

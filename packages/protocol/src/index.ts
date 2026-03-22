@@ -7,6 +7,7 @@
 
 export * from './types.js';
 export * from './encoder.js';
+export * from './tools.js';
 
 // Re-export commonly used items at top level
 export {

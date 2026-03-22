@@ -32,7 +32,7 @@ import {
 import { createProvider } from '@openbotman/orchestrator';
 
 // Import config loader
-import { getConfig, getAgentsForDiscussion, getAgentsForTeam, getTeams, getDefaultTeam, saveConfig, reloadConfig, getAgentsSafe, getPrompts, getPromptsFull, savePrompts, type PromptConfigFull } from './config.js';
+import { getConfig, getAgentsForDiscussion, getAgentsForTeam, getTeams, getDefaultTeam, saveConfig, reloadConfig, getAgentsSafe, getPrompts, getPromptsFull, savePrompts, getMcpServers, type PromptConfigFull } from './config.js';
 
 /**
  * Create and configure the Express server
@@ -354,6 +354,71 @@ export function createServer(config: ApiServerConfig): Express {
     jobStore.setError(jobId, 'Cancelled by user', job.durationMs || 0);
     console.log(`[${jobId}] Job cancelled by user`);
     res.json({ success: true, message: 'Job cancelled' });
+  });
+
+  // ============================================
+  // Tools & MCP Endpoints
+  // ============================================
+
+  /**
+   * GET /api/v1/tools - List registered tools and MCP server status
+   */
+  app.get('/api/v1/tools', (_req: Request, res: Response) => {
+    const mcpServers = getMcpServers();
+
+    res.json({
+      mcpServers: mcpServers.map(s => ({
+        id: s.id,
+        name: s.name,
+        command: s.command,
+        args: s.args,
+        enabled: s.enabled,
+        allowedAgents: s.allowedAgents,
+        status: 'configured', // Phase 2b: will show 'connected'/'error' when MCPClientManager is wired
+      })),
+      toolRegistry: {
+        status: 'ready',
+        info: 'ToolRegistry is available in the Orchestrator. Register tools via MCPClientManager or programmatically.',
+      },
+    });
+  });
+
+  /**
+   * PUT /api/v1/tools/mcp-servers - Save MCP server configurations
+   */
+  app.put('/api/v1/tools/mcp-servers', (req: Request, res: Response) => {
+    const { servers } = req.body as {
+      servers: Array<{
+        id: string;
+        name: string;
+        command: string;
+        args?: string[];
+        env?: Record<string, string>;
+        allowedAgents?: string[];
+        enabled?: boolean;
+      }>;
+    };
+
+    if (!Array.isArray(servers)) {
+      res.status(400).json({ error: 'servers array required' });
+      return;
+    }
+
+    // Validate each server has required fields
+    for (const s of servers) {
+      if (!s.id || !s.name || !s.command) {
+        res.status(400).json({ error: `Server missing required fields (id, name, command): ${JSON.stringify(s)}` });
+        return;
+      }
+    }
+
+    const result = saveConfig({ mcpServers: servers });
+    if (result.success) {
+      reloadConfig();
+      res.json({ success: true, count: servers.length });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
   });
 
   // ============================================

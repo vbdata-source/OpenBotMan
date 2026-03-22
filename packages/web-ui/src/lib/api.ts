@@ -86,6 +86,32 @@ export async function cancelJob(jobId: string) {
   return res.json()
 }
 
+export async function fetchTools() {
+  const res = await apiFetch('/api/v1/tools')
+  if (!res.ok) throw new Error('Failed to fetch tools')
+  return res.json()
+}
+
+export async function saveMcpServers(servers: Array<{
+  id: string
+  name: string
+  command: string
+  args?: string[]
+  env?: Record<string, string>
+  allowedAgents?: string[]
+  enabled?: boolean
+}>) {
+  const res = await apiFetch('/api/v1/tools/mcp-servers', {
+    method: 'PUT',
+    body: JSON.stringify({ servers }),
+  })
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.error || 'Failed to save MCP servers')
+  }
+  return res.json()
+}
+
 export async function deleteJob(jobId: string) {
   const res = await apiFetch(`/api/v1/jobs/${jobId}`, {
     method: 'DELETE',

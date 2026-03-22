@@ -19,6 +19,8 @@ import { AgentRunner, type AgentExecutionResult } from './agent-runner.js';
 import { DiscussionEngine, type DiscussionOptions, type DiscussionResult } from './discussion.js';
 import { ClaudeAuthProvider, type ClaudeAuthConfig } from './auth/index.js';
 import { ClaudeCliProvider } from './providers/claude-cli.js';
+import { ToolRegistry } from './tools/tool-registry.js';
+import { AuditLogger } from './tools/audit-logger.js';
 import type { 
   OrchestratorConfig, 
   Task, 
@@ -38,6 +40,8 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
   private discussionEngine: DiscussionEngine;
   private knowledgeBase?: KnowledgeBase;
   private authProvider: ClaudeAuthProvider;
+  private toolRegistry: ToolRegistry;
+  private auditLogger: AuditLogger;
   
   // State
   private tasks: Map<string, Task> = new Map();
@@ -86,6 +90,8 @@ export class Orchestrator extends EventEmitter<OrchestratorEvents> {
     }
     
     // Initialize components
+    this.toolRegistry = new ToolRegistry();
+    this.auditLogger = new AuditLogger(null); // In-memory only for now
     this.agentRunner = new AgentRunner();
     this.discussionEngine = new DiscussionEngine(this.agentRunner);
     
@@ -288,8 +294,9 @@ Communication Style:
   /**
    * Build tool definitions
    */
-  private buildTools(): Anthropic.Tool[] {
-    return [
+  private buildTools(agentId?: string): Anthropic.Tool[] {
+    // Core meta-tools (hardcoded, need full orchestrator access)
+    const metaTools: Anthropic.Tool[] = [
       {
         name: 'delegate_task',
         description: 'Assign a task to a specific agent. Returns the agent response.',
@@ -448,6 +455,14 @@ Communication Style:
         },
       },
     ];
+
+    // Add plugin tools from registry (if any assigned to this agent)
+    if (agentId) {
+      const pluginTools = this.toolRegistry.toAnthropicTools(agentId);
+      return [...metaTools, ...pluginTools as Anthropic.Tool[]];
+    }
+
+    return metaTools;
   }
   
   /**
@@ -503,8 +518,26 @@ Communication Style:
           input['options'] as string[] | undefined
         );
         
-      default:
+      default: {
+        // Check plugin tools in registry
+        if (this.toolRegistry.has(name)) {
+          const startTime = Date.now();
+          const context = { agentId: 'orchestrator', agentName: 'Orchestrator' };
+          const result = await this.toolRegistry.execute(name, input, context);
+
+          this.auditLogger.logToolCall(
+            context.agentId,
+            context.agentName,
+            name,
+            input,
+            result,
+            Date.now() - startTime
+          );
+
+          return result;
+        }
         throw new Error(`Unknown tool: ${name}`);
+      }
     }
   }
   
@@ -791,6 +824,20 @@ Keep it concise - max 3-4 bullet points.
   /**
    * Get orchestrator status
    */
+  /**
+   * Access the tool registry for registering external tools.
+   */
+  getToolRegistry(): ToolRegistry {
+    return this.toolRegistry;
+  }
+
+  /**
+   * Access the audit logger for querying tool call history.
+   */
+  getAuditLogger(): AuditLogger {
+    return this.auditLogger;
+  }
+
   getStatus(): Record<string, unknown> {
     const uptime = Date.now() - this.startTime.getTime();
     

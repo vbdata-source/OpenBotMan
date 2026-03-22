@@ -2,9 +2,12 @@
 
 /**
  * OpenBotMan MCP Server
- * 
+ *
  * Model Context Protocol server for IDE integration.
- * Provides tools for orchestrating multi-agent tasks.
+ * Connects to the OpenBotMan API server via HTTP to execute real actions.
+ *
+ * Usage:
+ *   OPENBOTMAN_API_URL=http://localhost:8080 OPENBOTMAN_API_KEY=your-key node dist/server.js
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -16,12 +19,67 @@ import {
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
+const API_URL = process.env['OPENBOTMAN_API_URL'] || 'http://localhost:8080';
+const API_KEY = process.env['OPENBOTMAN_API_KEY'] || '';
+
 /**
- * OpenBotMan MCP Server
+ * Helper: Make authenticated API call to the OpenBotMan API server
+ */
+async function apiCall(path: string, options: {
+  method?: string;
+  body?: unknown;
+} = {}): Promise<unknown> {
+  const url = `${API_URL}${path}`;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (API_KEY) {
+    headers['Authorization'] = `Bearer ${API_KEY}`;
+  }
+
+  const response = await fetch(url, {
+    method: options.method || 'GET',
+    headers,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`API ${response.status}: ${text}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Poll a job until completion
+ */
+async function pollJob(jobId: string, timeoutMs = 300000): Promise<{ status: string; result?: string; error?: string }> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const job = await apiCall(`/api/v1/jobs/${jobId}`) as {
+      status: string;
+      result?: string;
+      error?: string;
+      progress?: string;
+    };
+
+    if (job.status === 'complete' || job.status === 'error') {
+      return job;
+    }
+
+    // Wait 3 seconds between polls
+    await new Promise(resolve => setTimeout(resolve, 3000));
+  }
+  throw new Error(`Job ${jobId} timed out after ${timeoutMs / 1000}s`);
+}
+
+/**
+ * OpenBotMan MCP Server - connected to live API server
  */
 class OpenBotManMCPServer {
   private server: Server;
-  
+
   constructor() {
     this.server = new Server(
       {
@@ -35,417 +93,315 @@ class OpenBotManMCPServer {
         },
       }
     );
-    
+
     this.setupHandlers();
   }
-  
-  /**
-   * Set up request handlers
-   */
+
   private setupHandlers(): void {
-    // List available tools
+    // ========== TOOLS ==========
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: [
           {
-            name: 'orchestrate',
-            description: 'Coordinate multiple AI agents to complete a complex task',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                task: {
-                  type: 'string',
-                  description: 'The task to orchestrate',
-                },
-                agents: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Specific agents to use (optional)',
-                },
-                workflow: {
-                  type: 'string',
-                  description: 'Workflow to execute (optional)',
-                },
-              },
-              required: ['task'],
-            },
-          },
-          {
             name: 'discuss',
-            description: 'Start a discussion between agents to reach consensus',
+            description: 'Start a multi-agent expert discussion to reach consensus on a topic. ' +
+              'Agents discuss autonomously and return a structured result with positions and action items.',
             inputSchema: {
               type: 'object',
               properties: {
                 topic: {
                   type: 'string',
-                  description: 'The topic to discuss',
+                  description: 'The topic or question for the experts to discuss',
                 },
-                participants: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Agent IDs to participate',
+                team: {
+                  type: 'string',
+                  description: 'Team ID (e.g. "full", "quick", "code-review", "security"). Optional.',
+                },
+                workspace: {
+                  type: 'string',
+                  description: 'Workspace path for code context. Optional.',
                 },
                 maxRounds: {
                   type: 'number',
-                  description: 'Maximum discussion rounds',
-                  default: 3,
+                  description: 'Maximum discussion rounds (default: from config)',
                 },
               },
               required: ['topic'],
             },
           },
           {
-            name: 'knowledge_query',
-            description: 'Search the shared knowledge base',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                query: {
-                  type: 'string',
-                  description: 'Search query',
-                },
-                types: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Filter by knowledge types',
-                },
-                limit: {
-                  type: 'number',
-                  description: 'Maximum results',
-                  default: 10,
-                },
-              },
-              required: ['query'],
-            },
-          },
-          {
-            name: 'knowledge_add',
-            description: 'Add new knowledge to the shared knowledge base',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                type: {
-                  type: 'string',
-                  enum: ['decision', 'pattern', 'learning', 'code', 'doc'],
-                  description: 'Type of knowledge',
-                },
-                title: {
-                  type: 'string',
-                  description: 'Knowledge title',
-                },
-                content: {
-                  type: 'string',
-                  description: 'Knowledge content',
-                },
-                tags: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Tags for categorization',
-                },
-              },
-              required: ['type', 'title', 'content'],
-            },
-          },
-          {
-            name: 'agent_status',
-            description: 'Get status of all agents',
+            name: 'status',
+            description: 'Get OpenBotMan system status including available providers and server health.',
             inputSchema: {
               type: 'object',
               properties: {},
             },
           },
           {
-            name: 'delegate',
-            description: 'Delegate a task to a specific agent',
+            name: 'list_teams',
+            description: 'List available expert teams with their agents.',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+            },
+          },
+          {
+            name: 'get_job',
+            description: 'Get the status and result of a running or completed discussion job.',
             inputSchema: {
               type: 'object',
               properties: {
-                agentId: {
+                jobId: {
                   type: 'string',
-                  description: 'Agent to delegate to',
-                },
-                task: {
-                  type: 'string',
-                  description: 'Task description',
-                },
-                role: {
-                  type: 'string',
-                  description: 'Role context',
-                },
-                priority: {
-                  type: 'number',
-                  description: 'Priority (0-4)',
-                  default: 1,
+                  description: 'The job ID to check',
                 },
               },
-              required: ['agentId', 'task'],
+              required: ['jobId'],
             },
           },
         ],
       };
     });
-    
-    // Handle tool calls
+
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
-      
+
       try {
         switch (name) {
-          case 'orchestrate':
-            return await this.handleOrchestrate(args as any);
           case 'discuss':
-            return await this.handleDiscuss(args as any);
-          case 'knowledge_query':
-            return await this.handleKnowledgeQuery(args as any);
-          case 'knowledge_add':
-            return await this.handleKnowledgeAdd(args as any);
-          case 'agent_status':
-            return await this.handleAgentStatus();
-          case 'delegate':
-            return await this.handleDelegate(args as any);
+            return await this.handleDiscuss(args as {
+              topic: string;
+              team?: string;
+              workspace?: string;
+              maxRounds?: number;
+            });
+
+          case 'status':
+            return await this.handleStatus();
+
+          case 'list_teams':
+            return await this.handleListTeams();
+
+          case 'get_job':
+            return await this.handleGetJob(args as { jobId: string });
+
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
       } catch (error) {
         return {
-          content: [
-            {
-              type: 'text',
-              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-            },
-          ],
+          content: [{
+            type: 'text',
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          }],
           isError: true,
         };
       }
     });
-    
-    // List resources
+
+    // ========== RESOURCES ==========
     this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
       return {
         resources: [
           {
-            uri: 'openbotman://agents',
-            name: 'Agent List',
-            description: 'List of configured agents',
+            uri: 'openbotman://teams',
+            name: 'Expert Teams',
+            description: 'Available expert teams and their agents',
             mimeType: 'application/json',
           },
           {
-            uri: 'openbotman://workflows',
-            name: 'Workflow List',
-            description: 'List of available workflows',
-            mimeType: 'application/json',
-          },
-          {
-            uri: 'openbotman://knowledge/stats',
-            name: 'Knowledge Stats',
-            description: 'Knowledge base statistics',
+            uri: 'openbotman://health',
+            name: 'System Health',
+            description: 'API server health and provider status',
             mimeType: 'application/json',
           },
         ],
       };
     });
-    
-    // Read resources
+
     this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       const { uri } = request.params;
-      
+
       switch (uri) {
-        case 'openbotman://agents':
+        case 'openbotman://teams': {
+          const data = await apiCall('/api/v1/teams');
           return {
-            contents: [
-              {
-                uri,
-                mimeType: 'application/json',
-                text: JSON.stringify({
-                  agents: [
-                    { id: 'claude_code', role: 'coder', status: 'idle' },
-                    { id: 'gemini', role: 'reviewer', status: 'idle' },
-                    { id: 'gpt4', role: 'tester', status: 'idle' },
-                  ],
-                }, null, 2),
-              },
-            ],
+            contents: [{
+              uri,
+              mimeType: 'application/json',
+              text: JSON.stringify(data, null, 2),
+            }],
           };
-        
-        case 'openbotman://workflows':
+        }
+
+        case 'openbotman://health': {
+          const data = await apiCall('/health');
           return {
-            contents: [
-              {
-                uri,
-                mimeType: 'application/json',
-                text: JSON.stringify({
-                  workflows: [
-                    { id: 'code_review', name: 'Code Review' },
-                    { id: 'feature_development', name: 'Feature Development' },
-                  ],
-                }, null, 2),
-              },
-            ],
+            contents: [{
+              uri,
+              mimeType: 'application/json',
+              text: JSON.stringify(data, null, 2),
+            }],
           };
-        
-        case 'openbotman://knowledge/stats':
-          return {
-            contents: [
-              {
-                uri,
-                mimeType: 'application/json',
-                text: JSON.stringify({
-                  totalDocuments: 0,
-                  byType: {},
-                  lastUpdated: new Date().toISOString(),
-                }, null, 2),
-              },
-            ],
-          };
-        
+        }
+
         default:
           throw new Error(`Unknown resource: ${uri}`);
       }
     });
   }
-  
+
+  // ========== Tool Handlers ==========
+
   /**
-   * Handle orchestrate tool
-   */
-  private async handleOrchestrate(args: {
-    task: string;
-    agents?: string[];
-    workflow?: string;
-  }) {
-    // TODO: Connect to actual orchestrator
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Orchestrating task: "${args.task}"\n\n` +
-                `Agents: ${args.agents?.join(', ') || 'auto-selected'}\n` +
-                `Workflow: ${args.workflow || 'dynamic'}\n\n` +
-                `[MCP Server - Orchestrator integration pending]`,
-        },
-      ],
-    };
-  }
-  
-  /**
-   * Handle discuss tool
+   * Start a real discussion via the API server.
+   * Sends async request, polls for completion, returns result.
    */
   private async handleDiscuss(args: {
     topic: string;
-    participants?: string[];
+    team?: string;
+    workspace?: string;
     maxRounds?: number;
   }) {
-    return {
-      content: [
-        {
+    // Start async discussion
+    const body: Record<string, unknown> = {
+      topic: args.topic,
+      async: true,
+    };
+    if (args.team) body.team = args.team;
+    if (args.workspace) {
+      body.workspace = args.workspace;
+      body.include = ['**/*.ts', '**/*.js', '**/*.json', '**/*.py', '**/*.md'];
+    }
+    if (args.maxRounds) body.maxRounds = args.maxRounds;
+
+    const startResult = await apiCall('/api/v1/discuss', {
+      method: 'POST',
+      body,
+    }) as { id: string };
+
+    // Poll for completion
+    const job = await pollJob(startResult.id);
+
+    if (job.status === 'error') {
+      return {
+        content: [{
           type: 'text',
-          text: `Starting discussion: "${args.topic}"\n\n` +
-                `Participants: ${args.participants?.join(', ') || 'all agents'}\n` +
-                `Max rounds: ${args.maxRounds || 3}\n\n` +
-                `[MCP Server - Discussion engine integration pending]`,
-        },
-      ],
+          text: `Discussion failed: ${job.error || 'Unknown error'}`,
+        }],
+        isError: true,
+      };
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: job.result || 'Discussion completed but no result was returned.',
+      }],
     };
   }
-  
+
   /**
-   * Handle knowledge query
+   * Get system health status from the API server.
    */
-  private async handleKnowledgeQuery(args: {
-    query: string;
-    types?: string[];
-    limit?: number;
-  }) {
+  private async handleStatus() {
+    const health = await apiCall('/health') as {
+      status: string;
+      version: string;
+      uptime: number;
+      providers: Array<{ name: string; available: boolean }>;
+    };
+
+    const lines = [
+      `Status: ${health.status}`,
+      `Version: ${health.version}`,
+      `Uptime: ${health.uptime}s`,
+      '',
+      'Providers:',
+      ...health.providers.map(p =>
+        `  ${p.available ? '[OK]' : '[--]'} ${p.name}`
+      ),
+    ];
+
     return {
-      content: [
-        {
-          type: 'text',
-          text: `Searching knowledge base: "${args.query}"\n\n` +
-                `Types: ${args.types?.join(', ') || 'all'}\n` +
-                `Limit: ${args.limit || 10}\n\n` +
-                `Results: [Knowledge base integration pending]`,
-        },
-      ],
+      content: [{
+        type: 'text',
+        text: lines.join('\n'),
+      }],
     };
   }
-  
+
   /**
-   * Handle knowledge add
+   * List available teams from the API server.
    */
-  private async handleKnowledgeAdd(args: {
-    type: string;
-    title: string;
-    content: string;
-    tags?: string[];
-  }) {
+  private async handleListTeams() {
+    const data = await apiCall('/api/v1/teams') as {
+      teams: Array<{
+        id: string;
+        name: string;
+        description: string;
+        agentCount: number;
+        default: boolean;
+      }>;
+    };
+
+    const lines = data.teams.map(t =>
+      `${t.default ? '* ' : '  '}${t.id} - ${t.name} (${t.agentCount} agents)${t.default ? ' [default]' : ''}`
+    );
+
     return {
-      content: [
-        {
-          type: 'text',
-          text: `Adding knowledge: "${args.title}"\n\n` +
-                `Type: ${args.type}\n` +
-                `Tags: ${args.tags?.join(', ') || 'none'}\n` +
-                `Content: ${args.content.slice(0, 100)}...\n\n` +
-                `[Knowledge base integration pending]`,
-        },
-      ],
+      content: [{
+        type: 'text',
+        text: `Available Teams:\n${lines.join('\n')}`,
+      }],
     };
   }
-  
+
   /**
-   * Handle agent status
+   * Get job status/result.
    */
-  private async handleAgentStatus() {
-    return {
-      content: [
-        {
+  private async handleGetJob(args: { jobId: string }) {
+    const job = await apiCall(`/api/v1/jobs/${args.jobId}`) as {
+      status: string;
+      progress?: string;
+      result?: string;
+      error?: string;
+      durationMs?: number;
+    };
+
+    if (job.status === 'complete') {
+      return {
+        content: [{
           type: 'text',
-          text: JSON.stringify({
-            agents: [
-              { id: 'claude_code', role: 'coder', status: 'idle', tasks: 0 },
-              { id: 'gemini', role: 'reviewer', status: 'idle', tasks: 0 },
-              { id: 'gpt4', role: 'tester', status: 'idle', tasks: 0 },
-            ],
-            totalTasks: 0,
-            uptime: '0s',
-          }, null, 2),
-        },
-      ],
+          text: job.result || 'Job completed.',
+        }],
+      };
+    }
+
+    if (job.status === 'error') {
+      return {
+        content: [{
+          type: 'text',
+          text: `Job failed: ${job.error}`,
+        }],
+        isError: true,
+      };
+    }
+
+    return {
+      content: [{
+        type: 'text',
+        text: `Job ${args.jobId}: ${job.status} - ${job.progress || 'processing...'}`,
+      }],
     };
   }
-  
-  /**
-   * Handle delegate
-   */
-  private async handleDelegate(args: {
-    agentId: string;
-    task: string;
-    role?: string;
-    priority?: number;
-  }) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Delegating to ${args.agentId}:\n\n` +
-                `Task: ${args.task}\n` +
-                `Role: ${args.role || 'default'}\n` +
-                `Priority: ${args.priority || 1}\n\n` +
-                `[Agent runner integration pending]`,
-        },
-      ],
-    };
-  }
-  
-  /**
-   * Start the server
-   */
+
   async start(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error('OpenBotMan MCP Server running on stdio');
+    console.error(`OpenBotMan MCP Server running (API: ${API_URL})`);
   }
 }
 
-// Start server
 const server = new OpenBotManMCPServer();
 server.start().catch(console.error);
