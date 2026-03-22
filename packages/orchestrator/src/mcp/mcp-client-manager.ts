@@ -8,7 +8,8 @@
  * to external community tools.
  */
 
-import { resolve } from 'path';
+import { resolve, join } from 'path';
+import { existsSync } from 'fs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { OpenBotManTool, ToolResult } from '@openbotman/protocol';
@@ -83,10 +84,27 @@ export class MCPClientManager {
     }
 
     // Resolve relative paths in args (e.g. "tools/fetch-mcp/server.mjs")
-    // Use forward slashes to avoid Windows backslash escape issues in child processes
+    // Try CWD first, then walk up to find project root
     const resolvedArgs = config.args?.map(arg => {
       if (arg.endsWith('.js') || arg.endsWith('.mjs') || arg.endsWith('.ts')) {
-        return resolve(arg).replace(/\\/g, '/');
+        // Try resolving from CWD
+        const fromCwd = resolve(arg);
+        if (existsSync(fromCwd)) {
+          return fromCwd.replace(/\\/g, '/');
+        }
+        // Walk up directories to find the file (handles api-server subdirectory)
+        let dir = process.cwd();
+        for (let i = 0; i < 5; i++) {
+          const candidate = join(dir, arg);
+          if (existsSync(candidate)) {
+            return candidate.replace(/\\/g, '/');
+          }
+          const parent = resolve(dir, '..');
+          if (parent === dir) break;
+          dir = parent;
+        }
+        // Fallback: return as-is with forward slashes
+        return arg.replace(/\\/g, '/');
       }
       return arg;
     });
