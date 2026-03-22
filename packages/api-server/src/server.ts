@@ -435,10 +435,13 @@ export function createServer(config: ApiServerConfig): Express {
     // Static base lists per provider
     const staticModels: Record<string, Array<{ id: string; name: string }>> = {
       'claude-api': [
+        { id: 'claude-opus-4-6', name: 'Claude Opus 4.6' },
+        { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
+        { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5' },
+        { id: 'claude-opus-4-5-20251101', name: 'Claude Opus 4.5' },
         { id: 'claude-opus-4-20250514', name: 'Claude Opus 4' },
         { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' },
         { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5' },
-        { id: 'claude-sonnet-4-5-20250514', name: 'Claude Sonnet 4.5' },
       ],
       'openai': [
         { id: 'gpt-4o', name: 'GPT-4o' },
