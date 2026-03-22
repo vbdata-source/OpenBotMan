@@ -54,7 +54,7 @@ export class ClaudeApiProvider extends BaseProvider {
     try {
       // Build messages array - support multi-turn tool use
       const messages: Anthropic.MessageParam[] = mergedOptions.messages
-        ? mergedOptions.messages as Anthropic.MessageParam[]
+        ? mergedOptions.messages as unknown as Anthropic.MessageParam[]
         : [{ role: 'user', content: prompt }];
 
       // Build request parameters

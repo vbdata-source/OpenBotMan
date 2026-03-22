@@ -21,35 +21,23 @@ export interface GoogleProviderConfig extends ProviderConfig {
 }
 
 /**
- * Gemini API request format
- */
-interface GeminiRequest {
-  contents: Array<{
-    role: 'user' | 'model';
-    parts: Array<{ text: string }>;
-  }>;
-  systemInstruction?: {
-    parts: Array<{ text: string }>;
-  };
-  generationConfig?: {
-    maxOutputTokens?: number;
-    temperature?: number;
-    topP?: number;
-    topK?: number;
-  };
-  safetySettings?: Array<{
-    category: string;
-    threshold: string;
-  }>;
-}
-
-/**
  * Gemini API response format
  */
+interface GeminiFunctionCall {
+  name: string;
+  args: Record<string, unknown>;
+}
+
+interface GeminiPart {
+  text?: string;
+  functionCall?: GeminiFunctionCall;
+  functionResponse?: { name: string; response: unknown };
+}
+
 interface GeminiResponse {
   candidates?: Array<{
     content: {
-      parts: Array<{ text: string }>;
+      parts: GeminiPart[];
       role: string;
     };
     finishReason: string;
@@ -87,34 +75,46 @@ export class GoogleProvider extends BaseProvider {
     const startTime = Date.now();
     const mergedOptions = this.mergeOptions(options);
     
-    // Build request body
-    const request: GeminiRequest = {
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: prompt }],
-        },
-      ],
+    // Build request body - support multi-turn tool use
+    const requestBody: Record<string, unknown> = {
       generationConfig: {
         maxOutputTokens: mergedOptions.maxTokens ?? 4096,
         temperature: mergedOptions.temperature ?? 0.7,
       },
+      safetySettings: [
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
+        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
+      ],
     };
-    
+
+    // Build contents: either from multi-turn messages or single prompt
+    if (mergedOptions.messages) {
+      requestBody.contents = mergedOptions.messages;
+    } else {
+      requestBody.contents = [
+        { role: 'user', parts: [{ text: prompt }] },
+      ];
+    }
+
     // Add system instruction if provided
     if (mergedOptions.systemPrompt) {
-      request.systemInstruction = {
+      requestBody.systemInstruction = {
         parts: [{ text: mergedOptions.systemPrompt }],
       };
     }
-    
-    // Safety settings - use reasonable defaults
-    request.safetySettings = [
-      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
-      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
-      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
-      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
-    ];
+
+    // Add tools if provided (Gemini function calling format)
+    if (mergedOptions.tools && mergedOptions.tools.length > 0) {
+      requestBody.tools = [{
+        functionDeclarations: mergedOptions.tools.map(t => ({
+          name: t.name,
+          description: t.description,
+          parameters: t.input_schema,
+        })),
+      }];
+    }
     
     try {
       // Make request
@@ -131,7 +131,7 @@ export class GoogleProvider extends BaseProvider {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(request),
+        body: JSON.stringify(requestBody),
         signal: controller.signal,
       });
       
@@ -155,11 +155,25 @@ export class GoogleProvider extends BaseProvider {
         );
       }
       
-      // Extract response text
-      const text = data.candidates?.[0]?.content?.parts
-        ?.map(p => p.text)
-        .join('') ?? '';
-      
+      // Extract response parts
+      const parts = data.candidates?.[0]?.content?.parts ?? [];
+
+      // Extract text parts
+      const text = parts
+        .filter(p => p.text)
+        .map(p => p.text!)
+        .join('');
+
+      // Extract function calls (Gemini tool use)
+      const functionCalls = parts.filter(p => p.functionCall);
+      const toolCalls = functionCalls.length > 0
+        ? functionCalls.map((p, i) => ({
+            id: `gemini-fc-${i}`,
+            name: p.functionCall!.name,
+            input: p.functionCall!.args,
+          }))
+        : undefined;
+
       // Check for blocked response
       const finishReason = data.candidates?.[0]?.finishReason;
       if (finishReason === 'SAFETY') {
@@ -168,13 +182,14 @@ export class GoogleProvider extends BaseProvider {
           durationMs
         );
       }
-      
+
       return {
         text,
         model: this.config.model,
         provider: 'google',
         durationMs,
         isError: false,
+        toolCalls,
         usage: data.usageMetadata ? {
           inputTokens: data.usageMetadata.promptTokenCount,
           outputTokens: data.usageMetadata.candidatesTokenCount,

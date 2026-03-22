@@ -55,8 +55,8 @@ export interface ProviderOptions {
     content: string;
   }>;
 
-  /** Previous messages for multi-turn tool use conversations */
-  messages?: Array<{ role: string; content: unknown }>;
+  /** Previous messages for multi-turn tool use conversations (format varies by provider) */
+  messages?: Array<Record<string, unknown>>;
 
   /** Additional provider-specific options */
   extra?: Record<string, unknown>;

@@ -422,6 +422,111 @@ export function createServer(config: ApiServerConfig): Express {
   });
 
   // ============================================
+  // Provider Models Endpoint
+  // ============================================
+
+  /**
+   * GET /api/v1/providers/:providerId/models - List available models for a provider
+   * Combines static base list with live API query where supported.
+   */
+  app.get('/api/v1/providers/:providerId/models', async (req: Request, res: Response) => {
+    const providerId = req.params.providerId;
+
+    // Static base lists per provider
+    const staticModels: Record<string, Array<{ id: string; name: string }>> = {
+      'claude-api': [
+        { id: 'claude-opus-4-20250514', name: 'Claude Opus 4' },
+        { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' },
+        { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5' },
+        { id: 'claude-sonnet-4-5-20250514', name: 'Claude Sonnet 4.5' },
+      ],
+      'openai': [
+        { id: 'gpt-4o', name: 'GPT-4o' },
+        { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+        { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
+        { id: 'o3', name: 'o3' },
+        { id: 'o3-mini', name: 'o3 Mini' },
+        { id: 'o4-mini', name: 'o4 Mini' },
+      ],
+      'google': [
+        { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+        { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro' },
+        { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
+        { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite' },
+      ],
+      'ollama': [],
+      'claude-cli': [
+        { id: 'opus', name: 'Claude Opus (via CLI)' },
+        { id: 'sonnet', name: 'Claude Sonnet (via CLI)' },
+        { id: 'haiku', name: 'Claude Haiku (via CLI)' },
+      ],
+    };
+
+    const baseModels = staticModels[providerId!] ?? [];
+    let liveModels: Array<{ id: string; name: string }> = [];
+    let source: 'static' | 'live' | 'merged' = 'static';
+
+    // Try live API query for providers that support it
+    try {
+      if (providerId === 'openai') {
+        const apiKey = process.env['OPENAI_API_KEY'];
+        if (apiKey) {
+          const resp = await fetch('https://api.openai.com/v1/models', {
+            headers: { 'Authorization': `Bearer ${apiKey}` },
+            signal: AbortSignal.timeout(5000),
+          });
+          if (resp.ok) {
+            const data = await resp.json() as { data: Array<{ id: string }> };
+            liveModels = data.data
+              .filter(m => m.id.startsWith('gpt-') || m.id.startsWith('o'))
+              .map(m => ({ id: m.id, name: m.id }));
+            source = liveModels.length > 0 ? 'merged' : 'static';
+          }
+        }
+      } else if (providerId === 'google') {
+        const apiKey = process.env['GOOGLE_API_KEY'];
+        if (apiKey) {
+          const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, {
+            signal: AbortSignal.timeout(5000),
+          });
+          if (resp.ok) {
+            const data = await resp.json() as { models: Array<{ name: string; displayName: string }> };
+            liveModels = data.models
+              .filter(m => m.name.includes('gemini'))
+              .map(m => ({ id: m.name.replace('models/', ''), name: m.displayName }));
+            source = liveModels.length > 0 ? 'merged' : 'static';
+          }
+        }
+      } else if (providerId === 'ollama') {
+        // Try local Ollama API
+        const resp = await fetch('http://localhost:11434/api/tags', {
+          signal: AbortSignal.timeout(3000),
+        });
+        if (resp.ok) {
+          const data = await resp.json() as { models: Array<{ name: string }> };
+          liveModels = (data.models ?? []).map(m => ({ id: m.name, name: m.name }));
+          source = liveModels.length > 0 ? 'live' : 'static';
+        }
+      }
+    } catch {
+      // Ignore - fall back to static list
+    }
+
+    // Merge: live models + static models (deduplicated)
+    const seenIds = new Set(liveModels.map(m => m.id));
+    const merged = [
+      ...liveModels,
+      ...baseModels.filter(m => !seenIds.has(m.id)),
+    ];
+
+    res.json({
+      provider: providerId,
+      models: merged.length > 0 ? merged : baseModels,
+      source,
+    });
+  });
+
+  // ============================================
   // Workspace Endpoints
   // ============================================
 
@@ -1193,7 +1298,7 @@ async function runDiscussion(
             : undefined;
 
           // Send to provider (with tools if available and provider supports them)
-          const supportsTools = agent.provider === 'claude-api' || agent.provider === 'openai';
+          const supportsTools = agent.provider === 'claude-api' || agent.provider === 'openai' || agent.provider === 'google';
           let response = await agentProvider.send(prompt, {
             systemPrompt: agent.systemPrompt,
             timeoutMs: request.timeout * 1000,
@@ -1205,26 +1310,16 @@ async function runDiscussion(
           const MAX_TOOL_ITERATIONS = 5;
           const MAX_TOOL_RESULT_CHARS = 15000;
           let toolIteration = 0;
-          let messages: Array<{ role: string; content: unknown }> = [
-            { role: 'user', content: prompt },
-          ];
+          let messages: Array<Record<string, unknown>> = agent.provider === 'google'
+            ? [{ role: 'user', parts: [{ text: prompt }] }]
+            : [{ role: 'user', content: prompt }];
 
           while (response.toolCalls && response.toolCalls.length > 0 && toolIteration < MAX_TOOL_ITERATIONS) {
             toolIteration++;
             console.log(`[${requestId}] ${agent.name}: Tool call iteration ${toolIteration} - ${response.toolCalls.map(t => t.name).join(', ')}`);
 
-            // Build assistant message with text + tool_use blocks
-            const assistantContent: Array<{ type: string; [key: string]: unknown }> = [];
-            if (response.text) {
-              assistantContent.push({ type: 'text', text: response.text });
-            }
-            for (const tc of response.toolCalls) {
-              assistantContent.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.input });
-            }
-            messages.push({ role: 'assistant', content: assistantContent });
-
-            // Execute each tool call
-            const toolResultContent: Array<{ type: string; tool_use_id: string; content: string }> = [];
+            // Execute each tool call and collect results
+            const toolResults: Array<{ id: string; name: string; result: string }> = [];
             for (const tc of response.toolCalls) {
               try {
                 const toolResult = await discussionTools.execute(tc.name, tc.input, {
@@ -1233,19 +1328,60 @@ async function runDiscussion(
                   jobId: requestId,
                 });
                 let resultText = toolResult.output;
-                // Truncation: prevent context window explosion
                 if (resultText.length > MAX_TOOL_RESULT_CHARS) {
                   resultText = resultText.substring(0, MAX_TOOL_RESULT_CHARS) + '\n\n... [truncated]';
                 }
-                toolResultContent.push({ type: 'tool_result', tool_use_id: tc.id, content: resultText });
+                toolResults.push({ id: tc.id, name: tc.name, result: resultText });
                 console.log(`[${requestId}] ${agent.name}: Tool ${tc.name} → ${toolResult.success ? 'OK' : 'ERROR'} (${resultText.length} chars)`);
               } catch (toolError) {
                 const errMsg = toolError instanceof Error ? toolError.message : String(toolError);
-                toolResultContent.push({ type: 'tool_result', tool_use_id: tc.id, content: `Error: ${errMsg}` });
+                toolResults.push({ id: tc.id, name: tc.name, result: `Error: ${errMsg}` });
                 console.error(`[${requestId}] ${agent.name}: Tool ${tc.name} ERROR: ${errMsg}`);
               }
             }
-            messages.push({ role: 'user', content: toolResultContent });
+
+            // Build provider-specific multi-turn messages
+            if (agent.provider === 'google') {
+              // Gemini format: model parts with functionCall, user parts with functionResponse
+              const modelParts: Array<Record<string, unknown>> = [];
+              if (response.text) modelParts.push({ text: response.text });
+              for (const tc of response.toolCalls) {
+                modelParts.push({ functionCall: { name: tc.name, args: tc.input } });
+              }
+              messages.push({ role: 'model', parts: modelParts });
+
+              const userParts = toolResults.map(tr => ({
+                functionResponse: { name: tr.name, response: { result: tr.result } },
+              }));
+              messages.push({ role: 'user', parts: userParts });
+            } else if (agent.provider === 'openai') {
+              // OpenAI format: assistant message with tool_calls, then tool role messages
+              messages.push({
+                role: 'assistant',
+                content: response.text || null,
+                tool_calls: response.toolCalls.map(tc => ({
+                  id: tc.id,
+                  type: 'function',
+                  function: { name: tc.name, arguments: JSON.stringify(tc.input) },
+                })),
+              });
+              for (const tr of toolResults) {
+                messages.push({ role: 'tool', tool_call_id: tr.id, content: tr.result });
+              }
+            } else {
+              // Anthropic format: assistant content blocks + user tool_result blocks
+              const assistantContent: Array<Record<string, unknown>> = [];
+              if (response.text) assistantContent.push({ type: 'text', text: response.text });
+              for (const tc of response.toolCalls) {
+                assistantContent.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.input });
+              }
+              messages.push({ role: 'assistant', content: assistantContent });
+
+              const toolResultContent = toolResults.map(tr => ({
+                type: 'tool_result', tool_use_id: tr.id, content: tr.result,
+              }));
+              messages.push({ role: 'user', content: toolResultContent });
+            }
 
             // Re-send with tool results
             response = await agentProvider.send('', {

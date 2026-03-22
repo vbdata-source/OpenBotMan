@@ -21,16 +21,17 @@ export interface OpenAIProviderConfig extends ProviderConfig {
 }
 
 /**
- * OpenAI API message format
- */
-interface OpenAIMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
-
-/**
  * OpenAI API response format
  */
+interface OpenAIToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
 interface OpenAIResponse {
   id: string;
   object: string;
@@ -40,7 +41,8 @@ interface OpenAIResponse {
     index: number;
     message: {
       role: string;
-      content: string;
+      content: string | null;
+      tool_calls?: OpenAIToolCall[];
     };
     finish_reason: string;
   }>;
@@ -70,28 +72,44 @@ export class OpenAIProvider extends BaseProvider {
     const startTime = Date.now();
     const mergedOptions = this.mergeOptions(options);
     
-    // Build messages array
-    const messages: OpenAIMessage[] = [];
-    
-    if (mergedOptions.systemPrompt) {
-      messages.push({
-        role: 'system',
-        content: mergedOptions.systemPrompt,
-      });
+    // Build messages array - support multi-turn tool use
+    let messages: Array<Record<string, unknown>>;
+    if (mergedOptions.messages) {
+      // Multi-turn: use provided messages (prepend system if needed)
+      messages = [];
+      if (mergedOptions.systemPrompt) {
+        messages.push({ role: 'system', content: mergedOptions.systemPrompt });
+      }
+      for (const msg of mergedOptions.messages) {
+        messages.push(msg as Record<string, unknown>);
+      }
+    } else {
+      messages = [];
+      if (mergedOptions.systemPrompt) {
+        messages.push({ role: 'system', content: mergedOptions.systemPrompt });
+      }
+      messages.push({ role: 'user', content: prompt });
     }
-    
-    messages.push({
-      role: 'user',
-      content: prompt,
-    });
-    
+
     // Build request body
-    const body = {
+    const body: Record<string, unknown> = {
       model: this.config.model,
       messages,
       max_tokens: mergedOptions.maxTokens ?? 4096,
       temperature: mergedOptions.temperature ?? 0.7,
     };
+
+    // Add tools if provided (OpenAI function calling format)
+    if (mergedOptions.tools && mergedOptions.tools.length > 0) {
+      body.tools = mergedOptions.tools.map(t => ({
+        type: 'function',
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.input_schema,
+        },
+      }));
+    }
     
     try {
       // Build headers
@@ -136,14 +154,26 @@ export class OpenAIProvider extends BaseProvider {
       const durationMs = Date.now() - startTime;
       
       // Extract response text
-      const text = data.choices[0]?.message?.content ?? '';
-      
+      const choice = data.choices[0];
+      const text = choice?.message?.content ?? '';
+
+      // Extract tool calls if present
+      const rawToolCalls = choice?.message?.tool_calls;
+      const toolCalls = rawToolCalls && rawToolCalls.length > 0
+        ? rawToolCalls.map(tc => ({
+            id: tc.id,
+            name: tc.function.name,
+            input: JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>,
+          }))
+        : undefined;
+
       return {
         text,
         model: data.model,
         provider: 'openai',
         durationMs,
         isError: false,
+        toolCalls,
         usage: data.usage ? {
           inputTokens: data.usage.prompt_tokens,
           outputTokens: data.usage.completion_tokens,

@@ -92,6 +92,16 @@ export async function fetchTools() {
   return res.json()
 }
 
+export async function fetchProviderModels(providerId: string) {
+  const res = await apiFetch(`/api/v1/providers/${providerId}/models`)
+  if (!res.ok) return { models: [], source: 'error' }
+  return res.json() as Promise<{
+    provider: string
+    models: Array<{ id: string; name: string }>
+    source: string
+  }>
+}
+
 export async function saveMcpServers(servers: Array<{
   id: string
   name: string

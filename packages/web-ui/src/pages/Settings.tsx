@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Key, Save, Users, Settings as SettingsIcon, Bot, Plus, Pencil, Trash2, Check, X, AlertCircle, FileText } from 'lucide-react'
-import { getApiKey, setApiKey } from '../lib/api'
+import { getApiKey, setApiKey, fetchProviderModels } from '../lib/api'
 
 // Types
 interface Agent {
@@ -90,11 +90,23 @@ export default function Settings() {
   const [editingTeam, setEditingTeam] = useState<Team | null>(null)
   const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null)
   const [hasChanges, setHasChanges] = useState(false)
+  const [modelOptions, setModelOptions] = useState<Array<{ id: string; name: string }>>([])
 
   // Load data
   useEffect(() => {
     loadData()
   }, [])
+
+  // Load model options when provider changes
+  useEffect(() => {
+    if (editingAgent?.provider) {
+      fetchProviderModels(editingAgent.provider)
+        .then(data => setModelOptions(data.models || []))
+        .catch(() => setModelOptions([]))
+    } else {
+      setModelOptions([])
+    }
+  }, [editingAgent?.provider])
 
   async function loadData() {
     setLoading(true)
@@ -698,12 +710,31 @@ export default function Settings() {
                 </div>
                 <div>
                   <label className="text-sm font-medium">Model</label>
-                  <input
-                    type="text"
-                    value={editingAgent.model}
-                    onChange={(e) => setEditingAgent({ ...editingAgent, model: e.target.value })}
-                    className="w-full mt-1 px-3 py-2 bg-background border border-input rounded-md"
-                  />
+                  {modelOptions.length > 0 ? (
+                    <>
+                      <input
+                        type="text"
+                        list="model-options"
+                        value={editingAgent.model}
+                        onChange={(e) => setEditingAgent({ ...editingAgent, model: e.target.value })}
+                        placeholder="Modell waehlen oder eingeben"
+                        className="w-full mt-1 px-3 py-2 bg-background border border-input rounded-md"
+                      />
+                      <datalist id="model-options">
+                        {modelOptions.map(m => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </datalist>
+                    </>
+                  ) : (
+                    <input
+                      type="text"
+                      value={editingAgent.model}
+                      onChange={(e) => setEditingAgent({ ...editingAgent, model: e.target.value })}
+                      placeholder="z.B. gemini-2.5-flash"
+                      className="w-full mt-1 px-3 py-2 bg-background border border-input rounded-md"
+                    />
+                  )}
                 </div>
               </div>
               
