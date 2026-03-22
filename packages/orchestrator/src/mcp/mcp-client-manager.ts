@@ -8,6 +8,7 @@
  * to external community tools.
  */
 
+import { resolve } from 'path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { OpenBotManTool, ToolResult } from '@openbotman/protocol';
@@ -74,13 +75,22 @@ export class MCPClientManager {
 
     // On Windows, commands like 'npx' need '.cmd' extension for spawn
     const isWindows = process.platform === 'win32';
-    const command = isWindows && !config.command.includes('.') && !config.command.includes('/')
-      ? `${config.command}.cmd`
-      : config.command;
+    let command = config.command;
+    if (isWindows && !command.includes('.') && !command.includes('/') && !command.includes('\\')) {
+      command = `${command}.cmd`;
+    }
+
+    // Resolve relative paths in args (e.g. "tools/fetch-mcp/server.mjs")
+    const resolvedArgs = config.args?.map(arg => {
+      if (arg.endsWith('.js') || arg.endsWith('.mjs') || arg.endsWith('.ts')) {
+        return resolve(arg);
+      }
+      return arg;
+    });
 
     const transport = new StdioClientTransport({
       command,
-      args: config.args,
+      args: resolvedArgs,
       env: {
         ...process.env as Record<string, string>,
         ...config.env,
