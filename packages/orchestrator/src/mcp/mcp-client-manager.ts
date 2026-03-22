@@ -73,10 +73,12 @@ export class MCPClientManager {
       throw new Error(`MCP server already connected: ${config.id}`);
     }
 
-    // On Windows, commands like 'npx' need '.cmd' extension for spawn
+    // On Windows, script-runners like 'npx' need '.cmd' extension for spawn.
+    // But executables like 'node', 'python' etc. work without extension.
     const isWindows = process.platform === 'win32';
+    const WINDOWS_CMD_COMMANDS = ['npx', 'npm', 'pnpm', 'yarn', 'bunx'];
     let command = config.command;
-    if (isWindows && !command.includes('.') && !command.includes('/') && !command.includes('\\')) {
+    if (isWindows && WINDOWS_CMD_COMMANDS.includes(command)) {
       command = `${command}.cmd`;
     }
 
