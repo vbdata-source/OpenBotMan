@@ -5,13 +5,19 @@
  * Ported from CLI implementation.
  */
 
-export type ConsensusPosition = 
+export type ConsensusPosition =
   | 'PROPOSAL'
   | 'SUPPORT'
   | 'SUPPORT_WITH_CONDITIONS'
   | 'CONCERN'
   | 'OBJECTION'
   | 'ERROR';
+
+/**
+ * Discussion mode - determines how many rounds and what prompts to use.
+ * Detected from the first agent's [MODE: X] tag.
+ */
+export type DiscussionMode = 'INFO' | 'DECISION' | 'ANALYSIS';
 
 export interface AgentContribution {
   agentName: string;
@@ -43,6 +49,7 @@ export interface ConsensusResult {
   finalSummary: string;
   actionItems: string[];
   durationMs: number;
+  discussionMode?: DiscussionMode;
 }
 
 /**
@@ -117,6 +124,64 @@ export function extractPosition(content: string): {
   
   // Default to CONCERN
   return { position: 'CONCERN', reason: 'Position unclear' };
+}
+
+/**
+ * Extract discussion mode from the first agent's response.
+ * Falls back to DECISION (current behavior) if no tag found.
+ */
+export function extractDiscussionMode(content: string): DiscussionMode {
+  const match = content.match(/\[MODE:\s*(INFO|DECISION|ANALYSIS)\]/i);
+  if (match) {
+    return match[1]!.toUpperCase() as DiscussionMode;
+  }
+  return 'DECISION';
+}
+
+/**
+ * Server-side heuristic to classify the question type from the topic string.
+ * Used as fallback when the agent doesn't provide a [MODE: ...] tag.
+ * Intentionally conservative: only classifies as INFO/ANALYSIS when clearly matching.
+ */
+export function classifyTopicMode(topic: string): DiscussionMode {
+  const lower = topic.toLowerCase().trim();
+
+  // INFO patterns: questions asking for facts, explanations, lists
+  const infoPatterns = [
+    /^was (sind|ist|gibt es|bedeutet|macht|kann)/,
+    /^welche (features|funktionen|neuerungen|aenderungen|unterschiede|vorteile|nachteile|tools|versionen)/,
+    /^wie (funktioniert|arbeitet|heisst)/,
+    /^erklaer(e|t|ung)/,
+    /^beschreib(e|t|ung)/,
+    /^(liste|auflistung|uebersicht|zusammenfassung)/,
+    /^what (is|are|does|can|did|has|were|was)/,
+    /^(list|explain|describe|summarize|show|tell me about)/,
+    /^which (features|tools|versions|options|methods)/,
+    /^how does .+ work/,
+    /neuesten? (features|funktionen|neuerungen|aenderungen)/,
+    /new (features|changes|additions|capabilities)/,
+    /was gibt es neues/,
+    /what'?s new/,
+  ];
+
+  for (const pattern of infoPatterns) {
+    if (pattern.test(lower)) return 'INFO';
+  }
+
+  // ANALYSIS patterns: requests for deep review or evaluation
+  const analysisPatterns = [
+    /^(analysier|analys[ei]|review|bewert|evaluier|pruef|audit)/,
+    /^(analyze|analyse|review|evaluate|assess|audit|inspect)/,
+    /code.*(review|analyse|bewert)/,
+    /(architektur|architecture).*(analys|review|bewert)/,
+  ];
+
+  for (const pattern of analysisPatterns) {
+    if (pattern.test(lower)) return 'ANALYSIS';
+  }
+
+  // DECISION patterns are the default
+  return 'DECISION';
 }
 
 /**
@@ -372,14 +437,83 @@ ${topic}
 
 ${context ? `## Code-Kontext (analysiere diesen Code!)\n${context}` : ''}
 
-## Format
-Beende deine Analyse mit einer klaren Position:
-[POSITION: PROPOSAL]
+## Antwort-Format (STRIKT EINHALTEN!)
 
-Strukturiere deine Antwort mit:
+**ALLERERSTE ZEILE deiner Antwort MUSS einer dieser Tags sein:**
+[MODE: INFO] - Wenn die Anfrage eine reine Informationsfrage ist (z.B. "Was sind die Features von X?", "Erklaere Y", "Was gibt es Neues?")
+[MODE: DECISION] - Wenn eine Entscheidung/Empfehlung erwartet wird (z.B. "Sollen wir X oder Y?", "Welche Architektur?")
+[MODE: ANALYSIS] - Wenn eine tiefe Analyse mit Bewertung gefragt ist (z.B. "Analysiere unsere Codebase", "Review diesen Code")
+
+**Danach folgt deine inhaltliche Antwort:**
 1. Analyse der Situation
 2. Konkrete Empfehlungen
 3. Action Items (als - [ ] Liste)
+
+**LETZTE ZEILE: Position**
+[POSITION: PROPOSAL]
+
+Beispiel-Start einer Antwort:
+\`\`\`
+[MODE: INFO]
+
+## Uebersicht der neuen Features...
+\`\`\`
+`;
+}
+
+/**
+ * Build prompt for INFO mode first agent.
+ * Forces the agent to ANSWER the question directly with facts, not meta-discuss.
+ */
+export function buildInfoProposerPrompt(
+  topic: string,
+  context: string,
+  agentRole: string,
+  options?: { contextType?: 'inventory' | 'raw-code' | 'none' }
+): string {
+  const hasCode = context && context.includes('```');
+  const hasInventory = options?.contextType === 'inventory';
+
+  return `Du bist ein ${agentRole} und beantwortest eine Informationsfrage.
+
+## SCHRITT 1: ZUERST RECHERCHIEREN (PFLICHT!)
+Dein Wissen kann veraltet sein. BEVOR du antwortest, nutze deine Tools:
+
+**Suchstrategie (in dieser Reihenfolge versuchen):**
+1. web_search mit spezifischen Begriffen: "[Thema] release notes", "[Thema] changelog"
+2. Wenn die Suche zu generisch ist, probiere DIREKTE URLs mit web_fetch:
+   - Offizielle Blogs: z.B. nodejs.org/en/blog, react.dev/blog, go.dev/blog
+   - GitHub Releases: z.B. github.com/[org]/[repo]/releases
+   - GitHub Changelogs: z.B. github.com/[org]/[repo]/blob/main/CHANGELOG.md
+3. Wenn ein Suchergebnis eine relevante URL zeigt, IMMER mit web_fetch den Inhalt holen.
+
+**Wichtig:**
+- Sage NIEMALS "das gibt es nicht" oder "das kenne ich nicht" ohne VORHER gesucht zu haben.
+- Dein Trainingswissen ist NICHT aktuell - die Tools sind es.
+- Wenn die erste Suche nichts Gutes liefert, probiere andere Suchbegriffe oder direkte URLs.
+- Gib nicht nach einem fehlgeschlagenen Suchversuch auf.
+
+## SCHRITT 2: ANTWORT FORMULIEREN
+- Beantworte die Frage DIREKT mit konkreten Fakten aus deiner Recherche.
+- NICHT diskutieren WIE man die Antwort finden koennte - DU hast sie bereits gefunden.
+- NICHT Action Items oder TODO-Listen erstellen.
+- Fokussiere auf die KONKRETEN Neuerungen/Fakten, nicht auf vollstaendige Listen.
+- Markiere Informationen aus deinem Vorwissen (ohne Quelle) mit "Laut meinem Wissen:".
+- Erfinde keine Fakten - wenn die Suche nichts liefert, sage das ehrlich.
+${hasInventory ? `
+Nutze das Projekt-Inventar und den Quellcode fuer konkrete Referenzen.` :
+hasCode ? `
+Referenziere konkrete Dateien und Code-Stellen.` : ''}
+
+## Frage
+${topic}
+
+${context ? `## Kontext\n${context}` : ''}
+
+## Antwort-Format
+Strukturiere deine Antwort mit klaren Ueberschriften und konkreten Inhalten.
+Nenne Quellen (URLs) am Ende jedes Abschnitts.
+Keine [POSITION: ...] Tags noetig.
 `;
 }
 
@@ -516,6 +650,105 @@ Begruende deine Position kurz nach dem Tag.
 }
 
 /**
+ * Build prompt for INFO mode - agents supplement facts, no positions needed.
+ */
+export function buildInfoRoundPrompt(
+  topic: string,
+  context: string,
+  previousContributions: AgentContribution[],
+  agentRole: string,
+  options?: { contextType?: 'inventory' | 'raw-code' | 'none' }
+): string {
+  const previousResponses = previousContributions
+    .map(c => `### ${c.agentName} (${c.role})\n${c.content}`)
+    .join('\n\n---\n\n');
+
+  const hasCode = context && context.includes('```');
+  const hasInventory = options?.contextType === 'inventory';
+
+  return `Du bist ein ${agentRole} und ergaenzt eine Informationsfrage.
+${hasInventory ? `
+**PROJEKT-INVENTAR + CODE bereitgestellt:**
+Nutze das Inventar und den Quellcode fuer konkrete Referenzen.` :
+hasCode ? `
+**CODE bereitgestellt:**
+Referenziere konkrete Dateien und Code-Stellen.` : ''}
+
+## Thema
+${topic}
+
+${context ? `## Code-Kontext\n${context}` : ''}
+
+## Bisherige Beitraege
+${previousResponses}
+
+## Deine Aufgabe (in dieser Reihenfolge!)
+1. PRUEFE die bisherigen Beitraege auf faktische Fehler.
+   Nutze web_search/web_fetch um Behauptungen zu verifizieren - NICHT dein Vorwissen.
+   Korrigiere NUR wenn du eine bessere Quelle hast: "KORREKTUR: [Agent] behauptet X, tatsaechlich ist Y (Quelle: URL)".
+   Behaupte NICHT "das gibt es nicht" basierend auf deinem Vorwissen - suche zuerst!
+2. Ergaenze NEUE Informationen die noch fehlen - aus deiner Perspektive als ${agentRole}.
+   Nutze web_search/web_fetch um zusaetzliche Fakten zu finden.
+   Probiere direkte URLs wenn die Suche zu generisch ist (GitHub Releases, offizielle Blogs).
+3. Wiederhole NICHTS was bereits korrekt gesagt wurde.
+4. Erfinde keine Fakten - markiere Unsicheres mit "Laut meinem Wissen:".
+5. Nenne Quellen (URLs) fuer alle Aussagen die du ueber Tools gefunden hast.
+
+Antworte direkt und sachlich. Keine Position noetig.
+`;
+}
+
+/**
+ * Build prompt for ANALYSIS mode - focused analysis with light positions.
+ */
+export function buildAnalysisRoundPrompt(
+  topic: string,
+  context: string,
+  previousContributions: AgentContribution[],
+  round: number,
+  agentRole: string,
+  options?: { contextType?: 'inventory' | 'raw-code' | 'none' }
+): string {
+  const previousResponses = previousContributions
+    .map(c => `### ${c.agentName} (${c.role})\n${c.content}`)
+    .join('\n\n---\n\n');
+
+  const hasCode = context && context.includes('```');
+  const hasInventory = options?.contextType === 'inventory';
+
+  return `Du bist ein ${agentRole} in Runde ${round} einer Analyse-Diskussion.
+${hasInventory ? `
+**PROJEKT-INVENTAR + CODE bereitgestellt:**
+Nutze das Inventar und den Quellcode fuer Detail-Analyse.` :
+hasCode ? `
+**CODE bereitgestellt:**
+Referenziere konkrete Dateien und Code-Stellen.` : ''}
+
+## Thema
+${topic}
+
+${context ? `## Code-Kontext\n${context}` : ''}
+
+## Bisherige Beitraege
+${previousResponses}
+
+## Deine Aufgabe
+1. Ergaenze fehlende Analyse-Aspekte
+2. Bewerte die bisherigen Erkenntnisse kritisch
+3. Wiederhole NICHTS was bereits analysiert wurde
+4. Fokus auf Ergaenzungen und neue Perspektiven
+
+## Position (PFLICHT!)
+Beende mit einer Position:
+- [POSITION: SUPPORT] - Analyse ist vollstaendig
+- [POSITION: SUPPORT_WITH_CONDITIONS] - Wichtige Aspekte fehlen noch
+- [POSITION: CONCERN] - Analyse hat Luecken
+
+Begruende deine Position kurz.
+`;
+}
+
+/**
  * Extract action items from markdown
  */
 export function extractActionItems(content: string): string[] {
@@ -537,12 +770,25 @@ export function extractActionItems(content: string): string[] {
  */
 export function formatConsensusResult(result: ConsensusResult): string {
   const lines: string[] = [];
-  
+  const mode = result.discussionMode || 'DECISION';
+
   lines.push(`# ${result.topic}`);
   lines.push('');
-  lines.push(`**Status:** ${result.consensusReached ? '✅ Konsens erreicht' : '⚠️ Kein Konsens'}`);
-  lines.push(`**Runden:** ${result.totalRounds}`);
-  lines.push(`**Dauer:** ${Math.round(result.durationMs / 1000)}s`);
+
+  if (mode === 'INFO') {
+    lines.push(`**Modus:** 📋 Experten-Zusammenfassung`);
+    lines.push(`**Experten:** ${result.totalRounds > 0 ? result.rounds[0]!.contributions.length : 0}`);
+    lines.push(`**Dauer:** ${Math.round(result.durationMs / 1000)}s`);
+  } else if (mode === 'ANALYSIS') {
+    lines.push(`**Modus:** 🔍 Analyse`);
+    lines.push(`**Status:** ${result.consensusReached ? '✅ Analyse abgeschlossen' : '⚠️ Offene Punkte'}`);
+    lines.push(`**Runden:** ${result.totalRounds}`);
+    lines.push(`**Dauer:** ${Math.round(result.durationMs / 1000)}s`);
+  } else {
+    lines.push(`**Status:** ${result.consensusReached ? '✅ Konsens erreicht' : '⚠️ Kein Konsens'}`);
+    lines.push(`**Runden:** ${result.totalRounds}`);
+    lines.push(`**Dauer:** ${Math.round(result.durationMs / 1000)}s`);
+  }
   lines.push('');
   
   // Each round

@@ -17,10 +17,15 @@ import { generateInventory, buildFullContext } from './inventory.js';
 import { jobStore } from './jobs.js';
 import {
   extractPosition,
+  extractDiscussionMode,
+  classifyTopicMode,
   evaluateRound,
   buildProposerPrompt,
   buildResponderPrompt,
   buildConditionRoundPrompt,
+  buildInfoProposerPrompt,
+  buildInfoRoundPrompt,
+  buildAnalysisRoundPrompt,
   extractActionItems,
   formatConsensusResult,
   type AgentContribution,
@@ -1297,11 +1302,25 @@ async function runDiscussion(
   const allContributions: AgentContribution[] = [];
   let consensusReached = false;
 
+  // Pre-classify discussion mode from topic (server-side heuristic)
+  let discussionMode = classifyTopicMode(topic);
+  let effectiveMaxRounds = request.maxRounds;
+
+  if (discussionMode === 'INFO') {
+    effectiveMaxRounds = 1;
+    console.log(`[${requestId}] Topic classified as INFO (server-side) - single round`);
+  } else if (discussionMode === 'ANALYSIS') {
+    effectiveMaxRounds = Math.min(3, request.maxRounds);
+    console.log(`[${requestId}] Topic classified as ANALYSIS (server-side) - max ${effectiveMaxRounds} rounds`);
+  } else {
+    console.log(`[${requestId}] Topic classified as DECISION (server-side) - full consensus`);
+  }
+
   try {
     // Run multiple rounds until consensus or max rounds
-    for (let round = 1; round <= request.maxRounds && !consensusReached; round++) {
-      console.log(`[${requestId}] Starting round ${round}/${request.maxRounds}`);
-      jobStore.setRound(requestId, round, request.maxRounds);
+    for (let round = 1; round <= effectiveMaxRounds && !consensusReached; round++) {
+      console.log(`[${requestId}] Starting round ${round}/${effectiveMaxRounds} (mode: ${discussionMode})`);
+      jobStore.setRound(requestId, round, effectiveMaxRounds);
       
       // Reset agent statuses for new round (just trigger update once)
       if (round > 1) {
@@ -1325,15 +1344,28 @@ async function runDiscussion(
           const prevResolved = prevRound?.resolvedPoints ?? [];
           const prevUnresolved = prevRound?.unresolvedConditions ?? [];
 
-          if (round === 1 && roundContributions.length === 0) {
-            // First agent, first round: Proposer
+          if (round === 1 && roundContributions.length === 0 && discussionMode === 'INFO') {
+            // INFO mode first agent: answer directly with facts
+            prompt = buildInfoProposerPrompt(topic, fullContext, agent.role, { contextType });
+          } else if (round === 1 && roundContributions.length === 0) {
+            // First agent, first round: Proposer (DECISION/ANALYSIS)
             prompt = buildProposerPrompt(topic, fullContext, { contextType });
+          } else if (discussionMode === 'INFO') {
+            // INFO mode: all subsequent agents just supplement facts
+            const previousContribs = [...allContributions, ...roundContributions];
+            prompt = buildInfoRoundPrompt(topic, fullContext, previousContribs, agent.role, { contextType });
+          } else if (discussionMode === 'ANALYSIS') {
+            // ANALYSIS mode: focused analysis with light positions
+            const previousContribs = round === 1
+              ? roundContributions
+              : [...allContributions.slice(-agentConfigs.length), ...roundContributions];
+            prompt = buildAnalysisRoundPrompt(topic, fullContext, previousContribs, round, agent.role, { contextType });
           } else if (prevUnresolved.length > 0 && round > 1) {
             // Condition-focused round: address specific unresolved conditions
             const previousContribs = [...allContributions.slice(-agentConfigs.length), ...roundContributions];
             prompt = buildConditionRoundPrompt(topic, fullContext, previousContribs, round, agent.role, prevUnresolved, prevResolved, { contextType });
           } else {
-            // Normal responder round
+            // Normal DECISION responder round
             const previousContribs = round === 1
               ? roundContributions
               : [...allContributions.slice(-agentConfigs.length), ...roundContributions];
@@ -1453,12 +1485,39 @@ async function runDiscussion(
           // Context isolation: only the final text goes to other agents
           const { position, reason } = extractPosition(response.text);
           const durationMs = Date.now() - agentStartTime;
-          
+
+          // Check if first agent provided a [MODE: ...] tag that overrides server classification
+          if (round === 1 && roundContributions.length === 0) {
+            const agentMode = extractDiscussionMode(response.text);
+            if (agentMode !== 'DECISION' || discussionMode === 'DECISION') {
+              // Agent explicitly tagged non-DECISION, or both agree on DECISION
+              if (agentMode !== discussionMode) {
+                console.log(`[${requestId}] Agent MODE: ${agentMode} overrides server classification: ${discussionMode}`);
+                discussionMode = agentMode;
+              }
+            }
+            // Apply mode settings
+            if (discussionMode === 'INFO') {
+              effectiveMaxRounds = 1;
+            } else if (discussionMode === 'ANALYSIS') {
+              effectiveMaxRounds = Math.min(3, request.maxRounds);
+            }
+            console.log(`[${requestId}] Final mode: ${discussionMode} (${effectiveMaxRounds} rounds)`);
+            jobStore.setRound(requestId, round, effectiveMaxRounds);
+          }
+
+          // For INFO mode, auto-set position to SUPPORT (no consensus theater)
+          const effectivePosition = round === 1 && roundContributions.length === 0
+            ? 'PROPOSAL'
+            : discussionMode === 'INFO'
+              ? 'SUPPORT' as const
+              : position;
+
           const contribution: AgentContribution = {
             agentName: agent.name,
             role: agent.role,
             content: response.text,
-            position: round === 1 && roundContributions.length === 0 ? 'PROPOSAL' : position,
+            position: effectivePosition,
             positionReason: reason,
             durationMs,
             model: agent.model,
@@ -1496,10 +1555,16 @@ async function runDiscussion(
       const evalPrevResolved = evalPrevRound?.resolvedPoints ?? [];
       const evalPrevConditions = evalPrevRound?.unresolvedConditions ?? [];
       const roundResult = evaluateRound(round, roundContributions, evalPrevResolved, evalPrevConditions);
+
+      // INFO mode: always mark as consensus (no voting needed)
+      if (discussionMode === 'INFO') {
+        roundResult.consensusReached = true;
+      }
+
       rounds.push(roundResult);
       consensusReached = roundResult.consensusReached;
 
-      console.log(`[${requestId}] Round ${round} complete. Consensus: ${consensusReached ? 'YES' : 'NO'}`);
+      console.log(`[${requestId}] Round ${round} complete. ${discussionMode === 'INFO' ? 'INFO mode - done.' : `Consensus: ${consensusReached ? 'YES' : 'NO'}`}`);
       if (roundResult.unresolvedConditions.length > 0) {
         console.log(`[${requestId}] Unresolved conditions (${roundResult.unresolvedConditions.length}): ${roundResult.unresolvedConditions.join(' | ')}`);
       }
@@ -1509,7 +1574,7 @@ async function runDiscussion(
       }
       
       // If no consensus and not last round, continue
-      if (!consensusReached && round < request.maxRounds) {
+      if (!consensusReached && round < effectiveMaxRounds) {
         console.log(`[${requestId}] Continuing to round ${round + 1}...`);
       }
     }
@@ -1518,14 +1583,21 @@ async function runDiscussion(
     const allActionItems = allContributions.flatMap(c => extractActionItems(c.content));
     const uniqueActionItems = [...new Set(allActionItems)];
     
+    const finalSummary = discussionMode === 'INFO'
+      ? 'Experten-Zusammenfassung'
+      : discussionMode === 'ANALYSIS'
+        ? (consensusReached ? 'Analyse abgeschlossen' : 'Offene Analyse-Punkte')
+        : (consensusReached ? 'Konsens erreicht' : 'Kein Konsens nach max. Runden');
+
     const result: ConsensusResult = {
       topic,
       rounds,
       consensusReached,
       totalRounds: rounds.length,
-      finalSummary: consensusReached ? 'Konsens erreicht' : 'Kein Konsens nach max. Runden',
+      finalSummary,
       actionItems: uniqueActionItems,
       durationMs: Date.now() - startTime,
+      discussionMode,
     };
     
     const markdown = formatConsensusResult(result);
