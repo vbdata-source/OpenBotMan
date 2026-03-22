@@ -102,6 +102,18 @@ export async function fetchProviderModels(providerId: string) {
   }>
 }
 
+export async function saveBuiltinTools(tools: { webSearch: boolean; webFetch: boolean }) {
+  const res = await apiFetch('/api/v1/tools/builtin', {
+    method: 'PUT',
+    body: JSON.stringify(tools),
+  })
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.error || 'Failed to save built-in tools')
+  }
+  return res.json()
+}
+
 export async function saveMcpServers(servers: Array<{
   id: string
   name: string

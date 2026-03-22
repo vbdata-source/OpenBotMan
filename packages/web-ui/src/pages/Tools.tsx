@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Wrench, Server, RefreshCw, AlertCircle, CheckCircle, XCircle, Plug, Plus, Trash2, Save, X, Pencil } from 'lucide-react'
-import { fetchTools, saveMcpServers } from '../lib/api'
+import { Wrench, Server, RefreshCw, AlertCircle, CheckCircle, XCircle, Plus, Trash2, Save, X, Pencil, Search, Globe } from 'lucide-react'
+import { fetchTools, saveMcpServers, saveBuiltinTools } from '../lib/api'
 
 interface MCPServerInfo {
   id: string
@@ -14,11 +14,11 @@ interface MCPServerInfo {
 }
 
 interface ToolsData {
-  mcpServers: MCPServerInfo[]
-  toolRegistry: {
-    status: string
-    info: string
+  builtinTools: {
+    webSearch: boolean
+    webFetch: boolean
   }
+  mcpServers: MCPServerInfo[]
 }
 
 const PRESET_SERVERS = [
@@ -407,16 +407,64 @@ export default function Tools() {
         </div>
       )}
 
-      {/* Tool Registry Status */}
+      {/* Built-in Tools */}
       {data && (
         <div className="rounded-lg border border-border p-6">
           <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-            <Plug className="h-5 w-5" />
-            Tool Registry
+            <Globe className="h-5 w-5" />
+            Built-in Tools
           </h2>
-          <div className="flex items-center gap-2 text-sm">
-            <CheckCircle className="h-4 w-4 text-green-500" />
-            <span className="text-muted-foreground">{data.toolRegistry.info}</span>
+          <p className="text-sm text-muted-foreground mb-4">
+            Diese Tools laufen direkt im Server - kein MCP-Server noetig.
+            Agents mit Tool-faehigen Providern (Claude API, OpenAI, Google) nutzen sie automatisch.
+          </p>
+          <div className="space-y-3">
+            <label className="flex items-center justify-between p-3 rounded-lg bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors">
+              <div className="flex items-center gap-3">
+                <Search className="h-5 w-5 text-blue-500" />
+                <div>
+                  <div className="font-medium">Websuche</div>
+                  <div className="text-sm text-muted-foreground">Agents koennen im Web recherchieren (DuckDuckGo)</div>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={data.builtinTools.webSearch}
+                onChange={async (e) => {
+                  const updated = { ...data.builtinTools, webSearch: e.target.checked }
+                  try {
+                    await saveBuiltinTools(updated)
+                    setData({ ...data, builtinTools: updated })
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Fehler')
+                  }
+                }}
+                className="h-5 w-5 rounded"
+              />
+            </label>
+            <label className="flex items-center justify-between p-3 rounded-lg bg-muted/50 cursor-pointer hover:bg-muted/70 transition-colors">
+              <div className="flex items-center gap-3">
+                <Globe className="h-5 w-5 text-green-500" />
+                <div>
+                  <div className="font-medium">Web Fetch</div>
+                  <div className="text-sm text-muted-foreground">Agents koennen URLs abrufen und Inhalte analysieren</div>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={data.builtinTools.webFetch}
+                onChange={async (e) => {
+                  const updated = { ...data.builtinTools, webFetch: e.target.checked }
+                  try {
+                    await saveBuiltinTools(updated)
+                    setData({ ...data, builtinTools: updated })
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Fehler')
+                  }
+                }}
+                className="h-5 w-5 rounded"
+              />
+            </label>
           </div>
         </div>
       )}

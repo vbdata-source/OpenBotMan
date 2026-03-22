@@ -32,7 +32,7 @@ import {
 import { createProvider } from '@openbotman/orchestrator';
 
 // Import config loader
-import { getConfig, getAgentsForDiscussion, getAgentsForTeam, getTeams, getDefaultTeam, saveConfig, reloadConfig, getAgentsSafe, getPrompts, getPromptsFull, savePrompts, getMcpServers, type PromptConfigFull } from './config.js';
+import { getConfig, getAgentsForDiscussion, getAgentsForTeam, getTeams, getDefaultTeam, saveConfig, reloadConfig, getAgentsSafe, getPrompts, getPromptsFull, savePrompts, getMcpServers, getBuiltinTools, saveBuiltinTools, type PromptConfigFull } from './config.js';
 
 /**
  * Create and configure the Express server
@@ -366,7 +366,10 @@ export function createServer(config: ApiServerConfig): Express {
   app.get('/api/v1/tools', (_req: Request, res: Response) => {
     const mcpServers = getMcpServers();
 
+    const builtinTools = getBuiltinTools();
+
     res.json({
+      builtinTools,
       mcpServers: mcpServers.map(s => ({
         id: s.id,
         name: s.name,
@@ -374,13 +377,27 @@ export function createServer(config: ApiServerConfig): Express {
         args: s.args,
         enabled: s.enabled,
         allowedAgents: s.allowedAgents,
-        status: 'configured', // Phase 2b: will show 'connected'/'error' when MCPClientManager is wired
+        status: 'configured',
       })),
-      toolRegistry: {
-        status: 'ready',
-        info: 'ToolRegistry is available in the Orchestrator. Register tools via MCPClientManager or programmatically.',
-      },
     });
+  });
+
+  /**
+   * PUT /api/v1/tools/builtin - Toggle built-in tools
+   */
+  app.put('/api/v1/tools/builtin', (req: Request, res: Response) => {
+    const { webSearch, webFetch } = req.body as { webSearch?: boolean; webFetch?: boolean };
+    const current = getBuiltinTools();
+    const updated = {
+      webSearch: webSearch ?? current.webSearch,
+      webFetch: webFetch ?? current.webFetch,
+    };
+    const result = saveBuiltinTools(updated);
+    if (result.success) {
+      res.json({ success: true, builtinTools: updated });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
   });
 
   /**
@@ -1207,8 +1224,34 @@ async function runDiscussion(
   // Initialize tool infrastructure for this discussion
   const { ToolRegistry } = await import('@openbotman/orchestrator');
   const { AuditLogger } = await import('@openbotman/orchestrator');
+  const { webSearchTool, webFetchTool } = await import('./builtin-tools/index.js');
   const discussionTools = new ToolRegistry();
   const auditLogger = new AuditLogger(null);
+
+  // Register built-in tools
+  const builtinConfig = getBuiltinTools();
+  const toolCapableProviders = ['claude-api', 'openai', 'google'];
+
+  if (builtinConfig.webSearch) {
+    discussionTools.register(webSearchTool);
+    for (const agent of agentConfigs) {
+      if (toolCapableProviders.includes(agent.provider)) {
+        discussionTools.assignToAgent(agent.id, ['web_search']);
+      }
+    }
+  }
+  if (builtinConfig.webFetch) {
+    discussionTools.register(webFetchTool);
+    for (const agent of agentConfigs) {
+      if (toolCapableProviders.includes(agent.provider)) {
+        discussionTools.assignToAgent(agent.id, ['web_fetch']);
+      }
+    }
+  }
+
+  if (builtinConfig.webSearch || builtinConfig.webFetch) {
+    console.log(`[${requestId}] Built-in tools: ${[builtinConfig.webSearch && 'web_search', builtinConfig.webFetch && 'web_fetch'].filter(Boolean).join(', ')}`);
+  }
 
   // Connect MCP servers and register their tools
   const mcpServers = getMcpServers().filter(s => s.enabled);

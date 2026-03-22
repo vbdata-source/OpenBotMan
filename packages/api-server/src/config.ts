@@ -97,6 +97,10 @@ interface ConfigFile {
       workflows?: string[];
     }>;
   };
+  builtinTools?: {
+    webSearch?: boolean;
+    webFetch?: boolean;
+  };
   mcpServers?: Array<{
     id: string;
     name: string;
@@ -593,6 +597,37 @@ export function getAgentsSafe(config: DiscussionConfig): Array<AgentConfig & { a
     apiKey: undefined, // Don't send actual key
     apiKeyMasked: maskApiKey(a.apiKey),
   }));
+}
+
+/**
+ * Get built-in tools configuration
+ */
+export function getBuiltinTools(): { webSearch: boolean; webFetch: boolean } {
+  const raw = getRawConfig();
+  const bt = raw?.content.builtinTools;
+  return {
+    webSearch: bt?.webSearch !== false, // Default: enabled
+    webFetch: bt?.webFetch !== false,   // Default: enabled
+  };
+}
+
+/**
+ * Save built-in tools configuration
+ */
+export function saveBuiltinTools(tools: { webSearch: boolean; webFetch: boolean }): { success: boolean; error?: string } {
+  const path = findConfigPath();
+  if (!path) return { success: false, error: 'Config file not found' };
+
+  try {
+    const content = readFileSync(path, 'utf-8');
+    const config = YAML.parse(content) as ConfigFile;
+    config.builtinTools = tools;
+    writeFileSync(path, YAML.stringify(config, { indent: 2 }), 'utf-8');
+    cachedConfig = null;
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
 }
 
 /**
