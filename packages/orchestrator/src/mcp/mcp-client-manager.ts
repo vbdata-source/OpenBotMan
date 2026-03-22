@@ -89,13 +89,12 @@ export class MCPClientManager {
       return arg;
     });
 
+    // Build env: only add custom env vars, let child inherit process.env naturally
+    // Passing full process.env explicitly can cause EINVAL on Windows with invalid values
     const transport = new StdioClientTransport({
       command,
       args: resolvedArgs,
-      env: {
-        ...process.env as Record<string, string>,
-        ...config.env,
-      },
+      ...(config.env ? { env: { ...process.env as Record<string, string>, ...config.env } } : {}),
     });
 
     const client = new Client(
