@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Wrench, Server, RefreshCw, AlertCircle, CheckCircle, XCircle, Plug, Plus, Trash2, Save, X } from 'lucide-react'
+import { Wrench, Server, RefreshCw, AlertCircle, CheckCircle, XCircle, Plug, Plus, Trash2, Save, X, Pencil } from 'lucide-react'
 import { fetchTools, saveMcpServers } from '../lib/api'
 
 interface MCPServerInfo {
@@ -61,6 +61,7 @@ export default function Tools() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   // Form state for new server
@@ -111,6 +112,53 @@ export default function Tools() {
     setFormAgents('')
     setFormEnabled(true)
     setShowAdd(false)
+    setEditingId(null)
+  }
+
+  const handleEditServer = (server: MCPServerInfo) => {
+    setFormId(server.id)
+    setFormName(server.name)
+    setFormCommand(server.command)
+    setFormArgs(server.args?.join(' ') || '')
+    setFormEnvKey('')
+    setFormEnvValue('')
+    setFormAgents(server.allowedAgents?.join(', ') || '')
+    setFormEnabled(server.enabled)
+    setEditingId(server.id)
+    setShowAdd(true)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!formId || !formName || !formCommand) {
+      setError('ID, Name und Command sind Pflichtfelder')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      const updated: MCPServerInfo = {
+        id: formId,
+        name: formName,
+        command: formCommand,
+        args: formArgs ? formArgs.split(' ').filter(Boolean) : undefined,
+        env: formEnvKey && formEnvValue ? { [formEnvKey]: formEnvValue } : undefined,
+        allowedAgents: formAgents ? formAgents.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+        enabled: formEnabled,
+        status: 'configured',
+      }
+
+      const existing = data?.mcpServers || []
+      const allServers = existing.map(s => s.id === editingId ? updated : s)
+      await saveMcpServers(allServers)
+
+      resetForm()
+      await loadData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehler beim Speichern')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleAddServer = async () => {
@@ -224,7 +272,7 @@ export default function Tools() {
       {showAdd && (
         <div className="rounded-lg border-2 border-primary/30 p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Neuen MCP-Server hinzufuegen</h2>
+            <h2 className="text-lg font-semibold">{editingId ? 'MCP-Server bearbeiten' : 'Neuen MCP-Server hinzufuegen'}</h2>
             <button onClick={resetForm} className="text-muted-foreground hover:text-foreground">
               <X className="h-5 w-5" />
             </button>
@@ -253,8 +301,9 @@ export default function Tools() {
                 type="text"
                 value={formId}
                 onChange={(e) => setFormId(e.target.value)}
+                disabled={!!editingId}
                 placeholder="z.B. github"
-                className="w-full mt-1 px-3 py-2 rounded-md border border-border bg-background text-sm"
+                className="w-full mt-1 px-3 py-2 rounded-md border border-border bg-background text-sm disabled:opacity-50"
               />
             </div>
             <div>
@@ -347,7 +396,7 @@ export default function Tools() {
               Abbrechen
             </button>
             <button
-              onClick={handleAddServer}
+              onClick={editingId ? handleSaveEdit : handleAddServer}
               disabled={saving || !formId || !formName || !formCommand}
               className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
@@ -427,6 +476,14 @@ export default function Tools() {
                     }`}>
                       {server.status}
                     </span>
+                    <button
+                      onClick={() => handleEditServer(server)}
+                      disabled={saving}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                      title="Bearbeiten"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
                     <button
                       onClick={() => handleDeleteServer(server.id)}
                       disabled={saving}

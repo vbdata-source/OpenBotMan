@@ -617,6 +617,6 @@ export function getMcpServers(): Array<{
     args: s.args,
     allowedAgents: s.allowedAgents,
     enabled: s.enabled !== false,
-    // Note: env vars are NOT exposed to frontend (security)
+    // Note: env vars and status are NOT exposed/stored (security/cleanliness)
   }));
 }

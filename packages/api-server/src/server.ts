@@ -412,10 +412,21 @@ export function createServer(config: ApiServerConfig): Express {
       }
     }
 
-    const result = saveConfig({ mcpServers: servers });
+    // Strip UI-only fields (status) before saving
+    const cleanServers = servers.map(s => ({
+      id: s.id,
+      name: s.name,
+      command: s.command,
+      args: s.args,
+      env: s.env,
+      allowedAgents: s.allowedAgents,
+      enabled: s.enabled,
+    }));
+
+    const result = saveConfig({ mcpServers: cleanServers });
     if (result.success) {
       reloadConfig();
-      res.json({ success: true, count: servers.length });
+      res.json({ success: true, count: cleanServers.length });
     } else {
       res.status(500).json({ error: result.error });
     }
