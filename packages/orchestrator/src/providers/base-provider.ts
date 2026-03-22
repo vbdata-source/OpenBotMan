@@ -8,19 +8,56 @@
 /**
  * Options for provider requests
  */
+/**
+ * Tool definition for LLM tool use / function calling
+ */
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  input_schema: {
+    type: 'object';
+    properties: Record<string, unknown>;
+    required?: string[];
+  };
+}
+
+/**
+ * A tool call requested by the LLM
+ */
+export interface ToolCall {
+  /** Tool call ID (needed for tool_result) */
+  id: string;
+  /** Tool name */
+  name: string;
+  /** Arguments passed by the LLM */
+  input: Record<string, unknown>;
+}
+
 export interface ProviderOptions {
   /** System prompt to use */
   systemPrompt?: string;
-  
+
   /** Maximum tokens to generate */
   maxTokens?: number;
-  
+
   /** Temperature for sampling (0-1) */
   temperature?: number;
-  
+
   /** Timeout in milliseconds */
   timeoutMs?: number;
-  
+
+  /** Tool definitions for tool use / function calling */
+  tools?: ToolDefinition[];
+
+  /** Tool results from previous tool calls (for multi-turn tool use) */
+  toolResults?: Array<{
+    id: string;
+    content: string;
+  }>;
+
+  /** Previous messages for multi-turn tool use conversations */
+  messages?: Array<{ role: string; content: unknown }>;
+
   /** Additional provider-specific options */
   extra?: Record<string, unknown>;
 }
@@ -56,7 +93,10 @@ export interface ProviderResponse {
   
   /** Whether this is an error response */
   isError: boolean;
-  
+
+  /** Tool calls requested by the LLM (if any) */
+  toolCalls?: ToolCall[];
+
   /** Raw response data (provider-specific) */
   raw?: unknown;
 }

@@ -1085,11 +1085,56 @@ async function runDiscussion(
     agentProviders.set(agent.id, createProvider(providerConfig));
   }
 
+  // Initialize tool infrastructure for this discussion
+  const { ToolRegistry } = await import('@openbotman/orchestrator');
+  const { AuditLogger } = await import('@openbotman/orchestrator');
+  const discussionTools = new ToolRegistry();
+  const auditLogger = new AuditLogger(null);
+
+  // Connect MCP servers and register their tools
+  const mcpServers = getMcpServers().filter(s => s.enabled);
+  let mcpManager: import('@openbotman/orchestrator').MCPClientManager | null = null;
+
+  if (mcpServers.length > 0) {
+    try {
+      const { MCPClientManager } = await import('@openbotman/orchestrator');
+      mcpManager = new MCPClientManager(discussionTools, auditLogger);
+      const mcpConfigs = mcpServers.map(s => ({
+        id: s.id,
+        name: s.name,
+        command: s.command,
+        args: s.args,
+        allowedAgents: s.allowedAgents,
+        enabled: s.enabled,
+      }));
+      const results = await mcpManager.connectAll(mcpConfigs);
+      for (const [id, tools] of results) {
+        if (tools.length > 0) {
+          console.log(`[${requestId}] MCP "${id}": ${tools.length} tools registered`);
+          // If no allowedAgents specified, assign to all agents
+          const serverConfig = mcpServers.find(s => s.id === id);
+          if (!serverConfig?.allowedAgents || serverConfig.allowedAgents.length === 0) {
+            for (const agent of agentConfigs) {
+              discussionTools.assignToAgent(agent.id, tools);
+            }
+          }
+        }
+      }
+    } catch (mcpError) {
+      console.warn(`[${requestId}] MCP connection failed (continuing without tools): ${mcpError instanceof Error ? mcpError.message : mcpError}`);
+    }
+  }
+
+  const totalTools = discussionTools.getAllTools().length;
+  if (totalTools > 0) {
+    console.log(`[${requestId}] Discussion has ${totalTools} tools available`);
+  }
+
   const startTime = Date.now();
   const rounds: RoundResult[] = [];
   const allContributions: AgentContribution[] = [];
   let consensusReached = false;
-  
+
   try {
     // Run multiple rounds until consensus or max rounds
     for (let round = 1; round <= request.maxRounds && !consensusReached; round++) {
@@ -1133,12 +1178,86 @@ async function runDiscussion(
             prompt = buildResponderPrompt(topic, fullContext, previousContribs, round, agent.role, prevResolved, { contextType });
           }
           
-          const response = await agentProvider.send(prompt, {
+          // Get tools available for this agent (from MCP servers)
+          const agentTools = discussionTools.getToolsForAgent(agent.id);
+          const toolDefs = agentTools.length > 0
+            ? agentTools.map(t => ({
+                name: t.name,
+                description: t.description,
+                input_schema: {
+                  type: 'object' as const,
+                  properties: t.inputSchema.properties,
+                  required: t.inputSchema.required,
+                },
+              }))
+            : undefined;
+
+          // Send to provider (with tools if available and provider supports them)
+          const supportsTools = agent.provider === 'claude-api' || agent.provider === 'openai';
+          let response = await agentProvider.send(prompt, {
             systemPrompt: agent.systemPrompt,
             timeoutMs: request.timeout * 1000,
             maxTokens: agent.maxTokens || 4096,
+            tools: supportsTools ? toolDefs : undefined,
           });
-          
+
+          // Tool execution loop: if LLM requests tool calls, execute and re-send
+          const MAX_TOOL_ITERATIONS = 5;
+          const MAX_TOOL_RESULT_CHARS = 15000;
+          let toolIteration = 0;
+          let messages: Array<{ role: string; content: unknown }> = [
+            { role: 'user', content: prompt },
+          ];
+
+          while (response.toolCalls && response.toolCalls.length > 0 && toolIteration < MAX_TOOL_ITERATIONS) {
+            toolIteration++;
+            console.log(`[${requestId}] ${agent.name}: Tool call iteration ${toolIteration} - ${response.toolCalls.map(t => t.name).join(', ')}`);
+
+            // Build assistant message with text + tool_use blocks
+            const assistantContent: Array<{ type: string; [key: string]: unknown }> = [];
+            if (response.text) {
+              assistantContent.push({ type: 'text', text: response.text });
+            }
+            for (const tc of response.toolCalls) {
+              assistantContent.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.input });
+            }
+            messages.push({ role: 'assistant', content: assistantContent });
+
+            // Execute each tool call
+            const toolResultContent: Array<{ type: string; tool_use_id: string; content: string }> = [];
+            for (const tc of response.toolCalls) {
+              try {
+                const toolResult = await discussionTools.execute(tc.name, tc.input, {
+                  agentId: agent.id,
+                  agentName: agent.name,
+                  jobId: requestId,
+                });
+                let resultText = toolResult.output;
+                // Truncation: prevent context window explosion
+                if (resultText.length > MAX_TOOL_RESULT_CHARS) {
+                  resultText = resultText.substring(0, MAX_TOOL_RESULT_CHARS) + '\n\n... [truncated]';
+                }
+                toolResultContent.push({ type: 'tool_result', tool_use_id: tc.id, content: resultText });
+                console.log(`[${requestId}] ${agent.name}: Tool ${tc.name} → ${toolResult.success ? 'OK' : 'ERROR'} (${resultText.length} chars)`);
+              } catch (toolError) {
+                const errMsg = toolError instanceof Error ? toolError.message : String(toolError);
+                toolResultContent.push({ type: 'tool_result', tool_use_id: tc.id, content: `Error: ${errMsg}` });
+                console.error(`[${requestId}] ${agent.name}: Tool ${tc.name} ERROR: ${errMsg}`);
+              }
+            }
+            messages.push({ role: 'user', content: toolResultContent });
+
+            // Re-send with tool results
+            response = await agentProvider.send('', {
+              systemPrompt: agent.systemPrompt,
+              timeoutMs: request.timeout * 1000,
+              maxTokens: agent.maxTokens || 4096,
+              tools: toolDefs,
+              messages,
+            });
+          }
+
+          // Context isolation: only the final text goes to other agents
           const { position, reason } = extractPosition(response.text);
           const durationMs = Date.now() - agentStartTime;
           
@@ -1233,6 +1352,16 @@ async function runDiscussion(
       rounds: rounds.length,
       error: error instanceof Error ? error.message : 'Provider error',
     };
+  } finally {
+    // Disconnect MCP servers after discussion
+    if (mcpManager) {
+      try {
+        await mcpManager.disconnectAll();
+        console.log(`[${requestId}] MCP servers disconnected`);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
   }
 }
 
