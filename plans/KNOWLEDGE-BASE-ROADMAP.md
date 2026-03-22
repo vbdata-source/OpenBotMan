@@ -1,17 +1,18 @@
 # OpenBotMan Knowledge Base System - Roadmap
 
-> **Ziel:** Experten-Agenten Zugriff auf projektspezifisches Wissen geben (VectronSkript, interne APIs, etc.)
+> **Ziel:** Experten-Agenten Zugriff auf projektspezifisches Wissen geben
+> **Stand:** Maerz 2026
 
----
+## Aktueller Status
 
-## Experten-Konsens (2026-02-03)
+Das Paket `packages/knowledge-base` existiert bereits mit:
+- Vector-DB-Backends (In-Memory, ChromaDB, Qdrant)
+- 10 Wissenstypen (decision, pattern, learning, code, doc, conversation, error, metric, config, security)
+- Semantische Suche + Metadaten-Filterung
+- Access-Counting und Staleness-Tracking
 
-**Teilnehmer:**
-- 🎯 Strategic Planner (Gemini)
-- 💻 Senior Developer (Claude)
-- 🔍 Security Expert (Claude)
-
-**Status:** ✅ KONSENS ERREICHT
+**Noch nicht verdrahtet:** Der Orchestrator hat `query_knowledge` und `add_knowledge` als Meta-Tools,
+aber der Diskussions-Workflow im API-Server extrahiert noch nicht automatisch Learnings.
 
 ---
 
