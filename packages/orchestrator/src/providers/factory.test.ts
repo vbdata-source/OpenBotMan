@@ -79,11 +79,14 @@ describe('Provider Factory', () => {
       })).toThrow('Google provider requires apiKey');
     });
 
-    it('should throw for ollama provider (not implemented)', () => {
-      expect(() => createProvider({
+    it('should create ollama provider', () => {
+      const provider = createProvider({
         provider: 'ollama',
         model: 'llama2',
-      })).toThrow('Ollama provider not yet implemented');
+      });
+
+      expect(provider).toBeDefined();
+      expect(provider.getName()).toBe('ollama');
     });
 
     it('should throw for unknown provider', () => {

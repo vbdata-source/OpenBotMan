@@ -32,6 +32,7 @@ export interface RoundResult {
   objections: string[];
   concerns: string[];
   resolvedPoints: string[];
+  unresolvedConditions: string[];
 }
 
 export interface ConsensusResult {
@@ -119,6 +120,102 @@ export function extractPosition(content: string): {
 }
 
 /**
+ * Extract conditions from SUPPORT_WITH_CONDITIONS responses.
+ * Looks for numbered lists, bullet points, and bold items after the position tag.
+ */
+export function extractConditions(contributions: AgentContribution[]): string[] {
+  const conditions: string[] = [];
+
+  for (const contrib of contributions) {
+    if (contrib.position !== 'SUPPORT_WITH_CONDITIONS') continue;
+
+    const content = contrib.content;
+
+    // Find content after the position tag or after keywords like "Bedingungen", "conditions"
+    const positionIdx = content.indexOf('[POSITION: SUPPORT_WITH_CONDITIONS]');
+    const searchArea = positionIdx >= 0 ? content : content;
+
+    const lines = searchArea.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      // Match numbered items: "1. **Plugin-Isolation**: ..." or "1. Plugin müssen..."
+      const numberedMatch = trimmed.match(/^\d+\.\s+\*{0,2}(.+?)\*{0,2}(?::\s*(.+))?$/);
+      if (numberedMatch) {
+        const label = numberedMatch[1]!.replace(/\*{1,2}/g, '').trim();
+        // Skip generic intro lines
+        if (label.length > 5 && !label.match(/^(ich|wir|das|die|der|es|aber|und|oder|diese|mein|dein)/i)) {
+          conditions.push(`[${contrib.agentName}] ${label}`);
+          continue;
+        }
+      }
+
+      // Match bullet points with bold: "- **Condition**: description"
+      const bulletMatch = trimmed.match(/^[-*]\s+\*{2}(.+?)\*{2}(?::\s*(.+))?$/);
+      if (bulletMatch) {
+        const label = bulletMatch[1]!.trim();
+        if (label.length > 3) {
+          conditions.push(`[${contrib.agentName}] ${label}`);
+        }
+      }
+    }
+
+    // Fallback: if no structured conditions found, use the position reason
+    if (conditions.filter(c => c.startsWith(`[${contrib.agentName}]`)).length === 0 && contrib.positionReason) {
+      conditions.push(`[${contrib.agentName}] ${contrib.positionReason}`);
+    }
+  }
+
+  return conditions;
+}
+
+/**
+ * Check if a condition has been addressed in subsequent contributions.
+ * A condition is considered addressed when another agent explicitly references
+ * and accepts/discusses it.
+ */
+export function findAddressedConditions(
+  conditions: string[],
+  contributions: AgentContribution[]
+): string[] {
+  const addressed: string[] = [];
+
+  for (const condition of conditions) {
+    // Extract the condition text without the agent prefix
+    const conditionText = condition.replace(/^\[.+?\]\s*/, '').toLowerCase();
+    // Take key words (3+ chars) for matching
+    const keywords = conditionText.split(/[\s,.:;-]+/).filter(w => w.length >= 3);
+
+    for (const contrib of contributions) {
+      const lowerContent = contrib.content.toLowerCase();
+      // Check if enough keywords appear in the response (at least 50% of keywords)
+      const matchCount = keywords.filter(kw => lowerContent.includes(kw)).length;
+      if (keywords.length > 0 && matchCount >= Math.ceil(keywords.length * 0.5)) {
+        // Check for signals of acknowledgement
+        if (
+          lowerContent.includes('akzeptiert') ||
+          lowerContent.includes('einverstanden') ||
+          lowerContent.includes('stimme zu') ||
+          lowerContent.includes('umgesetzt') ||
+          lowerContent.includes('berücksichtigt') ||
+          lowerContent.includes('integriert') ||
+          lowerContent.includes('addressed') ||
+          lowerContent.includes('agreed') ||
+          lowerContent.includes('accepted') ||
+          contrib.position === 'SUPPORT' ||
+          contrib.position === 'SUPPORT_WITH_CONDITIONS'
+        ) {
+          addressed.push(condition);
+          break;
+        }
+      }
+    }
+  }
+
+  return addressed;
+}
+
+/**
  * Extract resolved/agreed points from contributions where all agents agree.
  * Points are considered resolved when supported (SUPPORT or SUPPORT_WITH_CONDITIONS)
  * and no one objects.
@@ -156,7 +253,8 @@ export function extractResolvedPoints(contributions: AgentContribution[]): strin
 export function evaluateRound(
   round: number,
   contributions: AgentContribution[],
-  previousResolvedPoints: string[] = []
+  previousResolvedPoints: string[] = [],
+  previousUnresolvedConditions: string[] = []
 ): RoundResult {
   const positionCounts: Record<ConsensusPosition, number> = {
     'PROPOSAL': 0,
@@ -186,14 +284,43 @@ export function evaluateRound(
   const newResolved = extractResolvedPoints(contributions);
   const resolvedPoints = [...new Set([...previousResolvedPoints, ...newResolved])];
 
-  // Consensus: No objections and all support or conditional support
+  // Extract new conditions from this round's SUPPORT_WITH_CONDITIONS
+  const newConditions = extractConditions(contributions);
+
+  // Check which previous conditions have been addressed in this round
+  const addressedConditions = previousUnresolvedConditions.length > 0
+    ? findAddressedConditions(previousUnresolvedConditions, contributions)
+    : [];
+
+  // Unresolved = (previous unresolved - addressed) + new conditions
+  const stillUnresolved = previousUnresolvedConditions.filter(
+    c => !addressedConditions.includes(c)
+  );
+  const unresolvedConditions = [...new Set([...stillUnresolved, ...newConditions])];
+
+  // Consensus rules:
+  // 1. No objections
+  // 2. All voting agents support (with or without conditions)
+  // 3. No unresolved conditions from previous rounds
+  //    (new conditions in this round trigger a follow-up, but don't block
+  //     if this is already a condition-focused round with all SUPPORT)
   const votingContributions = contributions.filter(c => c.position !== 'PROPOSAL');
-  const consensusReached =
-    positionCounts['OBJECTION'] === 0 &&
-    votingContributions.length > 0 &&
+  const allSupport = votingContributions.length > 0 &&
     votingContributions.every(c =>
       c.position === 'SUPPORT' || c.position === 'SUPPORT_WITH_CONDITIONS'
     );
+
+  const hasUnaddressedPreviousConditions = stillUnresolved.length > 0;
+  const hasNewConditions = newConditions.length > 0;
+
+  const consensusReached =
+    positionCounts['OBJECTION'] === 0 &&
+    allSupport &&
+    !hasUnaddressedPreviousConditions &&
+    // New conditions in first consensus attempt → force follow-up
+    // But if we're in round 2+ and agents still add conditions while supporting,
+    // accept consensus to avoid endless loops
+    (!hasNewConditions || round >= 3);
 
   return {
     round,
@@ -203,6 +330,7 @@ export function evaluateRound(
     objections,
     concerns,
     resolvedPoints,
+    unresolvedConditions,
   };
 }
 
@@ -319,6 +447,75 @@ Begründe deine Position kurz nach dem Tag.
 }
 
 /**
+ * Build prompt for condition-focused follow-up rounds.
+ * Directs agents to address specific unresolved conditions rather than
+ * reopening the entire discussion.
+ */
+export function buildConditionRoundPrompt(
+  topic: string,
+  context: string,
+  previousContributions: AgentContribution[],
+  round: number,
+  agentRole: string,
+  unresolvedConditions: string[],
+  resolvedPoints: string[] = [],
+  options?: { contextType?: 'inventory' | 'raw-code' | 'none' }
+): string {
+  const previousResponses = previousContributions
+    .map(c => `### ${c.agentName} (${c.role}) - [${c.position}]\n${c.content}`)
+    .join('\n\n---\n\n');
+
+  const hasCode = context && context.includes('```');
+  const hasInventory = options?.contextType === 'inventory';
+
+  const resolvedSection = resolvedPoints.length > 0
+    ? `\n## Bereits geklaerte Punkte (NICHT erneut diskutieren!)
+${resolvedPoints.map(p => `- [x] ${p}`).join('\n')}
+`
+    : '';
+
+  const conditionsSection = unresolvedConditions
+    .map((c, i) => `${i + 1}. ${c}`)
+    .join('\n');
+
+  return `Du bist ein ${agentRole} in Runde ${round} einer Multi-Agent-Diskussion.
+
+## FOKUS: Offene Bedingungen klaeren
+In der vorherigen Runde wurde bedingte Zustimmung gegeben.
+Die folgenden Bedingungen muessen JETZT adressiert werden:
+
+${conditionsSection}
+
+**Deine Aufgabe in dieser Runde:**
+- Gehe auf JEDE offene Bedingung ein
+- Sage klar ob du die Bedingung akzeptierst, ablehnst oder modifizierst
+- Schlage konkrete Umsetzungen vor
+- Diskutiere NICHT erneut bereits geklaerte Punkte
+${hasInventory ? `
+Nutze das Projekt-Inventar und den Code fuer konkrete Referenzen.` :
+hasCode ? `
+Referenziere konkrete Dateien und Code-Stellen.` : ''}
+
+## Thema
+${topic}
+
+${context ? `## Code-Kontext\n${context}` : ''}
+${resolvedSection}
+## Bisherige Beitraege
+${previousResponses}
+
+## Position (PFLICHT!)
+Beende mit genau einer dieser Positionen:
+- [POSITION: SUPPORT] - Alle Bedingungen akzeptiert/adressiert
+- [POSITION: SUPPORT_WITH_CONDITIONS] - Weitere Bedingungen noetig
+- [POSITION: CONCERN] - Bedenken bei einzelnen Bedingungen
+- [POSITION: OBJECTION] - Bedingungen nicht akzeptabel
+
+Begruende deine Position kurz nach dem Tag.
+`;
+}
+
+/**
  * Extract action items from markdown
  */
 export function extractActionItems(content: string): string[] {
@@ -389,6 +586,14 @@ export function formatConsensusResult(result: ConsensusResult): string {
       lines.push('#### ⚠️ Bedenken');
       for (const concern of round.concerns) {
         lines.push(`- ${concern}`);
+      }
+      lines.push('');
+    }
+
+    if (round.unresolvedConditions.length > 0) {
+      lines.push(`#### 🔓 Offene Bedingungen (${round.unresolvedConditions.length})`);
+      for (const condition of round.unresolvedConditions) {
+        lines.push(`- ${condition}`);
       }
       lines.push('');
     }

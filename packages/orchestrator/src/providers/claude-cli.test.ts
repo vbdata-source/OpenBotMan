@@ -20,13 +20,13 @@ vi.mock('child_process', () => ({
 // Mock process creator
 function createMockProcess() {
   const proc = new EventEmitter() as EventEmitter & {
-    stdin: { end: () => void };
+    stdin: { write: (data: string) => void; end: () => void };
     stdout: EventEmitter;
     stderr: EventEmitter;
     kill: (signal?: string) => void;
   };
   
-  proc.stdin = { end: vi.fn() };
+  proc.stdin = { write: vi.fn(), end: vi.fn() };
   proc.stdout = new EventEmitter();
   proc.stderr = new EventEmitter();
   proc.kill = vi.fn();
@@ -151,12 +151,14 @@ describe('ClaudeCliProvider', () => {
         expect.arrayContaining([
           '--print',
           '--output-format', 'stream-json',
+          '--verbose',
           '--model', 'claude-sonnet-4-20250514',
           '--max-turns', '5',
-          'Hello',
         ]),
         expect.any(Object)
       );
+      // Message is written to stdin, not passed as CLI arg
+      expect(mockProcess.stdin.write).toHaveBeenCalledWith('Hello');
     });
     
     it('should parse JSON response', async () => {

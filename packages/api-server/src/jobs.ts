@@ -25,6 +25,23 @@ export interface AgentProgress {
   provider?: string;
 }
 
+export interface InventoryFileInfo {
+  path: string;
+  sizeKB: number;
+  language: string;
+  purpose: string;
+}
+
+export interface InventoryInfo {
+  fileCount: number;
+  totalSizeKB: number;
+  contextSizeKB: number;
+  contextType: 'inventory' | 'raw-code' | 'none';
+  languages: string[];
+  projectName: string;
+  files: InventoryFileInfo[];
+}
+
 export interface Job {
   id: string;
   status: JobStatus;
@@ -41,6 +58,7 @@ export interface Job {
   maxRounds?: number;
   agents?: AgentProgress[];
   currentAgent?: string;
+  inventoryInfo?: InventoryInfo;
 }
 
 /**
@@ -326,9 +344,10 @@ class JobStore {
       updatedAt: job.updatedAt.toISOString(),
       completedAt: job.completedAt?.toISOString(),
       agents: job.agents?.map(a => this.agentToStored(a)),
+      inventoryInfo: job.inventoryInfo,
     };
   }
-  
+
   private agentToStored(agent: AgentProgress): StoredAgent {
     return {
       id: agent.id,
@@ -362,9 +381,10 @@ class JobStore {
       updatedAt: new Date(stored.updatedAt),
       completedAt: stored.completedAt ? new Date(stored.completedAt) : undefined,
       agents: stored.agents?.map(a => this.storedToAgent(a)),
+      inventoryInfo: stored.inventoryInfo as InventoryInfo | undefined,
     };
   }
-  
+
   private storedToAgent(stored: StoredAgent): AgentProgress {
     return {
       id: stored.id,

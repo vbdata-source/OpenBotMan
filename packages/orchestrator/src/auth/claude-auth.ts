@@ -54,15 +54,18 @@ export interface AuthProfileStore {
 export interface ClaudeAuthConfig {
   /** Path to store auth profiles */
   storagePath?: string;
-  
+
   /** Prefer setup-token over API key */
   preferSetupToken?: boolean;
-  
+
   /** Environment variable for API key */
   apiKeyEnvVar?: string;
-  
+
   /** Allow fallback to API key if setup-token fails */
   allowFallback?: boolean;
+
+  /** Override home directory (for testing) */
+  homeDir?: string;
 }
 
 /**
@@ -81,6 +84,7 @@ export class ClaudeAuthProvider {
       preferSetupToken: config.preferSetupToken ?? true,
       apiKeyEnvVar: config.apiKeyEnvVar ?? 'ANTHROPIC_API_KEY',
       allowFallback: config.allowFallback ?? true,
+      homeDir: config.homeDir ?? homedir(),
     };
     
     this.storePath = join(this.config.storagePath, 'auth-profiles.json');
@@ -324,7 +328,7 @@ export class ClaudeAuthProvider {
   
   private readClaudeCliCredentials(): AuthCredential | null {
     // Try to read from Claude CLI credentials file (~/.claude/.credentials.json)
-    const credPath = join(homedir(), '.claude', '.credentials.json');
+    const credPath = join(this.config.homeDir, '.claude', '.credentials.json');
     
     if (!existsSync(credPath)) {
       return null;

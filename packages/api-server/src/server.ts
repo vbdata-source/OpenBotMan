@@ -20,6 +20,7 @@ import {
   evaluateRound,
   buildProposerPrompt,
   buildResponderPrompt,
+  buildConditionRoundPrompt,
   extractActionItems,
   formatConsensusResult,
   type AgentContribution,
@@ -281,6 +282,7 @@ export function createServer(config: ApiServerConfig): Express {
       actionItems: job.actionItems,
       error: job.error,
       durationMs: job.durationMs,
+      inventoryInfo: job.inventoryInfo,
       createdAt: job.createdAt.toISOString(),
       completedAt: job.completedAt?.toISOString(),
     });
@@ -934,7 +936,27 @@ async function runDiscussion(
       const result = buildFullContext(wsContext, inventory, maxBytes);
       fullContext = result.context;
       contextType = result.contextType;
-      console.log(`[${requestId}] Inventory: ${inventory.fileCount} files, context ${Math.round(Buffer.byteLength(fullContext, 'utf-8') / 1024)}KB (Inventar + priorisierter Code)`);
+      const ctxKB = Math.round(Buffer.byteLength(fullContext, 'utf-8') / 1024);
+      console.log(`[${requestId}] Inventory: ${inventory.fileCount} files, context ${ctxKB}KB (Inventar + priorisierter Code)`);
+
+      // Store inventory info in job for client visibility
+      const languages = [...new Set(inventory.files.map(f => f.language).filter(l => l !== 'other'))];
+      jobStore.update(requestId, {
+        inventoryInfo: {
+          fileCount: inventory.fileCount,
+          totalSizeKB: inventory.totalSizeKB,
+          contextSizeKB: ctxKB,
+          contextType,
+          languages,
+          projectName: inventory.projectName,
+          files: inventory.files.map(f => ({
+            path: f.path,
+            sizeKB: Math.round(f.size / 1024 * 10) / 10,
+            language: f.language,
+            purpose: f.purpose,
+          })),
+        },
+      });
     } catch (error) {
       console.warn(`[${requestId}] Inventory failed, using raw context: ${error}`);
       // fullContext remains workspaceContext (fallback)
@@ -1025,17 +1047,24 @@ async function runDiscussion(
           // Get agent's specific provider (each agent can have different model)
           const agentProvider = agentProviders.get(agent.id)!;
           
-          // Build prompt based on round
+          // Build prompt based on round and unresolved conditions
           let prompt: string;
+          const prevRound = rounds.length > 0 ? rounds[rounds.length - 1]! : null;
+          const prevResolved = prevRound?.resolvedPoints ?? [];
+          const prevUnresolved = prevRound?.unresolvedConditions ?? [];
+
           if (round === 1 && roundContributions.length === 0) {
             // First agent, first round: Proposer
             prompt = buildProposerPrompt(topic, fullContext, { contextType });
+          } else if (prevUnresolved.length > 0 && round > 1) {
+            // Condition-focused round: address specific unresolved conditions
+            const previousContribs = [...allContributions.slice(-agentConfigs.length), ...roundContributions];
+            prompt = buildConditionRoundPrompt(topic, fullContext, previousContribs, round, agent.role, prevUnresolved, prevResolved, { contextType });
           } else {
-            // All other cases: Responder
+            // Normal responder round
             const previousContribs = round === 1
               ? roundContributions
               : [...allContributions.slice(-agentConfigs.length), ...roundContributions];
-            const prevResolved = rounds.length > 0 ? rounds[rounds.length - 1]!.resolvedPoints : [];
             prompt = buildResponderPrompt(topic, fullContext, previousContribs, round, agent.role, prevResolved, { contextType });
           }
           
@@ -1085,13 +1114,18 @@ async function runDiscussion(
         }
       }
       
-      // Evaluate round
-      const prevResolved = rounds.length > 0 ? rounds[rounds.length - 1]!.resolvedPoints : [];
-      const roundResult = evaluateRound(round, roundContributions, prevResolved);
+      // Evaluate round (with condition tracking)
+      const evalPrevRound = rounds.length > 0 ? rounds[rounds.length - 1]! : null;
+      const evalPrevResolved = evalPrevRound?.resolvedPoints ?? [];
+      const evalPrevConditions = evalPrevRound?.unresolvedConditions ?? [];
+      const roundResult = evaluateRound(round, roundContributions, evalPrevResolved, evalPrevConditions);
       rounds.push(roundResult);
       consensusReached = roundResult.consensusReached;
-      
+
       console.log(`[${requestId}] Round ${round} complete. Consensus: ${consensusReached ? 'YES' : 'NO'}`);
+      if (roundResult.unresolvedConditions.length > 0) {
+        console.log(`[${requestId}] Unresolved conditions (${roundResult.unresolvedConditions.length}): ${roundResult.unresolvedConditions.join(' | ')}`);
+      }
       
       if (roundResult.objections.length > 0) {
         console.log(`[${requestId}] Objections: ${roundResult.objections.join(', ')}`);

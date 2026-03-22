@@ -24,6 +24,15 @@ export interface StoredJob {
   updatedAt: string;
   completedAt?: string;
   agents?: StoredAgent[];
+  inventoryInfo?: {
+    fileCount: number;
+    totalSizeKB: number;
+    contextSizeKB: number;
+    contextType: string;
+    languages: string[];
+    projectName: string;
+    files: { path: string; sizeKB: number; language: string; purpose: string }[];
+  };
 }
 
 export interface StoredAgent {

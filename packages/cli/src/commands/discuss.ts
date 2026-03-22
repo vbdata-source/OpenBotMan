@@ -825,8 +825,8 @@ function loadSpecificFiles(
         const stats = statSync(fullPath);
         if (stats.isFile() && stats.size > 0 && stats.size < 30000) {
           const content = readFileSync(fullPath, 'utf-8');
-          const relPath = relative(projectRoot, fullPath);
-          
+          const relPath = relative(projectRoot, fullPath).replace(/\\/g, '/');
+
           files.push({ path: relPath, content, size: stats.size });
           totalSize += stats.size;
         }

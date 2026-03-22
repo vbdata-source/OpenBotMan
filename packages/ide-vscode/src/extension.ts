@@ -374,11 +374,38 @@ async function pollJobWithProgress(
       durationMs?: number;
       currentRound?: number;
       maxRounds?: number;
+      inventoryInfo?: {
+        fileCount: number;
+        totalSizeKB: number;
+        contextSizeKB: number;
+        contextType: string;
+        languages: string[];
+        projectName: string;
+        files: { path: string; sizeKB: number; language: string; purpose: string }[];
+      };
     };
     
     // Update our tracked job
     updateJobFromApi(jobId, job);
     
+    // Show inventory info once (first poll with inventory data)
+    if (verboseLevel >= 1 && job.inventoryInfo && !agentListShown) {
+      const inv = job.inventoryInfo;
+      outputChannel.appendLine('📦 Projekt-Inventur:');
+      outputChannel.appendLine(`   Projekt: ${inv.projectName}`);
+      outputChannel.appendLine(`   Dateien: ${inv.fileCount} (${inv.totalSizeKB}KB)`);
+      outputChannel.appendLine(`   Sprachen: ${inv.languages.join(', ') || 'unbekannt'}`);
+      outputChannel.appendLine(`   Kontext: ${inv.contextSizeKB}KB (${inv.contextType === 'inventory' ? 'Inventar + Code' : inv.contextType})`);
+      if (inv.files && inv.files.length > 0) {
+        outputChannel.appendLine('   Analysierte Dateien:');
+        for (const f of inv.files) {
+          const size = f.sizeKB >= 1 ? `${f.sizeKB}KB` : '<1KB';
+          outputChannel.appendLine(`     - ${f.path} (${size}) — ${f.purpose}`);
+        }
+      }
+      outputChannel.appendLine('');
+    }
+
     // Show agent list once (first poll with agents)
     if (verboseLevel >= 1 && job.agents && !agentListShown) {
       agentListShown = true;

@@ -264,6 +264,7 @@ TASK: Update documentation
         objections: ['Security issue'],
         concerns: ['Performance'],
         conditions: [],
+        resolvedPoints: [],
       };
       
       const prompt = buildProposerPrompt('Caching implementieren', 2, previousRound);

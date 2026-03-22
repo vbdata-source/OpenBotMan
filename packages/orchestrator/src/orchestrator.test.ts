@@ -79,7 +79,8 @@ describe('Orchestrator', () => {
 
     it('should throw without API key', () => {
       delete process.env['ANTHROPIC_API_KEY'];
-      expect(() => new Orchestrator(testConfig)).toThrow();
+      // Use isolated homeDir so real Claude CLI credentials are not discovered
+      expect(() => new Orchestrator(testConfig, { homeDir: '/nonexistent-test-dir' })).toThrow();
     });
   });
 

@@ -15,19 +15,24 @@ function createValidToken(): string {
 
 describe('Auth Commands', () => {
   let tempDir: string;
-  
+  let originalEnv: NodeJS.ProcessEnv;
+
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'openbotman-cli-auth-test-'));
+    originalEnv = { ...process.env };
+    delete process.env['ANTHROPIC_API_KEY'];
+    delete process.env['CLAUDE_SETUP_TOKEN'];
   });
-  
+
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
+    process.env = originalEnv;
   });
   
   describe('ClaudeAuthProvider integration', () => {
     it('should work with CLI storage path', () => {
-      const provider = new ClaudeAuthProvider({ storagePath: tempDir });
-      
+      const provider = new ClaudeAuthProvider({ storagePath: tempDir, homeDir: tempDir });
+
       // Initially no auth
       expect(provider.getStatus().authenticated).toBe(false);
       

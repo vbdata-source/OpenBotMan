@@ -101,7 +101,7 @@ describe('ClaudeAuthProvider', () => {
   
   describe('getCredential', () => {
     it('should return null when no auth configured', () => {
-      const provider = new ClaudeAuthProvider({ storagePath: tempDir });
+      const provider = new ClaudeAuthProvider({ storagePath: tempDir, homeDir: tempDir });
       expect(provider.getCredential()).toBeNull();
     });
     
@@ -288,7 +288,7 @@ describe('ClaudeAuthProvider', () => {
   
   describe('getStatus', () => {
     it('should report unauthenticated status', () => {
-      const provider = new ClaudeAuthProvider({ storagePath: tempDir });
+      const provider = new ClaudeAuthProvider({ storagePath: tempDir, homeDir: tempDir });
       const status = provider.getStatus();
       
       expect(status.authenticated).toBe(false);
