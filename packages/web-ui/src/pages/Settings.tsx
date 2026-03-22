@@ -711,21 +711,31 @@ export default function Settings() {
                 <div>
                   <label className="text-sm font-medium">Model</label>
                   {modelOptions.length > 0 ? (
-                    <>
-                      <input
-                        type="text"
-                        list="model-options"
-                        value={editingAgent.model}
-                        onChange={(e) => setEditingAgent({ ...editingAgent, model: e.target.value })}
-                        placeholder="Modell waehlen oder eingeben"
+                    <div className="space-y-1">
+                      <select
+                        value={modelOptions.some(m => m.id === editingAgent.model) ? editingAgent.model : '__custom__'}
+                        onChange={(e) => {
+                          if (e.target.value !== '__custom__') {
+                            setEditingAgent({ ...editingAgent, model: e.target.value })
+                          }
+                        }}
                         className="w-full mt-1 px-3 py-2 bg-background border border-input rounded-md"
-                      />
-                      <datalist id="model-options">
+                      >
                         {modelOptions.map(m => (
-                          <option key={m.id} value={m.id}>{m.name}</option>
+                          <option key={m.id} value={m.id}>{m.name} ({m.id})</option>
                         ))}
-                      </datalist>
-                    </>
+                        <option value="__custom__">Benutzerdefiniert...</option>
+                      </select>
+                      {!modelOptions.some(m => m.id === editingAgent.model) && (
+                        <input
+                          type="text"
+                          value={editingAgent.model}
+                          onChange={(e) => setEditingAgent({ ...editingAgent, model: e.target.value })}
+                          placeholder="Modell-ID eingeben"
+                          className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
+                        />
+                      )}
+                    </div>
                   ) : (
                     <input
                       type="text"
