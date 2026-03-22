@@ -72,8 +72,14 @@ export class MCPClientManager {
       throw new Error(`MCP server already connected: ${config.id}`);
     }
 
+    // On Windows, commands like 'npx' need '.cmd' extension for spawn
+    const isWindows = process.platform === 'win32';
+    const command = isWindows && !config.command.includes('.') && !config.command.includes('/')
+      ? `${config.command}.cmd`
+      : config.command;
+
     const transport = new StdioClientTransport({
-      command: config.command,
+      command,
       args: config.args,
       env: {
         ...process.env as Record<string, string>,
